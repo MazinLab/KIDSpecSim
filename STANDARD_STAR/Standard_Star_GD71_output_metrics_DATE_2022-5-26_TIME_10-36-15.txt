@@ -1,0 +1,209 @@
+> Output metrics for KIDSpec Simulation of object Standard_Star_GD71
+
+Date run: 2022-05-26 10:36:15.577595 
+
+> Input Parameters for simulation and instrument: 
+
+Telescope mirror diameter: 800 cm 
+Exposure time: 1000 s 
+Seeing: 0.8 arcseconds 
+Airmass: 1.5 
+
+Slit width: 0.60 arcseconds 
+Slit length: 0.60 arcseconds 
+Slicers: 1 
+
+KIDSpec grating incidence angle: 25.0 deg 
+KIDSpec grating blaze angle: 25.0 deg 
+KIDSpec grating grooves: 241.5 /mm 
+
+Number of spectral pixels in each arm: 3200 
+Pixel plate scale: 0.3 
+Chosen MKID energy resolution at fiducial point: 30 
+Percentage of spectral pixels which are dead: 0.00 
+Number of dead spectral pixels in KIDSpec: 0 
+MKID energy resolution at fiducial point standard deviation for KIDSpec: 0.00 
+
+Simulation spectrum magnitudes:
+U --> 11.752822721067993 
+B --> 12.68607547678169 
+V --> 13.00013465990375 
+R --> 13.215907669250797 
+I --> 13.378627749316989 
+Z --> 13.425980123828563 
+Y --> 13.638804084825624 
+J --> 13.756404263189317 
+H --> 13.849812388502176 
+K --> N/A 
+L --> N/A 
+M --> N/A 
+N --> N/A 
+Q --> N/A 
+Flux reduced by factor of 1.00000
+Spectrum redshifted by 0.000
+
+> Result parameters: 
+
+OPT orders observed: 10 
+IR orders observed: 1 
+ 
+Wavelength range tested: 350 - 1900 nm 
+Recreated spectrum resolution: 4248 - 5847 
+Recreated spectrum resolution average: 5048 +/- 799 
+Average residuals (absoluted): (25.330 +/- 12.005)% 
+FWHM of residuals (not absoluted): 60.150 
+R value: 0.940 
+Average SNR: 238.235 +/- 27.856 
+Average X-Shooter Noise included SNR: 237.850 
+Average SOXS Noise included SNR: 238.122 
+Percentage of photons which were misidentified (total): 0.05412499
+Percentage of photons which were misidentified (average per pixel): 0.04686621
+
+Simulation run duration: 0:10:25.769629 (hours:minutes:seconds)
+
+Saturated pixels in OPT/Single arm:
+Pixel Number 235 :   1355706 / 1000000 photons
+Pixel Number 343 :   1183702 / 1000000 photons
+Pixel Number 396 :   1233714 / 1000000 photons
+Pixel Number 686 :   1759078 / 1000000 photons
+Pixel Number 695 :   1002058 / 1000000 photons
+Pixel Number 801 :   1521254 / 1000000 photons
+Pixel Number 829 :   1017094 / 1000000 photons
+Pixel Number 857 :   1154733 / 1000000 photons
+Pixel Number 858 :   1172665 / 1000000 photons
+Pixel Number 919 :   1023432 / 1000000 photons
+Pixel Number 920 :   1037792 / 1000000 photons
+Pixel Number 1075 :   1017731 / 1000000 photons
+Pixel Number 1104 :   1013816 / 1000000 photons
+Pixel Number 1185 :   1937384 / 1000000 photons
+Pixel Number 1194 :   1270789 / 1000000 photons
+Pixel Number 1270 :   1000859 / 1000000 photons
+Pixel Number 1307 :   1792772 / 1000000 photons
+Pixel Number 1337 :   1187813 / 1000000 photons
+Pixel Number 1368 :   1703226 / 1000000 photons
+Pixel Number 1408 :   1104638 / 1000000 photons
+Pixel Number 1409 :   1043121 / 1000000 photons
+Pixel Number 1434 :   1298801 / 1000000 photons
+Pixel Number 1435 :   1235151 / 1000000 photons
+Pixel Number 1439 :   1009051 / 1000000 photons
+Pixel Number 1442 :   1010894 / 1000000 photons
+Pixel Number 1444 :   1001821 / 1000000 photons
+Pixel Number 1456 :   1083363 / 1000000 photons
+Pixel Number 1459 :   1008806 / 1000000 photons
+Pixel Number 1466 :   1017401 / 1000000 photons
+Pixel Number 1473 :   1015281 / 1000000 photons
+Pixel Number 1478 :   1015279 / 1000000 photons
+Pixel Number 1485 :   1070301 / 1000000 photons
+Pixel Number 1492 :   1029918 / 1000000 photons
+Pixel Number 1495 :   1011966 / 1000000 photons
+Pixel Number 1504 :   1027617 / 1000000 photons
+Pixel Number 1507 :   1053845 / 1000000 photons
+Pixel Number 1508 :   1070971 / 1000000 photons
+Pixel Number 1512 :   1007330 / 1000000 photons
+Pixel Number 1516 :   1012515 / 1000000 photons
+Pixel Number 1524 :   1014850 / 1000000 photons
+Pixel Number 1526 :   1031493 / 1000000 photons
+Pixel Number 1527 :   1005859 / 1000000 photons
+Pixel Number 1532 :   1007702 / 1000000 photons
+Pixel Number 1539 :   1001822 / 1000000 photons
+Pixel Number 1541 :   1002660 / 1000000 photons
+Pixel Number 1542 :   1034788 / 1000000 photons
+Pixel Number 1555 :   1135200 / 1000000 photons
+Pixel Number 1557 :   1030090 / 1000000 photons
+Pixel Number 1560 :   1002321 / 1000000 photons
+Pixel Number 1565 :   1047355 / 1000000 photons
+Pixel Number 1572 :   1009529 / 1000000 photons
+Pixel Number 1582 :   1028616 / 1000000 photons
+Pixel Number 1585 :   1025848 / 1000000 photons
+Pixel Number 1586 :   1025751 / 1000000 photons
+Pixel Number 1587 :   1237554 / 1000000 photons
+Pixel Number 1588 :   1085131 / 1000000 photons
+Pixel Number 1594 :   1012945 / 1000000 photons
+Pixel Number 1596 :   1008317 / 1000000 photons
+Pixel Number 1598 :   1005365 / 1000000 photons
+Pixel Number 1606 :   1006750 / 1000000 photons
+Pixel Number 1608 :   1023281 / 1000000 photons
+Pixel Number 1610 :   1017511 / 1000000 photons
+Pixel Number 1611 :   1030285 / 1000000 photons
+Pixel Number 1613 :   1002244 / 1000000 photons
+Pixel Number 1615 :   1001753 / 1000000 photons
+Pixel Number 1619 :   1039172 / 1000000 photons
+Pixel Number 1623 :   1012581 / 1000000 photons
+Pixel Number 1624 :   1257204 / 1000000 photons
+Pixel Number 1625 :   1018840 / 1000000 photons
+Pixel Number 1627 :   1016064 / 1000000 photons
+Pixel Number 1630 :   1018077 / 1000000 photons
+Pixel Number 1633 :   1011609 / 1000000 photons
+Pixel Number 1635 :   1010202 / 1000000 photons
+Pixel Number 1639 :   1127404 / 1000000 photons
+Pixel Number 1642 :   1001922 / 1000000 photons
+Pixel Number 1644 :   1024065 / 1000000 photons
+Pixel Number 1647 :   1053893 / 1000000 photons
+Pixel Number 1651 :   1008810 / 1000000 photons
+Pixel Number 1653 :   1027116 / 1000000 photons
+Pixel Number 1656 :   1154091 / 1000000 photons
+Pixel Number 1658 :   1012756 / 1000000 photons
+Pixel Number 1661 :   1022693 / 1000000 photons
+Pixel Number 1664 :   1054553 / 1000000 photons
+Pixel Number 1667 :   1019692 / 1000000 photons
+Pixel Number 1671 :   1016673 / 1000000 photons
+Pixel Number 1672 :   1031266 / 1000000 photons
+Pixel Number 1676 :   1024855 / 1000000 photons
+Pixel Number 1678 :   1051506 / 1000000 photons
+Pixel Number 1680 :   1027440 / 1000000 photons
+Pixel Number 1681 :   1014241 / 1000000 photons
+Pixel Number 1683 :   1024643 / 1000000 photons
+Pixel Number 1684 :   1002955 / 1000000 photons
+Pixel Number 1685 :   1014870 / 1000000 photons
+Pixel Number 1688 :   1025894 / 1000000 photons
+Pixel Number 1690 :   1009183 / 1000000 photons
+Pixel Number 1692 :   1042848 / 1000000 photons
+Pixel Number 1695 :   1013640 / 1000000 photons
+Pixel Number 1696 :   1051658 / 1000000 photons
+Pixel Number 1697 :   1019638 / 1000000 photons
+Pixel Number 1701 :   1013350 / 1000000 photons
+Pixel Number 1703 :   1023950 / 1000000 photons
+Pixel Number 1705 :   1014604 / 1000000 photons
+Pixel Number 1706 :   1017772 / 1000000 photons
+Pixel Number 1709 :   1027979 / 1000000 photons
+Pixel Number 1712 :   1044391 / 1000000 photons
+Pixel Number 1713 :   1002826 / 1000000 photons
+Pixel Number 1715 :   1023800 / 1000000 photons
+Pixel Number 1717 :   1043781 / 1000000 photons
+Pixel Number 1721 :   1014445 / 1000000 photons
+Pixel Number 1724 :   1018768 / 1000000 photons
+Pixel Number 1726 :   1047979 / 1000000 photons
+Pixel Number 1729 :   1058004 / 1000000 photons
+Pixel Number 1731 :   1026755 / 1000000 photons
+Pixel Number 1733 :   1005641 / 1000000 photons
+Pixel Number 1737 :   1033328 / 1000000 photons
+Pixel Number 1740 :   1104116 / 1000000 photons
+Pixel Number 1742 :   1851860 / 1000000 photons
+Pixel Number 1743 :   1024086 / 1000000 photons
+Pixel Number 1746 :   1053131 / 1000000 photons
+Pixel Number 1753 :   1285730 / 1000000 photons
+Pixel Number 1754 :   1029160 / 1000000 photons
+Pixel Number 1760 :   1041939 / 1000000 photons
+Pixel Number 1762 :   1052948 / 1000000 photons
+Pixel Number 1765 :   1039951 / 1000000 photons
+Pixel Number 1768 :   1065524 / 1000000 photons
+Pixel Number 1772 :   1006976 / 1000000 photons
+Pixel Number 1774 :   1038235 / 1000000 photons
+Pixel Number 1779 :   1031767 / 1000000 photons
+Pixel Number 1782 :   1011929 / 1000000 photons
+Pixel Number 1785 :   1006195 / 1000000 photons
+Pixel Number 1787 :   1006793 / 1000000 photons
+Pixel Number 1799 :   1026031 / 1000000 photons
+Pixel Number 1803 :   1008690 / 1000000 photons
+Pixel Number 1811 :   1004887 / 1000000 photons
+Pixel Number 1813 :   1027926 / 1000000 photons
+Pixel Number 1819 :   1005296 / 1000000 photons
+Pixel Number 1844 :   1016887 / 1000000 photons
+Pixel Number 1847 :   1004367 / 1000000 photons
+Pixel Number 1869 :   1001054 / 1000000 photons
+Pixel Number 1873 :   1142053 / 1000000 photons
+Pixel Number 1874 :   1146773 / 1000000 photons
+Pixel Number 1939 :   1179498 / 1000000 photons
+Pixel Number 1940 :   1247650 / 1000000 photons
+Saturated pixels in NIR arm:
+None

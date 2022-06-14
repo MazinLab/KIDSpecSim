@@ -1,0 +1,57 @@
+> Output metrics for KIDSpec Simulation of object Mrk348_ZJ
+
+Date run: 2021-06-02 10:24:30.078200 
+
+> Input Parameters for simulation and instrument: 
+
+Telescope mirror diameter: 400 cm 
+Exposure time: 2700 s 
+Seeing: 0.8 arcseconds 
+Airmass: 1.5 
+
+Slit width: 0.63 arcseconds 
+Slit length: 2.70 arcseconds 
+Slicers: 1 
+
+KIDSpec grating incidence angle: 25.0 deg 
+KIDSpec grating blaze angle: 25.0 deg 
+KIDSpec grating grooves: 170.0 /mm 
+
+Number of spectral pixels in each arm: 2500 
+Pixel plate scale: 0.3 
+Chosen MKID energy resolution at fiducial point: 30 
+Number of dead spectal pixels in KIDSpec: 0 
+MKID energy resolution at fiducial point standard deviation for KIDSpec: 0.00 
+
+Simulation spectrum magnitudes:
+U --> N/A 
+B --> N/A 
+V --> N/A 
+R --> 15.661314515271702 
+I --> 15.036647580703324 
+Z --> 14.43713991905031 
+Y --> 14.341904183041503 
+J --> 13.932329459802887 
+H --> 12.592517143487104 
+K --> N/A 
+L --> N/A 
+M --> N/A 
+N --> N/A 
+Q --> N/A 
+Flux reduced by factor of 1.0
+Spectrum redshifted by 0.000
+
+> Result parameters: 
+
+OPT orders observed: 12 
+IR orders observed: 1 
+ 
+Wavelength range tested: 400 - 2500 nm 
+Recreated spectrum resolution: 4699 - 5889 
+Recreated spectrum resolution average: 5294 +/- 594 
+Average residuals: (2.145 +/- 1.241)% 
+R value: 0.994 
+Average SNR: 113.069 
+Percentage of photons which were misidentified: 0.30
+
+Simulation run duration: 0:11:36.653759 (hours:minutes:seconds)

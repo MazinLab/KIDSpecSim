@@ -1,0 +1,62 @@
+> Output metrics for KIDSpec Simulation of object SDSS_J003948.20+000814.6
+
+Date run: 2021-02-16 15:29:38.962140 
+
+> Input Parameters for simulation and instrument: 
+
+Telescope mirror diameter: 420 cm 
+Exposure time: 60 s 
+Seeing: 0.8 arcseconds 
+Airmass: 1.5 
+
+Slit width: 0.63 arcseconds 
+Slit length: 2.70 arcseconds 
+Slicers: 1 
+
+OPT arm incidence angle: 25.0 deg 
+OPT arm blaze angle: 25.0 deg 
+OPT arm grooves: 170.0 /mm 
+IR arm incidence angle: 30.0 deg 
+IR arm blaze angle: 30.0 deg 
+IR arm grooves: 110.0 /mm 
+
+Number of spectral pixels in each arm: 2500 
+Number of dead spectal pixels in OPT arm: 0 
+Number of dead spectal pixels in IR arm: 0 
+Pixel plate scale: 0.3 
+Chosen MKID energy resolution at fiducial point: 30 
+MKID energy resolution at fiducial point standard deviation for OPT arm: 0.00 
+MKID energy resolution at fiducial point standard deviation for IR arm: 0.00 
+
+Simulation spectrum magnitudes:
+U --> 22.699515823560525 
+B --> 21.920526060561656 
+V --> 20.28888457845646 
+R --> 19.515632715460708 
+I --> 18.719909122887028 
+Z --> 18.236006674946942 
+Y --> N/A 
+J --> N/A 
+H --> N/A 
+K --> N/A 
+L --> N/A 
+M --> N/A 
+N --> N/A 
+Q --> N/A 
+Flux reduced by factor of 50.0
+Spectrum redshifted by 0.000
+
+> Result parameters: 
+
+OPT orders observed: 9 
+IR orders observed: 7 
+ 
+Wavelength range tested: 400 - 2500 nm 
+Recreated spectrum resolution: 3331 - 5889 
+Recreated spectrum resolution average: 4699 +/- 683 
+Average residuals: (20.958 +/- 12.991)% 
+R value: 0.701 
+Average SNR: 0.000 
+Percentage of photons which were misidentified: 0.05
+
+Simulation run duration: 0:15:11.444601 (hours:minutes:seconds)

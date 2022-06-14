@@ -1,0 +1,71 @@
+> Output metrics for KIDSpec Simulation of object J003948.20+000814.6
+
+Date run: 2022-03-23 12:30:22.381290 
+
+> Input Parameters for simulation and instrument: 
+
+Telescope mirror diameter: 800 cm 
+Exposure time: 60 s 
+Seeing: 0.8 arcseconds 
+Airmass: 1.5 
+
+Slit width: 0.60 arcseconds 
+Slit length: 0.60 arcseconds 
+Slicers: 1 
+
+KIDSpec grating incidence angle: 25.0 deg 
+KIDSpec grating blaze angle: 25.0 deg 
+KIDSpec grating grooves: 241.5 /mm 
+
+Number of spectral pixels in each arm: 3200 
+Pixel plate scale: 0.3 
+Chosen MKID energy resolution at fiducial point: 30 
+Number of dead spectal pixels in KIDSpec: 0 
+MKID energy resolution at fiducial point standard deviation for KIDSpec: 0.00 
+
+Simulation spectrum magnitudes:
+U --> 17.185080527345185 
+B --> 17.24172773893893 
+V --> 15.886464730693922 
+R --> 15.209503850120132 
+I --> 14.443569865739471 
+Z --> 13.94533980060356 
+Y --> N/A 
+J --> N/A 
+H --> N/A 
+K --> N/A 
+L --> N/A 
+M --> N/A 
+N --> N/A 
+Q --> N/A 
+Flux reduced by factor of 1.00000
+Spectrum redshifted by 0.000
+
+> Result parameters: 
+
+OPT orders observed: 10 
+IR orders observed: 1 
+ 
+Wavelength range tested: 350 - 1900 nm 
+Recreated spectrum resolution: 4278 - 5878 
+Recreated spectrum resolution average: 5078 +/- 799 
+Average residuals: (3.862 +/- 2.504)% 
+R value: 0.980 
+Average SNR: 18.724 +/- 0.002 
+Average X-Shooter Noise included SNR: 15.363 
+Average SOXS Noise included SNR: 16.745 
+Percentage of photons which were misidentified (total): 0.03877382
+Percentage of photons which were misidentified (average per pixel): 0.09291635
+
+Simulation run duration: 0:04:26.051789 (hours:minutes:seconds)
+
+Saturated pixels in OPT/Single arm:
+Pixel Number 227 :   73145 / 60000 photons
+Pixel Number 680 :   87177 / 60000 photons
+Pixel Number 796 :   65867 / 60000 photons
+Pixel Number 1182 :   83897 / 60000 photons
+Pixel Number 1305 :   66436 / 60000 photons
+Pixel Number 1366 :   69176 / 60000 photons
+Pixel Number 1742 :   70369 / 60000 photons
+Saturated pixels in NIR arm:
+None

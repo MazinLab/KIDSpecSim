@@ -1,0 +1,81 @@
+> Output metrics for KIDSpec Simulation of object Standard_Star_GD71
+
+Date run: 2022-05-17 15:12:51.187129 
+
+> Input Parameters for simulation and instrument: 
+
+Telescope mirror diameter: 800 cm 
+Exposure time: 1000 s 
+Seeing: 0.8 arcseconds 
+Airmass: 1.5 
+
+Slit width: 0.60 arcseconds 
+Slit length: 0.60 arcseconds 
+Slicers: 1 
+
+KIDSpec grating incidence angle: 25.0 deg 
+KIDSpec grating blaze angle: 25.0 deg 
+KIDSpec grating grooves: 173.8 /mm 
+
+Number of spectral pixels in each arm: 6700 
+Pixel plate scale: 0.3 
+Chosen MKID energy resolution at fiducial point: 40 
+Percentage of spectral pixels which are dead: 0.00 
+Number of dead spectral pixels in KIDSpec: 0 
+MKID energy resolution at fiducial point standard deviation for KIDSpec: 0.00 
+
+Simulation spectrum magnitudes:
+U --> 11.752822721067993 
+B --> 12.68607547678169 
+V --> 13.00013465990375 
+R --> 13.215907669250797 
+I --> 13.378627749316989 
+Z --> 13.425980123828563 
+Y --> 13.638804084825624 
+J --> 13.756404263189317 
+H --> 13.849812388502176 
+K --> N/A 
+L --> N/A 
+M --> N/A 
+N --> N/A 
+Q --> N/A 
+Flux reduced by factor of 1.00000
+Spectrum redshifted by 0.000
+
+> Result parameters: 
+
+OPT orders observed: 13 
+IR orders observed: 1 
+ 
+Wavelength range tested: 350 - 1900 nm 
+Recreated spectrum resolution: 13377 - 16726 
+Recreated spectrum resolution average: 15052 +/- 1674 
+Average residuals (absoluted): (7.391 +/- 0.010)% 
+FWHM of residuals (not absoluted): 20.565 
+R value: 0.993 
+Average SNR: 177.243 +/- 15.646 
+Average X-Shooter Noise included SNR: 176.729 
+Average SOXS Noise included SNR: 177.092 
+Percentage of photons which were misidentified (total): 0.03423080
+Percentage of photons which were misidentified (average per pixel): 0.02961640
+
+Simulation run duration: 0:35:28.694427 (hours:minutes:seconds)
+
+Saturated pixels in OPT/Single arm:
+Pixel Number 1272 :   1311846 / 1000000 photons
+Pixel Number 2720 :   2087040 / 1000000 photons
+Pixel Number 2748 :   1278295 / 1000000 photons
+Pixel Number 3088 :   1850060 / 1000000 photons
+Pixel Number 3179 :   1098406 / 1000000 photons
+Pixel Number 3270 :   1369522 / 1000000 photons
+Pixel Number 3271 :   1375082 / 1000000 photons
+Pixel Number 3335 :   1046463 / 1000000 photons
+Pixel Number 3393 :   1105195 / 1000000 photons
+Pixel Number 3468 :   1127296 / 1000000 photons
+Pixel Number 3470 :   1068385 / 1000000 photons
+Pixel Number 3966 :   1215812 / 1000000 photons
+Pixel Number 4320 :   1902039 / 1000000 photons
+Pixel Number 4350 :   1104172 / 1000000 photons
+Pixel Number 4713 :   1420371 / 1000000 photons
+Saturated pixels in NIR arm:
+None

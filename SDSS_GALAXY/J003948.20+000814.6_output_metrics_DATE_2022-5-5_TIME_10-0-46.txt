@@ -1,0 +1,73 @@
+> Output metrics for KIDSpec Simulation of object J003948.20+000814.6
+
+Date run: 2022-05-05 10:00:46.817896 
+
+> Input Parameters for simulation and instrument: 
+
+Telescope mirror diameter: 800 cm 
+Exposure time: 60 s 
+Seeing: 0.8 arcseconds 
+Airmass: 1.5 
+
+Slit width: 0.60 arcseconds 
+Slit length: 0.60 arcseconds 
+Slicers: 1 
+
+KIDSpec grating incidence angle: 25.0 deg 
+KIDSpec grating blaze angle: 25.0 deg 
+KIDSpec grating grooves: 278.0 /mm 
+
+Number of spectral pixels in each arm: 4000 
+Pixel plate scale: 0.3 
+Chosen MKID energy resolution at fiducial point: 25 
+Percentage of spectral pixels which are dead: 0.00 
+Number of dead spectral pixels in KIDSpec: 0 
+MKID energy resolution at fiducial point standard deviation for KIDSpec: 0.00 
+
+Simulation spectrum magnitudes:
+U --> 17.185080527345185 
+B --> 17.24172773893893 
+V --> 15.886464730693922 
+R --> 15.209503850120132 
+I --> 14.443569865739471 
+Z --> 13.94533980060356 
+Y --> N/A 
+J --> N/A 
+H --> N/A 
+K --> N/A 
+L --> N/A 
+M --> N/A 
+N --> N/A 
+Q --> N/A 
+Flux reduced by factor of 1.00000
+Spectrum redshifted by 0.000
+
+> Result parameters: 
+
+OPT orders observed: 9 
+IR orders observed: 1 
+ 
+Wavelength range tested: 350 - 1900 nm 
+Recreated spectrum resolution: 3955 - 5954 
+Recreated spectrum resolution average: 4954 +/- 999 
+Average residuals (absoluted): (3.167 +/- 2.178)% 
+FWHM of residuals (not absoluted): 1283.163 
+R value: 0.981 
+Average SNR: 24.354 +/- 0.006 
+Average X-Shooter Noise included SNR: 21.453 
+Average SOXS Noise included SNR: 22.716 
+KSIM feature at 728.8 FWHM: 0.907 +/- 0.347 
+Model feature at 728.8 FWHM: 0.759 +/- 0.294 
+Percentage of photons which were misidentified (total): 0.02674224
+Percentage of photons which were misidentified (average per pixel): 0.01937168
+
+Simulation run duration: 0:06:03.760419 (hours:minutes:seconds)
+
+Saturated pixels in OPT/Single arm:
+Pixel Number 1989 :   90660 / 60000 photons
+Pixel Number 2111 :   71086 / 60000 photons
+Pixel Number 2171 :   71894 / 60000 photons
+Pixel Number 2630 :   67129 / 60000 photons
+Pixel Number 3065 :   72382 / 60000 photons
+Saturated pixels in NIR arm:
+None

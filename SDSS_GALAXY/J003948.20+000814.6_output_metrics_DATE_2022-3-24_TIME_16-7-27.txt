@@ -1,0 +1,70 @@
+> Output metrics for KIDSpec Simulation of object J003948.20+000814.6
+
+Date run: 2022-03-24 16:07:27.065524 
+
+> Input Parameters for simulation and instrument: 
+
+Telescope mirror diameter: 800 cm 
+Exposure time: 180 s 
+Seeing: 0.8 arcseconds 
+Airmass: 1.5 
+
+Slit width: 0.60 arcseconds 
+Slit length: 0.60 arcseconds 
+Slicers: 1 
+
+KIDSpec grating incidence angle: 25.0 deg 
+KIDSpec grating blaze angle: 25.0 deg 
+KIDSpec grating grooves: 173.8 /mm 
+
+Number of spectral pixels in each arm: 3800 
+Pixel plate scale: 0.3 
+Chosen MKID energy resolution at fiducial point: 40 
+Number of dead spectal pixels in KIDSpec: 0 
+MKID energy resolution at fiducial point standard deviation for KIDSpec: 0.00 
+
+Simulation spectrum magnitudes:
+U --> 22.185080527345185 
+B --> 22.241727738938927 
+V --> 20.886464730693923 
+R --> 20.209503850120136 
+I --> 19.443569865739473 
+Z --> 18.94533980060356 
+Y --> N/A 
+J --> N/A 
+H --> N/A 
+K --> N/A 
+L --> N/A 
+M --> N/A 
+N --> N/A 
+Q --> N/A 
+Flux reduced by factor of 100.00000
+Spectrum redshifted by 0.000
+
+> Result parameters: 
+
+OPT orders observed: 13 
+IR orders observed: 1 
+ 
+Wavelength range tested: 350 - 1900 nm 
+Recreated spectrum resolution: 7458 - 9358 
+Recreated spectrum resolution average: 8408 +/- 949 
+Average residuals: (7.094 +/- 4.574)% 
+R value: 0.952 
+Average SNR: 2.619 +/- 0.000 
+Average X-Shooter Noise included SNR: 0.797 
+Average SOXS Noise included SNR: 0.827 
+Percentage of photons which were misidentified (total): 0.00860204
+Percentage of photons which were misidentified (average per pixel): 0.08263504
+
+Simulation run duration: 0:07:12.382534 (hours:minutes:seconds)
+
+Saturated pixels in OPT/Single arm:
+Pixel Number 741 :   226021 / 180000 photons
+Pixel Number 1029 :   182542 / 180000 photons
+Pixel Number 1550 :   261252 / 180000 photons
+Pixel Number 1755 :   186169 / 180000 photons
+Pixel Number 1857 :   204673 / 180000 photons
+Pixel Number 2443 :   226681 / 180000 photons
+Saturated pixels in NIR arm:
+None

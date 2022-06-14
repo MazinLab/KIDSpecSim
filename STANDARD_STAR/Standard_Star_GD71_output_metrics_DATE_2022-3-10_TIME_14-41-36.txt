@@ -1,0 +1,72 @@
+> Output metrics for KIDSpec Simulation of object Standard_Star_GD71
+
+Date run: 2022-03-10 14:41:36.993846 
+
+> Input Parameters for simulation and instrument: 
+
+Telescope mirror diameter: 800 cm 
+Exposure time: 2000 s 
+Seeing: 0.8 arcseconds 
+Airmass: 1.5 
+
+Slit width: 0.60 arcseconds 
+Slit length: 0.60 arcseconds 
+Slicers: 1 
+
+OPT arm incidence angle: 25.0 deg 
+OPT arm blaze angle: 25.0 deg 
+OPT arm grooves: 278.0 /mm 
+IR arm incidence angle: 30.0 deg 
+IR arm blaze angle: 30.0 deg 
+IR arm grooves: 110.0 /mm 
+
+Number of spectral pixels in each arm: 4000 
+Pixel plate scale: 0.3 
+Chosen MKID energy resolution at fiducial point: 25 
+Number of dead spectal pixels in OPT arm: 0 
+Number of dead spectal pixels in IR arm: 0 
+MKID energy resolution at fiducial point standard deviation for OPT arm: 0.00 
+MKID energy resolution at fiducial point standard deviation for IR arm: 0.00 
+
+Simulation spectrum magnitudes:
+U --> 19.252822721067993 
+B --> 20.186075476781692 
+V --> 20.50013465990375 
+R --> 20.715907669250797 
+I --> 20.87862774931699 
+Z --> 20.925980123828563 
+Y --> 21.138804084825622 
+J --> 21.256404263189317 
+H --> 21.349812388502176 
+K --> N/A 
+L --> N/A 
+M --> N/A 
+N --> N/A 
+Q --> N/A 
+Flux reduced by factor of 1000.00000
+Spectrum redshifted by 0.000
+
+> Result parameters: 
+
+OPT orders observed: 9 
+IR orders observed: 1 
+ 
+Wavelength range tested: 350 - 1900 nm 
+Recreated spectrum resolution: 3955 - 5954 
+Recreated spectrum resolution average: 4954 +/- 999 
+Average residuals: (21.615 +/- 12.824)% 
+R value: 0.946 
+Average SNR: 8.894 +/- 1.965 
+Percentage of photons which were misidentified (total): 0.00
+Percentage of photons which were misidentified (average per pixel): 0.00
+
+Simulation run duration: 0:05:34.805936 (hours:minutes:seconds)
+
+Saturated pixels in OPT/Single arm:
+Pixel Number 1989 :   2780580 / 2000000 photons
+Pixel Number 2111 :   2109178 / 2000000 photons
+Pixel Number 2171 :   2148064 / 2000000 photons
+Pixel Number 2630 :   2001328 / 2000000 photons
+Pixel Number 3065 :   2229770 / 2000000 photons
+Saturated pixels in NIR arm:
+None

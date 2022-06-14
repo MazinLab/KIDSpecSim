@@ -1,0 +1,69 @@
+> Output metrics for KIDSpec Simulation of object HD212442
+
+Date run: 2022-05-03 11:13:38.602688 
+
+> Input Parameters for simulation and instrument: 
+
+Telescope mirror diameter: 50 cm 
+Exposure time: 60 s 
+Seeing: 0.8 arcseconds 
+Airmass: 1.5 
+
+Slit width: 0.60 arcseconds 
+Slit length: 0.60 arcseconds 
+Slicers: 1 
+
+KIDSpec grating incidence angle: 25.0 deg 
+KIDSpec grating blaze angle: 25.0 deg 
+KIDSpec grating grooves: 278.0 /mm 
+
+Number of spectral pixels in each arm: 4000 
+Pixel plate scale: 0.3 
+Chosen MKID energy resolution at fiducial point: 25 
+Percentage of spectral pixels which are dead: 0.00 
+Number of dead spectral pixels in KIDSpec: 0 
+MKID energy resolution at fiducial point standard deviation for KIDSpec: 0.00 
+
+Simulation spectrum magnitudes:
+U --> N/A 
+B --> 7.944532945313779 
+V --> 7.383592474304656 
+R --> 7.277971758334153 
+I --> 7.283960882561578 
+Z --> 7.163977364293903 
+Y --> 7.143576926373719 
+J --> 6.522892550779696 
+H --> N/A 
+K --> N/A 
+L --> N/A 
+M --> N/A 
+N --> N/A 
+Q --> N/A 
+Flux reduced by factor of 1.00000
+Spectrum redshifted by 0.000
+
+> Result parameters: 
+
+OPT orders observed: 9 
+IR orders observed: 1 
+ 
+Wavelength range tested: 350 - 1900 nm 
+Recreated spectrum resolution: 3955 - 5954 
+Recreated spectrum resolution average: 4954 +/- 999 
+Average residuals (absoluted): (1.703 +/- 1.006)% 
+FWHM of residuals (not absoluted): 8.911 
+R value: 0.998 
+Average SNR: 91.030 +/- 19.453 
+Average X-Shooter Noise included SNR: 90.089 
+Average SOXS Noise included SNR: 90.540 
+KSIM feature at 656.2 FWHM: 1.549 +/- 0.019 
+Model feature at 656.2 FWHM: 1.504 +/- 0.007 
+Percentage of photons which were misidentified (total): 0.02381345
+Percentage of photons which were misidentified (average per pixel): 0.01824638
+
+Simulation run duration: 0:05:29.561045 (hours:minutes:seconds)
+
+Saturated pixels in OPT/Single arm:
+None
+Saturated pixels in NIR arm:
+None

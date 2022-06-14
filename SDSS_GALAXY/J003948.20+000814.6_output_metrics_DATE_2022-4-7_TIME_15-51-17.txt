@@ -1,0 +1,69 @@
+> Output metrics for KIDSpec Simulation of object J003948.20+000814.6
+
+Date run: 2022-04-07 15:51:17.736242 
+
+> Input Parameters for simulation and instrument: 
+
+Telescope mirror diameter: 800 cm 
+Exposure time: 180 s 
+Seeing: 0.8 arcseconds 
+Airmass: 1.5 
+
+Slit width: 0.60 arcseconds 
+Slit length: 0.60 arcseconds 
+Slicers: 1 
+
+KIDSpec grating incidence angle: 25.0 deg 
+KIDSpec grating blaze angle: 25.0 deg 
+KIDSpec grating grooves: 278.0 /mm 
+
+Number of spectral pixels in each arm: 4000 
+Pixel plate scale: 0.3 
+Chosen MKID energy resolution at fiducial point: 25 
+Number of dead spectal pixels in KIDSpec: 0 
+MKID energy resolution at fiducial point standard deviation for KIDSpec: 2.99 
+
+Simulation spectrum magnitudes:
+U --> 21.432505538185232 
+B --> 21.48915274977898 
+V --> 20.13388974153397 
+R --> 19.45692886096018 
+I --> 18.69099487657952 
+Z --> 18.192764811443606 
+Y --> N/A 
+J --> N/A 
+H --> N/A 
+K --> N/A 
+L --> N/A 
+M --> N/A 
+N --> N/A 
+Q --> N/A 
+Flux reduced by factor of 50.00000
+Spectrum redshifted by 0.000
+
+> Result parameters: 
+
+OPT orders observed: 9 
+IR orders observed: 1 
+ 
+Wavelength range tested: 350 - 1900 nm 
+Recreated spectrum resolution: 3955 - 5954 
+Recreated spectrum resolution average: 4954 +/- 999 
+Average residuals: (100.000 +/- 0.000)% 
+R value: nan 
+Average SNR: 154.725 +/- nan 
+Average X-Shooter Noise included SNR: 154.161 
+Average SOXS Noise included SNR: 154.204 
+Percentage of photons which were misidentified (total): 37.01093999
+Percentage of photons which were misidentified (average per pixel): nan
+
+Simulation run duration: 0:04:17.380160 (hours:minutes:seconds)
+
+Saturated pixels in OPT/Single arm:
+Pixel Number 1989 :   250154 / 180000 photons
+Pixel Number 2111 :   190479 / 180000 photons
+Pixel Number 2171 :   193532 / 180000 photons
+Pixel Number 2630 :   180325 / 180000 photons
+Pixel Number 3065 :   200981 / 180000 photons
+Saturated pixels in NIR arm:
+None

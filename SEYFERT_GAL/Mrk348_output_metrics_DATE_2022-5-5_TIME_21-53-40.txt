@@ -1,0 +1,72 @@
+> Output metrics for KIDSpec Simulation of object Mrk348
+
+Date run: 2022-05-05 21:53:40.782831 
+
+> Input Parameters for simulation and instrument: 
+
+Telescope mirror diameter: 800 cm 
+Exposure time: 180 s 
+Seeing: 0.8 arcseconds 
+Airmass: 1.5 
+
+Slit width: 0.60 arcseconds 
+Slit length: 0.60 arcseconds 
+Slicers: 1 
+
+KIDSpec grating incidence angle: 25.0 deg 
+KIDSpec grating blaze angle: 25.0 deg 
+KIDSpec grating grooves: 173.8 /mm 
+
+Number of spectral pixels in each arm: 3800 
+Pixel plate scale: 0.3 
+Chosen MKID energy resolution at fiducial point: 40 
+Percentage of spectral pixels which are dead: 0.00 
+Number of dead spectral pixels in KIDSpec: 0 
+MKID energy resolution at fiducial point standard deviation for KIDSpec: 0.00 
+
+Simulation spectrum magnitudes:
+U --> N/A 
+B --> N/A 
+V --> N/A 
+R --> 20.52913502741998 
+I --> 19.902159155640785 
+Z --> 19.307893043865963 
+Y --> 19.202674102695553 
+J --> 18.77376477013903 
+H --> 17.418584683594098 
+K --> N/A 
+L --> N/A 
+M --> N/A 
+N --> N/A 
+Q --> N/A 
+Flux reduced by factor of 300.00000
+Spectrum redshifted by 0.000
+
+> Result parameters: 
+
+OPT orders observed: 13 
+IR orders observed: 1 
+ 
+Wavelength range tested: 350 - 1900 nm 
+Recreated spectrum resolution: 7458 - 9358 
+Recreated spectrum resolution average: 8408 +/- 949 
+Average residuals (absoluted): (2.932 +/- 1.615)% 
+FWHM of residuals (not absoluted): 16.048 
+R value: 0.984 
+Average SNR: 6.308 +/- 1.151 
+Average X-Shooter Noise included SNR: 2.320 
+Average SOXS Noise included SNR: 3.531 
+Percentage of photons which were misidentified (total): 0.01097344
+Percentage of photons which were misidentified (average per pixel): 0.02680154
+
+Simulation run duration: 0:06:43.566559 (hours:minutes:seconds)
+
+Saturated pixels in OPT/Single arm:
+Pixel Number 741 :   225507 / 180000 photons
+Pixel Number 1029 :   182019 / 180000 photons
+Pixel Number 1550 :   262619 / 180000 photons
+Pixel Number 1755 :   186198 / 180000 photons
+Pixel Number 1857 :   205923 / 180000 photons
+Pixel Number 2443 :   227233 / 180000 photons
+Saturated pixels in NIR arm:
+None

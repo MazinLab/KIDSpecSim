@@ -1,0 +1,83 @@
+> Output metrics for KIDSpec Simulation of object Standard_Star_GD71
+
+Date run: 2022-05-26 10:50:35.238864 
+
+> Input Parameters for simulation and instrument: 
+
+Telescope mirror diameter: 800 cm 
+Exposure time: 1000 s 
+Seeing: 0.8 arcseconds 
+Airmass: 1.5 
+
+Slit width: 0.60 arcseconds 
+Slit length: 0.60 arcseconds 
+Slicers: 1 
+
+KIDSpec grating incidence angle: 25.0 deg 
+KIDSpec grating blaze angle: 25.0 deg 
+KIDSpec grating grooves: 241.5 /mm 
+
+Number of spectral pixels in each arm: 3200 
+Pixel plate scale: 0.3 
+Chosen MKID energy resolution at fiducial point: 30 
+Percentage of spectral pixels which are dead: 0.00 
+Number of dead spectral pixels in KIDSpec: 0 
+MKID energy resolution at fiducial point standard deviation for KIDSpec: 0.00 
+
+Simulation spectrum magnitudes:
+U --> 11.752822721067993 
+B --> 12.68607547678169 
+V --> 13.00013465990375 
+R --> 13.215907669250797 
+I --> 13.378627749316989 
+Z --> 13.425980123828563 
+Y --> 13.638804084825624 
+J --> 13.756404263189317 
+H --> 13.849812388502176 
+K --> N/A 
+L --> N/A 
+M --> N/A 
+N --> N/A 
+Q --> N/A 
+Flux reduced by factor of 1.00000
+Spectrum redshifted by 0.000
+
+> Result parameters: 
+
+OPT orders observed: 10 
+IR orders observed: 1 
+ 
+Wavelength range tested: 350 - 1900 nm 
+Recreated spectrum resolution: 4248 - 5847 
+Recreated spectrum resolution average: 5048 +/- 799 
+Average residuals (absoluted): (25.330 +/- 12.005)% 
+FWHM of residuals (not absoluted): 60.148 
+R value: 0.940 
+Average SNR: 215.818 +/- 26.003 
+Average X-Shooter Noise included SNR: 215.393 
+Average SOXS Noise included SNR: 215.693 
+Percentage of photons which were misidentified (total): 0.05510031
+Percentage of photons which were misidentified (average per pixel): 0.04791081
+
+Simulation run duration: 0:06:15.928662 (hours:minutes:seconds)
+
+Saturated pixels in OPT/Single arm:
+Pixel Number 235 :   1231591 / 1000000 photons
+Pixel Number 343 :   1065648 / 1000000 photons
+Pixel Number 396 :   1107712 / 1000000 photons
+Pixel Number 686 :   1573969 / 1000000 photons
+Pixel Number 801 :   1334467 / 1000000 photons
+Pixel Number 858 :   1001799 / 1000000 photons
+Pixel Number 1185 :   1682724 / 1000000 photons
+Pixel Number 1194 :   1059977 / 1000000 photons
+Pixel Number 1307 :   1522900 / 1000000 photons
+Pixel Number 1368 :   1453627 / 1000000 photons
+Pixel Number 1434 :   1063674 / 1000000 photons
+Pixel Number 1435 :   1008629 / 1000000 photons
+Pixel Number 1587 :   1019581 / 1000000 photons
+Pixel Number 1624 :   1025828 / 1000000 photons
+Pixel Number 1742 :   1574970 / 1000000 photons
+Pixel Number 1753 :   1044392 / 1000000 photons
+Pixel Number 1940 :   1024859 / 1000000 photons
+Saturated pixels in NIR arm:
+None

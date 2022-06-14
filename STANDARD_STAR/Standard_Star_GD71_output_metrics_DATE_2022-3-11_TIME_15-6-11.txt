@@ -1,0 +1,49 @@
+> Output metrics for KIDSpec Simulation of object Standard_Star_GD71
+
+Date run: 2022-03-11 15:06:11.024272 
+
+> Input Parameters for simulation and instrument: 
+
+Telescope mirror diameter: 800 cm 
+Exposure time: 3600 s 
+Seeing: 0.8 arcseconds 
+Airmass: 1.5 
+
+Slit width: 0.60 arcseconds 
+Slit length: 0.60 arcseconds 
+Slicers: 1 
+
+OPT arm incidence angle: 25.0 deg 
+OPT arm blaze angle: 25.0 deg 
+OPT arm grooves: 173.8 /mm 
+IR arm incidence angle: 30.0 deg 
+IR arm blaze angle: 30.0 deg 
+IR arm grooves: 110.0 /mm 
+
+Number of spectral pixels in each arm: 3800 
+Pixel plate scale: 0.3 
+Chosen MKID energy resolution at fiducial point: 40 
+Flux reduced in total by factor of 1000.0
+Spectrum redshifted by 0.000
+
+> Result parameters: 
+
+OPT orders observed: 13 
+IR orders observed: 0 
+Wavelength range tested: 350 - 1900 nm 
+ 
+Simulation limiting magnitudes [Wavelength/nm, Vega band, Vega magnitude, SNR at limit]:
+1616.65371 | H | 19.67873 | 9.73649 
+1212.49030 | J | 20.98658 | 9.68479 
+969.99224 | I | 21.52232 | 9.80796 
+808.32683 | R | 22.19907 | 9.19800 
+692.85160 | V | 22.08356 | 9.91333 
+606.24517 | V | 22.27150 | 9.56361 
+538.88457 | V | 22.08356 | 9.57264 
+484.99612 | B | 22.16696 | 9.74406 
+440.90556 | B | 22.04449 | 9.73746 
+404.16347 | U | 20.47815 | 9.44270 
+373.07394 | U | 20.56171 | 9.76730 
+346.42580 | U | 18.48845 | 0.00000 
+323.33071 | U | 18.48845 | 0.00000 
+Simulation run duration: 5:37:16.060810 (hours:minutes:seconds)

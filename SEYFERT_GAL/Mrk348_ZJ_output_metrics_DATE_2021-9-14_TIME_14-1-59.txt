@@ -1,0 +1,63 @@
+> Output metrics for KIDSpec Simulation of object Mrk348_ZJ
+
+Date run: 2021-09-14 14:01:59.617127 
+
+> Input Parameters for simulation and instrument: 
+
+Telescope mirror diameter: 800 cm 
+Exposure time: 3600 s 
+Seeing: 0.8 arcseconds 
+Airmass: 1.5 
+
+Slit width: 0.63 arcseconds 
+Slit length: 2.70 arcseconds 
+Slicers: 1 
+
+OPT arm incidence angle: 25.0 deg 
+OPT arm blaze angle: 25.0 deg 
+OPT arm grooves: 170.0 /mm 
+IR arm incidence angle: 30.0 deg 
+IR arm blaze angle: 30.0 deg 
+IR arm grooves: 110.0 /mm 
+
+Number of spectral pixels in each arm: 2500 
+Pixel plate scale: 0.3 
+Chosen MKID energy resolution at fiducial point: 30 
+Number of dead spectal pixels in OPT arm: 0 
+Number of dead spectal pixels in IR arm: 0 
+MKID energy resolution at fiducial point standard deviation for OPT arm: 0.00 
+MKID energy resolution at fiducial point standard deviation for IR arm: 0.00 
+
+Simulation spectrum magnitudes:
+U --> N/A 
+B --> N/A 
+V --> N/A 
+R --> 15.644562462723126 
+I --> 15.018566824276716 
+Z --> 14.42285784912787 
+Y --> 14.3172084246377 
+J --> 13.876084313699922 
+H --> 12.563683566883535 
+K --> N/A 
+L --> N/A 
+M --> N/A 
+N --> N/A 
+Q --> N/A 
+Flux reduced by factor of 1.0
+Spectrum redshifted by 0.000
+
+> Result parameters: 
+
+OPT orders observed: 9 
+IR orders observed: 7 
+ 
+Wavelength range tested: 400 - 2500 nm 
+Recreated spectrum resolution: 3331 - 5889 
+Recreated spectrum resolution average: 4699 +/- 683 
+Average residuals: (0.474 +/- 0.296)% 
+R value: 0.980 
+Average SNR: 172.138 
+Percentage of photons which were misidentified (total): 0.33
+Percentage of photons which were misidentified (average per pixel): 0.35
+
+Simulation run duration: 0:15:45.479951 (hours:minutes:seconds)

@@ -1,0 +1,70 @@
+> Output metrics for KIDSpec Simulation of object J003948.20+000814.6
+
+Date run: 2022-03-24 15:50:59.446653 
+
+> Input Parameters for simulation and instrument: 
+
+Telescope mirror diameter: 800 cm 
+Exposure time: 180 s 
+Seeing: 0.8 arcseconds 
+Airmass: 1.5 
+
+Slit width: 0.60 arcseconds 
+Slit length: 0.60 arcseconds 
+Slicers: 1 
+
+KIDSpec grating incidence angle: 25.0 deg 
+KIDSpec grating blaze angle: 25.0 deg 
+KIDSpec grating grooves: 173.8 /mm 
+
+Number of spectral pixels in each arm: 3800 
+Pixel plate scale: 0.3 
+Chosen MKID energy resolution at fiducial point: 40 
+Number of dead spectal pixels in KIDSpec: 0 
+MKID energy resolution at fiducial point standard deviation for KIDSpec: 0.00 
+
+Simulation spectrum magnitudes:
+U --> 23.932505538185232 
+B --> 23.989152749778974 
+V --> 22.63388974153397 
+R --> 21.956928860960183 
+I --> 21.19099487657952 
+Z --> 20.692764811443606 
+Y --> N/A 
+J --> N/A 
+H --> N/A 
+K --> N/A 
+L --> N/A 
+M --> N/A 
+N --> N/A 
+Q --> N/A 
+Flux reduced by factor of 500.00000
+Spectrum redshifted by 0.000
+
+> Result parameters: 
+
+OPT orders observed: 13 
+IR orders observed: 1 
+ 
+Wavelength range tested: 350 - 1900 nm 
+Recreated spectrum resolution: 7458 - 9358 
+Recreated spectrum resolution average: 8408 +/- 949 
+Average residuals: (14.454 +/- 10.163)% 
+R value: 0.902 
+Average SNR: 0.866 +/- 0.000 
+Average X-Shooter Noise included SNR: 0.219 
+Average SOXS Noise included SNR: 0.227 
+Percentage of photons which were misidentified (total): 0.00670580
+Percentage of photons which were misidentified (average per pixel): 0.08116298
+
+Simulation run duration: 0:06:55.452623 (hours:minutes:seconds)
+
+Saturated pixels in OPT/Single arm:
+Pixel Number 741 :   226499 / 180000 photons
+Pixel Number 1029 :   182436 / 180000 photons
+Pixel Number 1550 :   261265 / 180000 photons
+Pixel Number 1755 :   186998 / 180000 photons
+Pixel Number 1857 :   204468 / 180000 photons
+Pixel Number 2443 :   225444 / 180000 photons
+Saturated pixels in NIR arm:
+None
