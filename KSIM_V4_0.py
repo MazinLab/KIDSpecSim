@@ -63,9 +63,9 @@ else:
 
 original_spec = np.copy(model_spec)
 
-#if redshift > 0:
-#    print('\n Redshifting.')
-#    model_spec = redshifter(model_spec,0.200344,redshift)
+if redshift > 0:
+    print('\n Redshifting.')
+    model_spec = redshifter(model_spec,redshift_orig,redshift)
 print('\nSimulating observation of %s.'%object_name)
 
 #sectioning the spectrum to chosen KIDSpec bandpass
