@@ -42,11 +42,7 @@ When simulating an observation with KSIM all changes can be done within the `SET
 |slit_width | Slit width in arcseconds.|
 |pixel_fov | Pixel FOV in arcseconds.|
 |off_centre | How off slit centre the pixel is (arcseconds).|
-|airmass | |
-|ir_grooves | If using two arms then these grating parameters are for the infrared (IR) arm, and previous parameters are for the optical (OPT) arm. Same definitions.|                                
-|ir_alpha_val | |             
-|ir_phi_val | |   
-|ir_refl_deg | |          
+|ir_grooves | If using two arms then these grating parameters are for the infrared (IR) arm, and previous parameters are for the optical (OPT) arm. Same definitions.|                                       
 |dead_pixel_perc | Percentage of MKIDs which are dead.|         
 |R_E_spread | Option to activate a 3-sigma spread in energy resolution around the fudicial energy resolution.|       
 |IR_arm | Option to activate a second arm.|
