@@ -81,11 +81,11 @@ eff_models = ['Gaussian','Sinc','Schroeder','Casini'] #grating efficiency model 
 off_centre = float(params[25].split(' ')[2]) #how much the object is not in the centre, between 0 and 1
 airmass = float(params[26].split(' ')[2])
 
-IR_grooves = float(params[29].split(' ')[2])
+IR_grooves = float(params[27].split(' ')[2])
 IR_a = 1000. / IR_grooves #distance between grooves in micrometers
-IR_alpha = float(params[30].split(' ')[2])
-IR_phi = float(params[31].split(' ')[2])
-refl_deg_ir = float(params[32].split(' ')[2]) 
+IR_alpha = float(params[28].split(' ')[2])
+IR_phi = float(params[29].split(' ')[2])
+refl_deg_ir = float(params[30].split(' ')[2]) 
 refl_start_val_ir = IR_alpha - refl_deg_ir #6.0 # Diffraction angles in degrees
 refl_end_val_ir = IR_alpha + refl_deg_ir #6.0  # Beta start and stop NEED NOT be symmetric around alpha in degrees
 
