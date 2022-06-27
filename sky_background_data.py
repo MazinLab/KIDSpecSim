@@ -8,7 +8,7 @@ Created on Fri Feb 28 14:19:32 2020
 from astropy.io import fits
 from matplotlib import pyplot as plt
 import numpy as np
-from parameters import h,c,mirr_diam,exposure_t,fov,area,binstep,slit_width,slit_length,lambda_high_val,lambda_low_val #c is in cm/s and mirr_diam is in cm
+from parameters import h,c,mirr_diam,exposure_t,fov,area,binstep,slit_width,lambda_high_val,lambda_low_val #c is in cm/s and mirr_diam is in cm
 
 
 #UVES------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -200,7 +200,7 @@ def ESO_sky_model(file):
     sky_mod[1] += sky_mod_flux
     bin_width = (sky_mod_lam[-1] - sky_mod_lam[0]) / len(sky_mod_lam)
     
-    units_conv = exposure_t*(np.pi*(0.5*(mirr_diam/100))**2)*(bin_width/1000)*(slit_width*slit_length)   #*fov
+    units_conv = exposure_t*(np.pi*(0.5*(mirr_diam/100))**2)*(bin_width/1000)*(slit_width*2.7)   #*fov
     
     sky_mod[1] *= units_conv
     low_coord = np.where(sky_mod[0]>lambda_low_val)[0][0]

@@ -542,7 +542,7 @@ f.write('Seeing: %.1f arcseconds \n'%seeing)
 f.write('Airmass: %.1f \n\n'%airmass)
 
 f.write('Slit width: %.2f arcseconds \n'%slit_width)
-f.write('Slit length: %.2f arcseconds \n'%slit_length)
+#f.write('Slit length: %.2f arcseconds \n'%slit_length)
 f.write('Slicers: %i \n\n'%slicers)
 
 if IR_arm == True:
