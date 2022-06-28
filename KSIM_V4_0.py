@@ -21,7 +21,7 @@ from useful_funcs import data_extractor, telescope_effects, optics_transmission,
             data_extractor_TLUSTY, data_extractor_TLUSTY_joint_spec,spec_seeing, \
                 atmospheric_effects,rebinner_with_bins, \
                     R_value,redshifter,order_merge_reg_grid,grid_plotter,SNR_calc_grid,SNR_calc_pred_grid,grid_plotter_opp, \
-                        model_interpolator,fwhm_fitter_lorentzian,continuum_removal,fwhm_fitter_gaussian, rebinner_2d
+                        model_interpolator,model_interpolator_sky,fwhm_fitter_lorentzian,continuum_removal,fwhm_fitter_gaussian, rebinner_2d
 from parameters import *
 from flux_to_photons_conversion import photons_conversion,flux_conversion,flux_conversion_3
 from apply_QE import QE
@@ -82,8 +82,9 @@ photon_spec_no_eff_original = photons_conversion(model_spec,model_spec,plotting=
 photon_spec_no_eff = model_interpolator(photon_spec_no_eff_original,200000)
 
 #generating sky
-photon_spec_of_sky = sky_spectrum_load(plotting=extra_plots)
- 
+photon_spec_of_sky_orig = sky_spectrum_load(plotting=extra_plots)
+photon_spec_of_sky = model_interpolator_sky(photon_spec_of_sky_orig,200000)
+
 #calculating magnitudes of model spectrum
 SIM_obj_mags = mag_calc(model_spec,plotting=False,wls_check=True)
 
@@ -173,7 +174,7 @@ if orders_opt[0] != 1:
                                                                                                                       orders_opt,efficiencies_opt,cutoff,IR=False,OPT=True,plotting=extra_plots)
 
     print('\nOPT/Single arm sky photons.')
-    pixel_sums_opt_sky,_= grating_binning_high_enough_R_sky(sky_QE,order_wavelengths_opt,order_wavelengths,
+    pixel_sums_opt_sky,_= grating_binning_high_enough_R(sky_QE,order_wavelengths_opt,order_wavelengths,
                                                   orders_opt,efficiencies_opt,cutoff,IR=False,OPT=True,plotting=extra_plots)
     
     #adding the object and sky grids together
@@ -208,7 +209,7 @@ if orders_ir[0] != 1:
                                                                                                                 orders_ir,efficiencies_ir,cutoff,IR=True,OPT=False,
                                                                                                                     plotting=extra_plots)
     print('\nNIR arm sky photons.')
-    pixel_sums_ir_sky,_ = grating_binning_high_enough_R_sky(sky_QE,order_wavelengths_ir,
+    pixel_sums_ir_sky,_ = grating_binning_high_enough_R(sky_QE,order_wavelengths_ir,
                                                                 order_wavelengths,orders_ir,efficiencies_ir,
                                                                 cutoff,IR=True,OPT=False,plotting=extra_plots)
     
@@ -541,9 +542,9 @@ f.write('Exposure time: %i s \n'%exposure_t)
 f.write('Seeing: %.1f arcseconds \n'%seeing)
 f.write('Airmass: %.1f \n\n'%airmass)
 
-f.write('Slit width: %.2f arcseconds \n'%slit_width)
+f.write('Slit width: %.2f arcseconds \n\n'%slit_width)
 #f.write('Slit length: %.2f arcseconds \n'%slit_length)
-f.write('Slicers: %i \n\n'%slicers)
+#f.write('Slicers: %i \n\n'%slicers)
 
 if IR_arm == True:
     f.write('OPT arm incidence angle: %.1f deg \n'%alpha_val)
