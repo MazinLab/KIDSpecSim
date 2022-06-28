@@ -359,7 +359,7 @@ def grating_binning_high_enough_R(spec,w_o,all_w_o,order_list,eff,cutoff,IR=Fals
         for i in range(len(pixel_sums[0,:])):
             for j in range(len(pixel_sums[:,0])):
                 if pixel_sums[j,i] < 1:
-                    pixel_sums[j,i] = 0
+                    #pixel_sums[j,i] = 0
                     zeroed_wls.append(w_o[i,j])
                 try:
                     pixel_sums[j,i] = np.random.poisson(lam=pixel_sums[j,i])

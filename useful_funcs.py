@@ -985,9 +985,25 @@ def model_interpolator(spec,no_points):
     spec_out = np.zeros((2,no_points))
     spec_out[0] += np.linspace(spec[0][0],spec[0][-1],no_points)
     spec_out[1] += f_int(spec_out[0])
+    
+    spec_out[1] /= np.sum(spec_out[1])/np.sum(spec[1])
 
     return spec_out
 
+def model_interpolator_sky(spec,no_points):
+    
+    binstep_interpolation = ((spec[0][-1]-spec[0][0]) / no_points)
+    binstep_sky = ((spec[0][-1]-spec[0][0]) / len(spec[0]))
+    binstep_factor = binstep_sky / binstep_interpolation
+    f_int = interpolate.interp1d(spec[0], spec[1]/binstep_factor, bounds_error = False, fill_value = 0) #interpolating data
+    
+    spec_out = np.zeros((2,no_points))
+    spec_out[0] += np.linspace(spec[0][0],spec[0][-1],no_points)
+    spec_out[1] += f_int(spec_out[0])
+    
+    spec_out[1] /= np.sum(spec_out[1])/np.sum(spec[1])
+
+    return spec_out
 
 
 #########################################################################################################################################
