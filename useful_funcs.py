@@ -314,8 +314,11 @@ def atmospheric_effects(spec,plotting=False,return_trans=False):
 def sigma_calc(s,lambdas,airmass): #the data used (sky, spec, atmos, etc) have been done with an airmass ~1.5
     
     D = mirr_diam / 100 #converting mirror diameter to metres
-    L0 = 46 #in metres, this is the wavefront outer length-scale of the atmospheric turbulence above Paranal
-            #if L0 is infinity then this corresponds to pure Kolomogorov turbulence
+    if mirr_diam >= 3000:
+        L0 = 25 # 46 in metres, this is the wavefront outer length-scale of the atmospheric turbulence above Paranal
+    else:
+        L0 = 46            #if L0 is infinity then this corresponds to pure Kolomogorov turbulence
+                # 25m is the ESO official value given to calculate turbulence 
     
     F_Kolb = (1. / (1. + (300.*D/L0))) - 1  #Kolb factor
 
@@ -400,11 +403,11 @@ def telescope_effects(spec,thorlabs=False,plotting=False):
         transmissions = telescope_effects_data(spec)
         post_tele = spec[1] * (transmissions/100) #applying interpolation to data
     else:
-        gemini_data = np.loadtxt('Mirror_Materials/gemini_mirrors_Ag_coating_data_nm.txt')
+        data = np.loadtxt('Mirror_Materials/%s.txt'%tele_file)
         #print(gemini_data)
         #print(np.shape(gemini_data))
         #print(spec[0])
-        transmissions = np.interp(spec[0],gemini_data[:,0][::-1],gemini_data[:,1][::-1])
+        transmissions = np.interp(spec[0],data[:,0][::-1],data[:,1][::-1])
         post_tele = spec[1] * (transmissions/100) #applying interpolation to data
         #print(transmissions)
 
@@ -517,7 +520,6 @@ def SNR_calc_grid(spec,sky,plotting=False): #spectra in photons ideally
         plt.colorbar()
         
     return SNR,SNRs
-    
 
 def SNR_calc_pred(obj,sky,SOX=False,plotting=False): #spectra in photons ideally
     
@@ -795,6 +797,22 @@ def rebinner_2d(spec,wls,no_bins):
     return new_spec,new_wls
         
 
+def how_many_bins(wls, desired_R):
+    
+    del_lam = wls[0][int(len(wls[0])/2)] / (2*desired_R)
+    
+    new_bins_no = (wls[0][-1]-wls[0][0]) / del_lam
+    
+    return int(new_bins_no)
+
+def rebin_and_calc_SNR(spec,sky,wls,desired_R):
+    
+    no_bins = how_many_bins(wls, desired_R)
+    rebin_spec,rebin_wls = rebinner_2d(spec,wls,no_bins)
+    rebin_sky,_ = rebinner_2d(sky,wls,no_bins)
+    rebin_SNR,rebin_SNRs = SNR_calc_grid(rebin_spec,rebin_sky)
+    
+    return rebin_SNRs,rebin_wls
 
 
 ##########################################################################################################################################
@@ -804,15 +822,20 @@ def rebinner_2d(spec,wls,no_bins):
 
 def R_value(sim_spec,data_spec,plotting=False):
     
-    x = sim_spec[1][~np.isnan(sim_spec[1])]
-    x_1 = x
-    y = data_spec[1][~np.isnan(sim_spec[1])]
-    x = x[x < 1e308]
-    x_2 = x
-    x = x[x > -1e308]
-    y = y[x_1 < 1e308]
-    y = y[x_2 > -1e308]
-    N = len(sim_spec[1])
+    if len(sim_spec) == 2:
+        x = sim_spec[1][~np.isnan(sim_spec[1])]
+        x_1 = x
+        y = data_spec[1][~np.isnan(sim_spec[1])]
+        x = x[x < 1e308]
+        x_2 = x
+        x = x[x > -1e308]
+        y = y[x_1 < 1e308]
+        y = y[x_2 > -1e308]
+        N = len(sim_spec[1])
+    else:
+        x = sim_spec
+        y = data_spec
+        N = len(sim_spec)
     
     numerator = (N*np.sum(x*y)) - (np.sum(x)*np.sum(y))
     denominator = np.sqrt( (N*np.sum(x**2) - (np.sum(x)**2)) * (N*np.sum(y**2) - (np.sum(y)**2)) )
@@ -985,7 +1008,7 @@ def model_interpolator(spec,no_points):
     spec_out = np.zeros((2,no_points))
     spec_out[0] += np.linspace(spec[0][0],spec[0][-1],no_points)
     spec_out[1] += f_int(spec_out[0])
-    
+
     spec_out[1] /= np.sum(spec_out[1])/np.sum(spec[1])
 
     return spec_out
@@ -1006,10 +1029,75 @@ def model_interpolator_sky(spec,no_points):
     return spec_out
 
 
+
+
 #########################################################################################################################################
 #KSIM express function
 #########################################################################################################################################
 
+def KIDSpec_Express_V2(pix_sum,ord_wl,order_list,pix_no,IR=False,sky=False):
+    
+    pix_order_ph = np.zeros((2,len(pix_sum[pix_no,:])))
+    pix_order_mis = np.zeros((2,len(pix_sum[pix_no,:])))
+        
+    file_path = '%s/Resample/'%(folder)
+
+    if len(ord_wl) > 0: 
+        pix_order_ph[0,:] += ord_wl[:,pix_no]
+        pix_order_mis[0,:] += ord_wl[:,pix_no]
+        R_Es = ER_band_low / np.sqrt(ord_wl[:,pix_no]/ER_band_wl)
+        mis_photon_perc = np.array([97,38,0.001,0.0])
+        order_re_ratio = np.array([1,2,3,4])
+        pix_order_RE_ratio = R_Es/order_list
+        pix_order_mis_photons = np.zeros(len(pix_order_RE_ratio))
+        pix_order_mis_photons[pix_order_RE_ratio > 4] += 1.0
+        pix_order_mis_photons[pix_order_RE_ratio < 4] += 1-((np.interp(pix_order_RE_ratio[pix_order_RE_ratio < 4],order_re_ratio,mis_photon_perc))/100)
+        
+        
+        for i in range(len(pix_sum[pix_no,:])):
+            photons_in_ord = pix_order_mis_photons[i]*pix_sum[pix_no,i]
+            if pix_order_mis_photons[i] < 1.0 and i != 0 and i != len(pix_sum[pix_no,:])-1:
+                pix_order_ph[1,i] += photons_in_ord
+                pix_order_ph[1,i-1] += (pix_sum[pix_no,i]-photons_in_ord)/2
+                pix_order_ph[1,i+1] += ((pix_sum[pix_no,i]-photons_in_ord)/2)
+                pix_order_mis[1,i] += (pix_sum[pix_no,i]-photons_in_ord)
+                
+            
+            elif pix_order_mis_photons[i] < 1.0 and i == 0 and i != len(pix_sum[pix_no,:])-1:
+                pix_order_ph[1,i] += photons_in_ord
+                pix_order_ph[1,i+1] += (pix_sum[pix_no,i]-photons_in_ord)
+                pix_order_mis[1,i] += (pix_sum[pix_no,i]-photons_in_ord)
+            
+            elif pix_order_mis_photons[i] < 1.0 and i != 0 and i == len(pix_sum[pix_no,:])-1:
+                pix_order_ph[1,i] += photons_in_ord
+                pix_order_ph[1,i-1] += (pix_sum[pix_no,i]-photons_in_ord)
+                pix_order_mis[1,i] += (pix_sum[pix_no,i]-photons_in_ord)
+                
+            else:
+                pix_order_ph[1,i] += photons_in_ord
+        
+    '''
+    if sky == False:
+        if IR == True:
+            np.save('%s/spectrum_order_pixel_IR_%i.npy'%(file_path,pix_no),pix_order_ph)
+            np.save('%s/spectrum_misident_pixel_IR_%i.npy'%(file_path,pix_no),pix_order_mis)
+        else:
+            #print('OBJ',pix_order_ph)
+            np.save('%s/spectrum_order_pixel_OPT_%i.npy'%(file_path,pix_no),pix_order_ph)
+            np.save('%s/spectrum_misident_pixel_OPT_%i.npy'%(file_path,pix_no),pix_order_mis)
+    else:
+        if IR == True:
+            np.save('%s/spectrum_order_pixel_IR_sky_%i.npy'%(file_path,pix_no),pix_order_ph)
+            np.save('%s/spectrum_misident_pixel_IR_sky_%i.npy'%(file_path,pix_no),pix_order_mis)
+        else:
+            #print('SKY',pix_order_ph)
+            np.save('%s/spectrum_order_pixel_OPT_sky_%i.npy'%(file_path,pix_no),pix_order_ph)
+            np.save('%s/spectrum_misident_pixel_OPT_sky_%i.npy'%(file_path,pix_no),pix_order_mis)
+    '''  
+    return pix_order_ph,pix_order_mis
+
+    
+    
 
 def KIDSpec_Express(pix_sum,pix_sky,ord_waves,pixels,bad_pix=[False,1.0],R_E_shift=[False,0],IR=False):
     
@@ -1641,6 +1729,20 @@ def three_d_rebinner(spec,wls):
 
 
 #########################################################################################################################################
+#Chi min test
+#########################################################################################################################################
+
+
+def reduced_chi_test(data,model,error,norm=True):
+    data2 = data/np.mean(abs(data))
+    model2 = model/np.mean(abs(data))
+    error2 = np.sqrt(abs(data2))    
+    return np.sum(np.square(data2-model2) / np.square(error2)) / (len(data)-1)
+
+
+
+
+#########################################################################################################################################
 #FWHM calculator via fitting
 #########################################################################################################################################
 
@@ -1686,7 +1788,27 @@ def fwhm_fitter_exp(data_x, data_y,mu,amp,offset,fac):
 
 def fwhm_fitter_lorentzian(data_x, data_y,mu,amp,offset,fwhm):
     
-    popt,pcov = curve_fit(lorentzian,data_x,data_y,p0=[mu,amp,offset,fwhm],maxfev=10000)
+    popt,pcov = curve_fit(lorentzian,data_x,data_y,p0=[mu,amp,offset,fwhm],maxfev=100000)
+    fwhm = popt[3]
+    fwhm_error = np.sqrt(pcov[3,3])
+
+    plt.figure()
+    plt.plot(data_x,data_y,'rx',label='Data')
+    plt.plot(np.linspace(data_x[0],data_x[-1],100000),lorentzian(np.linspace(data_x[0],data_x[-1],100000),*popt),'b-',alpha=0.7,label='Fit')
+    plt.xlabel('Wavelength / nm')
+    plt.ylabel(object_y)
+    plt.legend(loc='best')
+    
+    r_val_fit = R_value(data_y,lorentzian(data_x,*popt))
+    chi_val_fit = reduced_chi_test(data_y,lorentzian(data_x,*popt),np.sqrt(abs(data_y)))
+    
+    print('\nFWHM:',fwhm,'+/-',fwhm_error, r_val_fit)
+    
+    return fwhm,fwhm_error,r_val_fit,chi_val_fit
+
+def fwhm_fitter_lorentzian_ret_popt(data_x, data_y,mu,amp,offset,fwhm):
+    
+    popt,pcov = curve_fit(lorentzian,data_x,data_y,p0=[mu,amp,offset,fwhm],maxfev=100000)
     fwhm = popt[3]
     fwhm_error = np.sqrt(pcov[3,3])
     print('\nFWHM:',fwhm,'+/-',fwhm_error)
@@ -1697,7 +1819,7 @@ def fwhm_fitter_lorentzian(data_x, data_y,mu,amp,offset,fwhm):
     plt.xlabel('Wavelength / nm')
     plt.ylabel(object_y)
     plt.legend(loc='best')
-    return fwhm,fwhm_error
+    return fwhm,fwhm_error,popt
 
 
 def fwhm_fitter_gaussian(data_x, data_y,mu,amp,offset,sig):

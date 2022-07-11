@@ -286,6 +286,7 @@ def MKID_response_V2(spec,order_list,w_o,w_o_arm,n_pixels,pixel_sums,
             np.save('R_E_PIXELS/R_E_PIXELS_IR.npy',pixel_R_Es)
         else:
             np.save('R_E_PIXELS/R_E_PIXELS_OPT.npy',pixel_R_Es)
+            
     
     return resp_grid,resp_grid_mis
 

@@ -289,6 +289,14 @@ else:
     kidspec_raw_output_sky += kidspec_sky_resp_opt
     misidentified_sky_spectrum += kidspec_sky_mis_opt
         
+percentage_misidentified_tot = (abs(np.sum(kidspec_raw_output+kidspec_raw_output_sky) \
+                                    - np.sum(misidentified_spectrum+misidentified_sky_spectrum)) \
+                                        / np.sum(kidspec_raw_output+kidspec_raw_output_sky) )*100
+    
+percentage_misidentified_pp = np.mean(abs((kidspec_raw_output+kidspec_raw_output_sky) \
+                                    - (misidentified_spectrum+misidentified_sky_spectrum)) \
+                                        / (kidspec_raw_output+kidspec_raw_output_sky) )*100
+
 
 #############################################################################################################################################################################################
 #SKY SUBTRACTION, ORDER MERGING AND SNR CALCULATION
