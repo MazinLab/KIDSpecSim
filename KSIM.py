@@ -95,7 +95,7 @@ SIM_obj_mags = mag_calc(model_spec,plotting=False,wls_check=True)
 print('\nApplying atmospheric, telescope, slit, and QE effects.')
 
 photon_spec_post_atmos = atmospheric_effects(photon_spec_no_eff,plotting=extra_plots,return_trans=False)
-photon_sky_post_atmos = atmospheric_effects(photon_spec_of_sky,plotting=True,return_trans=False)
+photon_sky_post_atmos = atmospheric_effects(photon_spec_of_sky,plotting=False,return_trans=False)
 
 photon_spec_pre_optics = telescope_effects(photon_spec_post_atmos,plotting=extra_plots) 
 photon_sky_pre_optics = telescope_effects(photon_sky_post_atmos,plotting=False)
@@ -416,7 +416,7 @@ SIM_total_flux_spectrum_model_bins_pre_filt = flux_conversion_3(SIM_rebin_to_dat
 #SIM_total_flux_spectrum_model_bins = np.copy(SIM_total_flux_spectrum_model_bins_pre_filt)#
 SIM_total_flux_spectrum_model_bins = np.zeros_like(SIM_total_flux_spectrum_model_bins_pre_filt)#
 SIM_total_flux_spectrum_model_bins[0] += SIM_total_flux_spectrum_model_bins_pre_filt[0]
-SIM_total_flux_spectrum_model_bins[1] += gaussian_filter1d(SIM_total_flux_spectrum_model_bins_pre_filt[1],1)
+SIM_total_flux_spectrum_model_bins[1] += SIM_total_flux_spectrum_model_bins_pre_filt[1]#gaussian_filter1d(SIM_total_flux_spectrum_model_bins_pre_filt[1],1)
 
 #magnitude calculation from simulation result
 SIM_out_mags = mag_calc(SIM_total_flux_spectrum,plotting=False,wls_check=False)
@@ -429,14 +429,14 @@ if fwhm_fitter == True:
     SIM_spec_continuum_removed = continuum_removal(SIM_total_flux_spectrum_model_bins,poly=cont_rem_poly)
     model_spec_continuum_removed = continuum_removal(model_spec,poly=cont_rem_poly)
     coord_feature = nearest(SIM_total_flux_spectrum_model_bins[0],cen_wl,'coord')
-    coord_range = coord_feature - nearest(SIM_total_flux_spectrum_model_bins[0],cen_wl-1.4,'coord')
+    coord_range = coord_feature - nearest(SIM_total_flux_spectrum_model_bins[0],cen_wl-12,'coord')
     
-    fwhm,fwhm_err = fwhm_fitter_lorentzian(SIM_spec_continuum_removed[0,coord_feature-coord_range:coord_feature+coord_range],
+    fwhm,fwhm_err,r_val_fit,chi_val_fit = fwhm_fitter_lorentzian(SIM_spec_continuum_removed[0,coord_feature-coord_range:coord_feature+coord_range],
                                            SIM_spec_continuum_removed[1,coord_feature-coord_range:coord_feature+coord_range],
                                            cen_wl,SIM_spec_continuum_removed[1][coord_feature],
                                            SIM_spec_continuum_removed[1][coord_feature],0.5)
     
-    fwhm_model,fwhm_err_model = fwhm_fitter_lorentzian(model_spec_continuum_removed[0][coord_feature-coord_range:coord_feature+coord_range],
+    fwhm_model,fwhm_err_model,_,_ = fwhm_fitter_lorentzian(model_spec_continuum_removed[0][coord_feature-coord_range:coord_feature+coord_range],
                                            model_spec_continuum_removed[1][coord_feature-coord_range:coord_feature+coord_range],
                                            cen_wl,model_spec_continuum_removed[1][coord_feature],
                                            model_spec_continuum_removed[1][coord_feature],0.5)

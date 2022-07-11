@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 from scipy import interpolate
 import os
 
-from useful_funcs import gaussian_eq,nearest,wavelength_array_maker
+from useful_funcs import gaussian_eq,nearest,wavelength_array_maker,KIDSpec_Express_V2
 from parameters import ER_band_low,lambda_low_val,lambda_high_val,pix_mult,folder,r_e_spread,ER_band_wl,IR_arm
 
 
@@ -290,6 +290,54 @@ def MKID_response_V2(spec,order_list,w_o,w_o_arm,n_pixels,pixel_sums,
     
     return resp_grid,resp_grid_mis
 
+
+
+def MKID_response_Express(order_list,w_o,w_o_arm,n_pixels,pixel_sums,
+                  IR=False,sky=False,dual_arm_=True,make_folder=False):
+    
+    if make_folder == True:
+        os.mkdir('%s/Resample/'%(folder))
+    file_path_resample = '%s/Resample/'%(folder)
+    
+    if r_e_spread == True and IR == False:
+        pixel_R_Es = np.load('R_E_PIXELS/R_E_PIXELS_OPT.npy')
+    elif r_e_spread == True and IR == True:
+        pixel_R_Es = np.load('R_E_PIXELS/R_E_PIXELS_IR.npy')
+    else:
+        pixel_R_Es = np.ones(n_pixels)*ER_band_low
+    
+    int_steps = np.ndarray.astype((np.linspace(0,n_pixels,100)),dtype='int') 
+    prog = 0
+    
+    resp_grid = np.zeros_like(w_o_arm)
+    resp_grid_mis = np.zeros_like(w_o_arm)
+    
+    print('\n')
+    for pixel in range(n_pixels): #loop applies gaussian, finds any overlap, then resamples to 1d spectrum format, then saves
+    
+        if sky == True:
+            pix_order_ph,pix_order_mis = KIDSpec_Express_V2(pixel_sums,w_o_arm,order_list,pixel,IR=IR,sky=True)
+        else:
+            pix_order_ph,pix_order_mis = KIDSpec_Express_V2(pixel_sums,w_o_arm,order_list,pixel,IR=IR,sky=False)
+        
+        if IR_arm == True and IR == True:
+            resp_grid[:,pixel] += pix_order_ph[1]
+            resp_grid_mis[:,pixel] += pix_order_mis[1]
+        elif IR_arm == False and IR == False:
+            resp_grid[:,pixel] += pix_order_ph[1]
+            resp_grid_mis[:,pixel] += pix_order_mis[1]
+    
+        if (pixel == int_steps).any():
+            prog += 1
+            print('\r%i%% of pixels complete.'%prog,end='',flush=True)
+    
+    if r_e_spread == True:
+        if IR == True:
+            np.save('R_E_PIXELS/R_E_PIXELS_IR.npy',pixel_R_Es)
+        else:
+            np.save('R_E_PIXELS/R_E_PIXELS_OPT.npy',pixel_R_Es)
+    
+    return resp_grid,resp_grid_mis
 
 
 

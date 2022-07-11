@@ -16,10 +16,6 @@ import numpy as np
 from matplotlib import pyplot as plt
 import scipy.stats
 
-from useful_funcs import nearest,nearest_3
-
-from parameters import exposure_t
-
 plt.rcParams.update({'font.size': 32})
 
 #setting up
@@ -30,12 +26,41 @@ plt.rcParams.update({'font.size': 32})
 #wl = mu = spec[0][1]
 #tot_count = spec[1][1]
 
+exposure_t = 50
+
+def nearest(x,value,val_or_coord):
+    coord = np.abs(x-value).argmin()
+    val = x[coord]
+    if val_or_coord == 'coord':
+        return coord
+    if val_or_coord == 'val':
+        return val
+    
+def nearest_3(x,value,coord_removal_val):
+    x_new = np.zeros_like(x)
+    x_new += x
+    out = np.zeros(3)
+    
+    coord = np.abs(x_new-value).argmin()
+    out[0] = coord
+    
+    x_new[coord] += coord_removal_val
+    coord = np.abs(x_new-value).argmin()
+    out[1] = coord
+    
+    x_new[coord] += coord_removal_val
+    coord = np.abs(x_new-value).argmin()
+    out[2] = coord
+ 
+    return out
+
+
 def photon_stream_generator(R,plotting=False):
 
     data = np.zeros((3,3))
     data[:,0] = np.array([8,9,10])
     data[:,1] = np.array([550.14,489.01,440.11])
-    data[:,2] = np.array([100,10000,100])
+    data[:,2] = np.array([2000,2000*100,2000])
     
     #data = np.zeros((3,3))
     #data[:,0] = np.array([9,10,11])
@@ -80,7 +105,7 @@ def photon_stream_generator(R,plotting=False):
         poisson_eff_store = []
         
         for i in range(int(time_steps)):
-            poisson_eff = np.random.poisson(lam=expect_count)
+            poisson_eff = np.random.choice(2,p=[1-expect_count,expect_count])
             gaussian_wl = np.random.normal(loc=mu,scale=sig,size=poisson_eff)
             gaussian_eff_store.append(gaussian_wl)
             poisson_eff_store.append(poisson_eff)
@@ -88,6 +113,8 @@ def photon_stream_generator(R,plotting=False):
                 for j in range(poisson_eff):
                     photon_stream[k+1][i] += (gaussian_wl[j])
                     count_stream[k+1][i] += (mu/gaussian_wl[j])
+            prog = ((i+1) / int(time_steps))*100
+            print('\r%.5f%% of timebins in %ith of %i orders complete.'%(prog,k+1,len_ord),end='',flush=True)
                 
             
         #print('\nSpectrum count:',tot_count)
@@ -96,11 +123,12 @@ def photon_stream_generator(R,plotting=False):
         
         all_gauss_store.append(gaussian_eff_store)
         all_poisson_store.append(poisson_eff_store)
-    
+    print('\n')
     for i in range(int(time_steps)):
         photon_stream[-1,i] = np.sum(photon_stream[1:,i])
         count_stream[-1,i] = np.sum(count_stream[1:,i])
     
+        print('\r%i/%i time bins summed.'%(i+1,time_steps),end='',flush=True)
     
     
     if plotting == True:
@@ -640,7 +668,6 @@ def photon_stream_recreation_V2(photon_stream,count_stream,data,photon_resp,phot
                     
     return perc_mis,recreated_photon_stream,recreated_data,recreated_count_stream
 
-    
 
 def wave_to_phase(photon_stream):
     
@@ -677,8 +704,8 @@ def wave_to_phase(photon_stream):
 
 R = np.array([30])#np.linspace(5,85,20)
 
-ord_err_counts = np.zeros((3,len(R)))
-ord_err_counts2 = np.zeros((3,len(R)))
+ord_err_perc = np.zeros((3,len(R)))
+ord_err_perc2 = np.zeros((3,len(R)))
 
 prog = 0
 
@@ -693,14 +720,14 @@ for i in range(len(R)):
     print('Processing 2')
     perc_mis,recreated_photon_stream,recreated_data = photon_stream_recreation(photon_stream,count_stream,data,photon_resp,photon_combos,gauss_features)
     
-    ord_err_counts[:,i] = perc_mis[:,5]
-    ord_err_counts2[:,i] = perc_mis2[:,5]
+    ord_err_perc[:,i] = perc_mis[:,5]
+    ord_err_perc2[:,i] = perc_mis2[:,5]
     
     prog += 1
     
     print('\n',np.round((prog/len(R))*100,decimals=2),'% complete')
     
-'''
+
 wl_bins = []
 counts = []
 for i in range(3):
@@ -711,16 +738,17 @@ total_photons = np.sum(counts[:])
 counts_overlap = np.zeros((2,2))
 for i in range(2):
     coord_1 = np.where(wl_bins[i][0] >= wl_bins[i+1])[0][-1]
+    print(np.where(wl_bins[i+1][-1] >= wl_bins[i]))
     coord_2 = np.where(wl_bins[i+1][-1] >= wl_bins[i])[0][-1]
-    print(coord_1)
-    print(coord_2)
+    #print(coord_1)
+    #print(coord_2)
     wl_overlap[i] +=  wl_bins[i+1][-1] - wl_bins[i+1][coord_1]
     counts_overlap[i,0] += np.sum(counts[i][:coord_2])
     counts_overlap[i,1] += np.sum(counts[i+1][coord_1:])
 
 sum_counts_overlap = np.sum(counts_overlap)
 perc_overlap = (sum_counts_overlap/total_photons)*100
-'''
+print(perc_overlap)
 
 '''
 plt.figure()
