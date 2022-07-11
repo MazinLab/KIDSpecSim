@@ -26,7 +26,7 @@ from parameters import *
 from flux_to_photons_conversion import photons_conversion,flux_conversion,flux_conversion_3
 from apply_QE import QE
 from grating import grating_orders_2_arms,grating_binning,grating_binning_high_enough_R,grating_binning_high_enough_R_sky
-from MKID_gaussians import MKID_response,recreator
+from MKID_gaussians import MKID_response_V2,recreator
 
 plt.rcParams.update({'font.size': 32}) #sets the fontsize of any plots
 time_start = datetime.datetime.now() #beginning timer
@@ -240,38 +240,55 @@ if reset_R_Es == True:
 print('\nBeginning MKID response simulation for each arm and simultaneous sky exposure.')
 
 #OPT object mkid response
-MKID_response(spec_QE,orders_opt,order_wavelengths,order_wavelengths_opt,n_pixels,pixel_sums_opt,
-                  IR=False,sky=False,dual_arm_=IR_arm,make_folder=True)
+kidspec_resp_opt,kidspec_mis_opt = MKID_response_V2(spec_QE,orders_opt,order_wavelengths,order_wavelengths_opt,n_pixels,pixel_sums_opt,
+                  IR=False,sky=False,dual_arm_=IR_arm)
 print('\nOPT object observation complete. 1/4')
 
 #OPT sky mkid response
-MKID_response(sky_QE,orders_opt,order_wavelengths,order_wavelengths_opt,n_pixels,pixel_sums_opt_sky,
-                  IR=False,sky=True,dual_arm_=IR_arm,make_folder=False)
+kidspec_sky_resp_opt,kidspec_sky_mis_opt = MKID_response_V2(sky_QE,orders_opt,order_wavelengths,order_wavelengths_opt,n_pixels,pixel_sums_opt_sky,
+                  IR=False,sky=True,dual_arm_=IR_arm)
 print('\nOPT sky observation complete. 2/4')
 
 
 #NIR object mkid response
-MKID_response(spec_QE,orders_ir,order_wavelengths,order_wavelengths_ir,n_pixels,pixel_sums_ir,
-                  IR=True,sky=False,dual_arm_=IR_arm,make_folder=False)
+kidspec_resp_ir,kidspec_mis_ir = MKID_response_V2(spec_QE,orders_ir,order_wavelengths,order_wavelengths_ir,n_pixels,pixel_sums_ir,
+                  IR=True,sky=False,dual_arm_=IR_arm)
 print('\nNIR object observation complete. 3/4')
 
 #NIR sky mkid response
-MKID_response(sky_QE,orders_ir,order_wavelengths,order_wavelengths_ir,n_pixels,pixel_sums_ir_sky,
-                  IR=True,sky=True,dual_arm_=IR_arm,make_folder=False)
+kidspec_sky_resp_ir,kidspec_sky_mis_ir = MKID_response_V2(sky_QE,orders_ir,order_wavelengths,order_wavelengths_ir,n_pixels,pixel_sums_ir_sky,
+                  IR=True,sky=True,dual_arm_=IR_arm)
 print('\nNIR sky observation complete. 4/4')
 
 
-
-kidspec_raw_output,misidentified_spectrum,percentage_misidentified_pp, \
-    percentage_misidentified_tot,no_misident = recreator(spec_QE,n_pixels,order_wavelengths,orders_ir,sky=False) #1D spectrum of pixel grid, ORDERS NOT MERGED
-
-kidspec_raw_output_sky,misidentified_sky_spectrum,percentage_sky_misidentified_pp, \
-    percentage_sky_misidentified_tot,no_misident_sky = recreator(spec_QE,n_pixels,order_wavelengths,orders_ir,sky=True)
-
-
-if delete_folders == True:
-    shutil.rmtree('%s/Resample'%folder)
-
+print('\nFinalising MKID response grids.')
+if IR_arm == True:
+    kidspec_raw_output = np.zeros_like(order_wavelengths)
+    kidspec_raw_output[:len(order_list_ir)] += kidspec_resp_ir
+    kidspec_raw_output[len(order_list_ir):] += kidspec_resp_opt
+    
+    misidentified_spectrum = np.zeros_like(order_wavelengths)
+    misidentified_spectrum[:len(order_list_ir)] += kidspec_mis_ir
+    misidentified_spectrum[len(order_list_ir):] += kidspec_mis_opt
+    
+    kidspec_raw_output_sky = np.zeros_like(order_wavelengths)
+    kidspec_raw_output_sky[:len(order_list_ir)] += kidspec_sky_resp_ir
+    kidspec_raw_output_sky[len(order_list_ir):] += kidspec_sky_resp_opt
+    
+    misidentified_sky_spectrum = np.zeros_like(order_wavelengths)
+    misidentified_sky_spectrum[:len(order_list_ir)] += kidspec_sky_mis_ir
+    misidentified_sky_spectrum[len(order_list_ir):] += kidspec_sky_mis_opt
+else:
+    kidspec_raw_output = np.zeros_like(order_wavelengths)
+    misidentified_spectrum = np.zeros_like(order_wavelengths)
+    kidspec_raw_output_sky = np.zeros_like(order_wavelengths)
+    misidentified_sky_spectrum = np.zeros_like(order_wavelengths)
+    
+    kidspec_raw_output += kidspec_resp_opt
+    misidentified_spectrum += kidspec_mis_opt
+    kidspec_raw_output_sky += kidspec_sky_resp_opt
+    misidentified_sky_spectrum += kidspec_sky_mis_opt
+        
 
 #############################################################################################################################################################################################
 #SKY SUBTRACTION, ORDER MERGING AND SNR CALCULATION
