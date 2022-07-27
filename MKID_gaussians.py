@@ -270,12 +270,8 @@ def MKID_response_V2(spec,order_list,w_o,w_o_arm,n_pixels,pixel_sums,
         pix_gauss,pixel_R_Es = apply_gaussian(order_list,w_o,spec,pixel,pixel_sums,pixel_R_Es,generate_R_Es=r_e_spread,IR=IR,plot=False,dual_arm=dual_arm_)
         pixel_spec_ord,pixel_spec_mis = gaussian_overlaps(pix_gauss,pixel,order_list,w_o,spec,plotting=False)
         
-        if IR_arm == True and IR == True:
-            resp_grid[:,pixel] += pixel_spec_ord[1]
-            resp_grid_mis[:,pixel] += pixel_spec_mis[1]
-        elif IR_arm == False and IR == False:
-            resp_grid[:,pixel] += pixel_spec_ord[1]
-            resp_grid_mis[:,pixel] += pixel_spec_mis[1]
+        resp_grid[:,pixel] += pixel_spec_ord[1]
+        resp_grid_mis[:,pixel] += pixel_spec_mis[1]
     
         if (pixel == int_steps).any():
             prog += 1
@@ -286,9 +282,9 @@ def MKID_response_V2(spec,order_list,w_o,w_o_arm,n_pixels,pixel_sums,
             np.save('R_E_PIXELS/R_E_PIXELS_IR.npy',pixel_R_Es)
         else:
             np.save('R_E_PIXELS/R_E_PIXELS_OPT.npy',pixel_R_Es)
-            
     
     return resp_grid,resp_grid_mis
+
 
 
 

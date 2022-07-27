@@ -942,21 +942,29 @@ def order_merge_reg_grid(wls,resps,del_lam=None):
     out_spec_wls = np.arange(start=lambda_low_val,stop=lambda_high_val,step=del_lam)
     out_spec_counts = np.zeros_like(out_spec_wls)
     
+    tot_counts = len(wls)*len(wls[0])
+    
+    prog = 0
+    
     for order in range(len(wls)):
+        
         for lam in range(len(wls[order])):
             
-            if resps[order,lam] != 0:
+            if resps[order,lam] > 0:
                 
                 if lam == len(wls[order])-1:
                     curr_del_lam = wls[order,lam]-wls[order,lam-1]
                 else:
                     curr_del_lam = wls[order,lam+1]-wls[order,lam]
                 
-                low_range = nearest(out_spec_wls,wls[order,lam]-curr_del_lam,'coord')
-                high_range = nearest(out_spec_wls,wls[order,lam]+curr_del_lam,'coord')
-                diff_range = (curr_del_lam*2) / del_lam
+                low_range = nearest(out_spec_wls,wls[order,lam]-(curr_del_lam/2),'coord')
+                high_range = nearest(out_spec_wls,wls[order,lam]+(curr_del_lam/2),'coord')
+                diff_range = (high_range-low_range)+1#(curr_del_lam*2) / del_lam
                 
-                out_spec_counts[low_range:high_range+1] += resps[order,lam]/diff_range
+                out_spec_counts[low_range:high_range+1] += resps[order,lam]/len(out_spec_counts[low_range:high_range+1])
+                
+            prog += 1
+            print('\r%i%% of wavelengths complete.'%((prog/tot_counts)*100),end='',flush=True)
             
     out_spec = np.zeros((2,len(out_spec_wls)))
     out_spec[0] += out_spec_wls
@@ -964,9 +972,24 @@ def order_merge_reg_grid(wls,resps,del_lam=None):
     
     return out_spec
 
-
-
-
+'''
+test2 = np.zeros(len(test2_wls))
+for i in range(len(test)):
+    if i == len(test)-1:
+        curr_del_lam = test_wls[i]-test_wls[i-1]
+    else:
+        curr_del_lam =  test_wls[i+1]-test_wls[i]
+    low_range = nearest(test2_wls,test_wls[i]-(curr_del_lam/2),'coord')
+    high_range = nearest(test2_wls,test_wls[i]+(curr_del_lam/2),'coord')
+    diff_range = (high_range-low_range)+1#(curr_del_lam*2) / del_lam
+    test2[low_range:high_range+1] += test[i]/len(test2[low_range:high_range+1])
+    print(test[i])
+    print(curr_del_lam)
+    print(diff_range)
+    print(test2[low_range:high_range+1])
+    print(sum(test2[low_range:high_range+1]))
+    print('\n')
+'''
 #########################################################################################################################################
 #plotting a grid (2D array) by row
 #########################################################################################################################################
@@ -1005,6 +1028,7 @@ def model_interpolator(spec,no_points):
     binstep_factor = (binstep/1e-7) / binstep_interpolation
     f_int = interpolate.interp1d(spec[0], spec[1]/binstep_factor, bounds_error = False, fill_value = 0) #interpolating data
     
+    stand_star = np.loadtxt('STANDARD_STAR/GD71_spec.txt')
     spec_out = np.zeros((2,no_points))
     spec_out[0] += np.linspace(spec[0][0],spec[0][-1],no_points)
     spec_out[1] += f_int(spec_out[0])
@@ -1752,6 +1776,9 @@ def gaussian_2(x,mu,sig,offset,amp):
 def lorentzian(x,mu,amp,offset,fwhm):
     return ((-amp * ((fwhm/2)) / np.pi) / (  np.square(x-mu) + np.square((fwhm/2))  )) + offset
 
+def double_lorentzian(x,mu1,amp1,offset1,fwhm1,mu2,amp2,offset2,fwhm2):
+    return lorentzian(x,mu1,amp1,offset1,fwhm1) + lorentzian(x,mu2,amp2,offset2,fwhm2)
+
 def exp_func(x,mu,amp,offset,fac):
     return (-amp * np.exp(-fac*abs(mu-x))) + offset
 
@@ -1785,6 +1812,27 @@ def fwhm_fitter_exp(data_x, data_y,mu,amp,offset,fac):
     plt.legend(loc='best')
     return fwhm,fwhm_error
 
+def fwhm_fitter_lorentzian_double(data_x,data_y,mu,amp,offset,fwhm,mu2,amp2,offset2,fwhm2):
+    
+    popt,pcov = curve_fit(double_lorentzian,data_x,data_y,p0=[mu,amp,offset,fwhm,mu2,amp2,offset2,fwhm2],maxfev=100000)
+    fwhms = (popt[3],popt[7])
+    fwhm_errors = (np.sqrt(pcov[3,3]),np.sqrt(pcov[7,7]))
+
+    plt.figure()
+    plt.plot(data_x,data_y,'rx',label='Data')
+    plt.plot(np.linspace(data_x[0],data_x[-1],100000),double_lorentzian(np.linspace(data_x[0],data_x[-1],100000),*popt),\
+             'b-',alpha=0.7,label='Fit')
+    plt.xlabel('Wavelength / nm')
+    plt.ylabel(object_y)
+    plt.legend(loc='best')
+    
+    r_val_fit = R_value(data_y,double_lorentzian(data_x,*popt))
+    chi_val_fit = reduced_chi_test(data_y,double_lorentzian(data_x,*popt),np.sqrt(abs(data_y)))
+    
+    print('\nFWHM at %.2f:'%popt[0],fwhms[0],'+/-',fwhm_errors[0], r_val_fit)
+    print('\nFWHM at %.2f:'%popt[4],fwhms[1],'+/-',fwhm_errors[1], r_val_fit)
+    
+    return fwhms,fwhm_errors,r_val_fit,chi_val_fit
 
 def fwhm_fitter_lorentzian(data_x, data_y,mu,amp,offset,fwhm):
     

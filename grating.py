@@ -388,7 +388,7 @@ def grating_binning_high_enough_R(spec,w_o,all_w_o,order_list,eff,cutoff,IR=Fals
         
         
     
-    return pixel_sums,w_o_bins
+    return np.nan_to_num(pixel_sums),w_o_bins
 
 def grating_binning_high_enough_R_sky(spec,w_o,all_w_o,order_list,eff,cutoff,IR=False,OPT=False,plotting=False): #note: w_o here is wavelengths_orders
     

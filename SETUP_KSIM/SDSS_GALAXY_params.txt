@@ -1,8 +1,8 @@
 object_name = J003948.20+000814.6                   
-object_file = sdss_gal_spec_data.txt          
+object_file = sdss_gal_spec.txt          
 object_x = Wavelength / $nm$
 object_y = Flux / $ergcm^{-2}s^{-1}\AA^{-1}$         
-binstep = 0.14051246294919328             
+binstep = 0.0062665583703447785        
 mirr_diam = 800       
 seeing = 0.8         
 h = 6.626e-27 

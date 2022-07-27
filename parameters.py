@@ -112,10 +112,12 @@ stand_star_filename_detail = params[49].split(' ')[2]
 supported_file_extraction = str_2_bool(params[50].split(' ')[2])
 fwhm_fitter = str_2_bool(params[51].split(' ')[2])
 cen_wl = float(params[52].split(' ')[2])
-cont_rem_poly = str_2_bool(params[53].split(' ')[2])
-reset_R_Es = str_2_bool(params[54].split(' ')[2])
-reset_dead_pixels = str_2_bool(params[55].split(' ')[2])
-reg_grid_factor = float(params[56].split(' ')[2])
+cen_wl_2 = float(params[53].split(' ')[2])
+double_fit = str_2_bool(params[54].split(' ')[2])
+cont_rem_poly = str_2_bool(params[55].split(' ')[2])
+reset_R_Es = str_2_bool(params[56].split(' ')[2])
+reset_dead_pixels = str_2_bool(params[57].split(' ')[2])
+reg_grid_factor = float(params[58].split(' ')[2])
 
 pix_mult = np.ndarray.astype((np.linspace(1,n_pixels,10)),dtype='int') #for progress updates during sections of the code involving looping through pixels
  

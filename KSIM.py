@@ -21,7 +21,8 @@ from useful_funcs import data_extractor, telescope_effects, optics_transmission,
             data_extractor_TLUSTY, data_extractor_TLUSTY_joint_spec,spec_seeing, \
                 atmospheric_effects,rebinner_with_bins, \
                     R_value,redshifter,order_merge_reg_grid,grid_plotter,SNR_calc_grid,SNR_calc_pred_grid,grid_plotter_opp, \
-                        model_interpolator,model_interpolator_sky,fwhm_fitter_lorentzian,continuum_removal,fwhm_fitter_gaussian, rebinner_2d
+                        model_interpolator,model_interpolator_sky,fwhm_fitter_lorentzian,continuum_removal, \
+                            fwhm_fitter_gaussian, rebinner_2d, fwhm_fitter_lorentzian_double
 from parameters import *
 from flux_to_photons_conversion import photons_conversion,flux_conversion,flux_conversion_3
 from apply_QE import QE
@@ -250,15 +251,18 @@ kidspec_sky_resp_opt,kidspec_sky_mis_opt = MKID_response_V2(sky_QE,orders_opt,or
 print('\nOPT sky observation complete. 2/4')
 
 
-#NIR object mkid response
-kidspec_resp_ir,kidspec_mis_ir = MKID_response_V2(spec_QE,orders_ir,order_wavelengths,order_wavelengths_ir,n_pixels,pixel_sums_ir,
-                  IR=True,sky=False,dual_arm_=IR_arm)
-print('\nNIR object observation complete. 3/4')
-
-#NIR sky mkid response
-kidspec_sky_resp_ir,kidspec_sky_mis_ir = MKID_response_V2(sky_QE,orders_ir,order_wavelengths,order_wavelengths_ir,n_pixels,pixel_sums_ir_sky,
-                  IR=True,sky=True,dual_arm_=IR_arm)
-print('\nNIR sky observation complete. 4/4')
+if IR_arm == True:
+    #NIR object mkid response
+    kidspec_resp_ir,kidspec_mis_ir = MKID_response_V2(spec_QE,orders_ir,order_wavelengths,order_wavelengths_ir,n_pixels,pixel_sums_ir,
+                      IR=True,sky=False,dual_arm_=IR_arm)
+    print('\nNIR object observation complete. 3/4')
+    
+    #NIR sky mkid response
+    kidspec_sky_resp_ir,kidspec_sky_mis_ir = MKID_response_V2(sky_QE,orders_ir,order_wavelengths,order_wavelengths_ir,n_pixels,pixel_sums_ir_sky,
+                      IR=True,sky=True,dual_arm_=IR_arm)
+    print('\nNIR sky observation complete. 4/4')
+else:
+    print('\nIR arm not selected, observations complete. 4/4')
 
 
 print('\nFinalising MKID response grids.')
@@ -431,16 +435,37 @@ if fwhm_fitter == True:
     coord_feature = nearest(SIM_total_flux_spectrum_model_bins[0],cen_wl,'coord')
     coord_range = coord_feature - nearest(SIM_total_flux_spectrum_model_bins[0],cen_wl-12,'coord')
     
-    fwhm,fwhm_err,r_val_fit,chi_val_fit = fwhm_fitter_lorentzian(SIM_spec_continuum_removed[0,coord_feature-coord_range:coord_feature+coord_range],
+    if double_fit == True:
+        print('\nFitting result for KSIM:')
+        coord_feature_2 =  nearest(SIM_total_flux_spectrum_model_bins[0],cen_wl_2,'coord')
+        fwhm,fwhm_err,r_val_fit,chi_val_fit = fwhm_fitter_lorentzian_double(SIM_spec_continuum_removed[0,coord_feature-coord_range:coord_feature+coord_range],
                                            SIM_spec_continuum_removed[1,coord_feature-coord_range:coord_feature+coord_range],
                                            cen_wl,SIM_spec_continuum_removed[1][coord_feature],
-                                           SIM_spec_continuum_removed[1][coord_feature],0.5)
+                                           SIM_spec_continuum_removed[1][coord_feature],0.5,
+                                           cen_wl_2,SIM_spec_continuum_removed[1][coord_feature_2],
+                                           SIM_spec_continuum_removed[1][coord_feature_2],0.5)
+        
+        print('\nFitting result for model:')
+        fwhm_model,fwhm_err_model,_,_ = fwhm_fitter_lorentzian_double(model_spec_continuum_removed[0][coord_feature-coord_range:coord_feature+coord_range],
+                                               model_spec_continuum_removed[1][coord_feature-coord_range:coord_feature+coord_range],
+                                               cen_wl,model_spec_continuum_removed[1][coord_feature],
+                                               model_spec_continuum_removed[1][coord_feature],0.5,
+                                               cen_wl_2,model_spec_continuum_removed[1][coord_feature_2],
+                                               model_spec_continuum_removed[1][coord_feature_2],0.5)
     
-    fwhm_model,fwhm_err_model,_,_ = fwhm_fitter_lorentzian(model_spec_continuum_removed[0][coord_feature-coord_range:coord_feature+coord_range],
-                                           model_spec_continuum_removed[1][coord_feature-coord_range:coord_feature+coord_range],
-                                           cen_wl,model_spec_continuum_removed[1][coord_feature],
-                                           model_spec_continuum_removed[1][coord_feature],0.5)
+    else:
+        print('\nFitting result for KSIM:')
+        fwhm,fwhm_err,r_val_fit,chi_val_fit = fwhm_fitter_lorentzian(SIM_spec_continuum_removed[0,coord_feature-coord_range:coord_feature+coord_range],
+                                               SIM_spec_continuum_removed[1,coord_feature-coord_range:coord_feature+coord_range],
+                                               cen_wl,SIM_spec_continuum_removed[1][coord_feature],
+                                               SIM_spec_continuum_removed[1][coord_feature],0.5)
+        print('\nFitting result for model:')
+        fwhm_model,fwhm_err_model,_,_ = fwhm_fitter_lorentzian(model_spec_continuum_removed[0][coord_feature-coord_range:coord_feature+coord_range],
+                                               model_spec_continuum_removed[1][coord_feature-coord_range:coord_feature+coord_range],
+                                               cen_wl,model_spec_continuum_removed[1][coord_feature],
+                                               model_spec_continuum_removed[1][coord_feature],0.5)
 
+#print(SIM_obj_mags[0][3],mag_reduce,fwhm,fwhm_err,r_val_fit)
 
 #############################################################################################################################################################################################
 #RESIDUALS
@@ -623,8 +648,15 @@ f.write('Average SNR: %.3f +/- %.3f \n'%(SNR_av,SNR_spread))
 f.write('Average X-Shooter Noise included SNR: %.3f \n'%(av_SNR_x))
 f.write('Average SOXS Noise included SNR: %.3f \n'%(av_SNR_s))
 if fwhm_fitter == True:
-    f.write('KSIM feature at %.1f FWHM: %.3f +/- %.3f \n'%(cen_wl,fwhm,fwhm_err))
-    f.write('Model feature at %.1f FWHM: %.3f +/- %.3f \n'%(cen_wl,fwhm_model,fwhm_err_model))
+    if double_fit == True:
+        f.write('KSIM feature at %.1f FWHM: %.3f +/- %.3f \n'%(cen_wl,fwhm[0],fwhm_err[0]))
+        f.write('Model feature at %.1f FWHM: %.3f +/- %.3f \n'%(cen_wl,fwhm_model[0],fwhm_err_model[0]))
+        f.write('KSIM feature at %.1f FWHM: %.3f +/- %.3f \n'%(cen_wl,fwhm[1],fwhm_err[1]))
+        f.write('Model feature at %.1f FWHM: %.3f +/- %.3f \n'%(cen_wl,fwhm_model[1],fwhm_err_model[1]))
+        f.write('R value of KSIM fit against model fit: %.5f \n'%r_val_fit)
+    else:
+        f.write('KSIM feature at %.1f FWHM: %.3f +/- %.3f \n'%(cen_wl,fwhm,fwhm_err))
+        f.write('Model feature at %.1f FWHM: %.3f +/- %.3f \n'%(cen_wl,fwhm_model,fwhm_err_model))
 f.write('Percentage of photons which were misidentified (total): %.8f\n'%percentage_misidentified_tot)
 f.write('Percentage of photons which were misidentified (average per pixel): %.8f\n\n'%percentage_misidentified_pp)
 
