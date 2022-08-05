@@ -80,7 +80,7 @@ def KSIM_looper(mag_reduce_fac,blaze_coords):
     print('\n Simulating observation of %s.'%object_name)
     
     #sectioning the spectrum to chosen KIDSpec bandpass
-    model_spec1 = (original_spec[0],original_spec[1] / mag_reduce_fac) *10000
+    model_spec1 = (original_spec[0],(original_spec[1]*10000) / mag_reduce_fac)
     model_spec = np.zeros((2,len(model_spec[0])))
     model_spec[0] += model_spec1[0]
     model_spec[1] += np.max(model_spec1[1])
@@ -383,7 +383,7 @@ while stop_condition != len(blaze_wl_mag_found_check):
     if mag_reduce_fac >= 20000:
         mag_reduce_fac += 2000
     if mag_reduce_fac_prev == mag_reduce_fac:
-        mag_reduce_fac += 1
+        mag_reduce_fac += 0.1
             
     print('\nCurrent time taken:',datetime.datetime.now() - time_start)
 

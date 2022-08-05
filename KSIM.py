@@ -42,10 +42,6 @@ time_start = datetime.datetime.now() #beginning timer
 print('\nImporting spectrum from data file.')
 if TLUSTY == True:
     model_spec = data_extractor_TLUSTY_joint_spec(object_file_1,object_file_2,row,plotting=extra_plots)  
-    #tlusty_spec = np.loadtxt('SHIFTED_SPECTRA/XS_T100T498_OBJ.txt')
-    #model_spec = np.zeros((2,len(tlusty_spec[:,0])))
-    #model_spec[0] += tlusty_spec[:,0]
-    #model_spec[1] += tlusty_spec[:,1]
 elif supported_file_extraction == True:
     #If data that will be used is from the DRs of XShooter then set XShooter to True, since their FITS files are setup differently to the ESO-XShooter archive
     #Spectrum is in units of Flux / $ergcm^{-2}s^{-1}\AA^{-1}$, the AA is angstrom, wavelength array is in nm
@@ -322,11 +318,6 @@ predicted_SNRs_s = SNR_calc_pred_grid(raw_sky_subbed_spec_pre_ord_merge,kidspec_
 av_SNR_x = np.median(predicted_SNRs_x[(order_wavelengths > model_spec[0][0])*(order_wavelengths < model_spec[0][-1])])
 av_SNR_s = np.median(predicted_SNRs_s[(order_wavelengths > model_spec[0][0])*(order_wavelengths < model_spec[0][-1])])
 
-
-
-blaze_pix = int(n_pixels/2)
-#print(np.mean(SNRs[:,blaze_pix][(order_wavelengths[:,blaze_pix]>550)*(order_wavelengths[:,blaze_pix]<model_spec[0][-1])]))
-
 #calculating spectral resolution of KIDSpec setup
 Rs = []
 for i in range(len(order_wavelengths)):
@@ -425,8 +416,7 @@ SIM_total_flux_spectrum_model_bins_pre_filt = flux_conversion_3(SIM_rebin_to_dat
 #SIM_total_flux_spectrum_model_bins = np.copy(SIM_total_flux_spectrum_model_bins_pre_filt)#
 SIM_total_flux_spectrum_model_bins = np.zeros_like(SIM_total_flux_spectrum_model_bins_pre_filt)#
 SIM_total_flux_spectrum_model_bins[0] += SIM_total_flux_spectrum_model_bins_pre_filt[0]
-#SIM_total_flux_spectrum_model_bins[1] += SIM_total_flux_spectrum_model_bins_pre_filt[1]
-SIM_total_flux_spectrum_model_bins[1] += gaussian_filter1d(SIM_total_flux_spectrum_model_bins_pre_filt[1],2)
+SIM_total_flux_spectrum_model_bins[1] += SIM_total_flux_spectrum_model_bins_pre_filt[1]
 
 #magnitude calculation from simulation result
 SIM_out_mags = mag_calc(SIM_total_flux_spectrum,plotting=False,wls_check=False)
@@ -471,7 +461,6 @@ if fwhm_fitter == True:
                                                cen_wl,model_spec_continuum_removed[1][coord_feature],
                                                model_spec_continuum_removed[1][coord_feature],0.5)
 
-#print(SIM_obj_mags[0][3],mag_reduce,fwhm,fwhm_err,r_val_fit)
 
 #############################################################################################################################################################################################
 #RESIDUALS
@@ -528,73 +517,6 @@ f2_ax2.set_xlabel(object_x)
 f2_ax2.set_ylabel('Residuals / %')
 f2_ax2.set_ylim([-70,70])
 
-'''
-plt.rcParams.update({'font.size': 20})
-fig2 = plt.figure(constrained_layout=False)
-gs = fig2.add_gridspec(13, 13)
-
-swap = 2271
-
-f2_ax1 = fig2.add_subplot(gs[:7, :6])
-f2_ax1.plot(model_spec[0][:swap],model_spec[1][:swap],'r-',label='Model spectrum')
-f2_ax1.plot(SIM_total_flux_spectrum_model_bins[0][:swap],SIM_total_flux_spectrum_model_bins[1][:swap],'b-',label='Spectrum from simulation rebinned',alpha = 0.6)
-f2_ax1.set_ylabel(object_y)
-f2_ax1.tick_params(axis='x',which='both',bottom=False,top=False,labelbottom=False)
-f2_ax1.set_ylim(0,2e-16)
-#f2_ax1.legend(loc='best')
-
-f2_ax1 = fig2.add_subplot(gs[:7, 7:])
-f2_ax1.plot(model_spec[0][swap:5069],model_spec[1][swap:5069],'r-',label='Model spectrum')
-f2_ax1.plot(SIM_total_flux_spectrum_model_bins[0][swap:],SIM_total_flux_spectrum_model_bins[1][swap:],'b-',label='Spectrum from simulation rebinned',alpha = 0.6)
-#f2_ax1.set_ylabel(object_y)
-f2_ax1.tick_params(axis='x',which='both',bottom=False,top=False,labelbottom=False)
-f2_ax1.set_ylim(0,2.8e-17)
-#f2_ax1.legend(loc='best')
-
-f2_ax2 = fig2.add_subplot(gs[9:,:6])
-f2_ax2.plot(SIM_total_flux_spectrum_model_bins[0][:swap],residuals[:swap]*100,'ko',markersize=1)
-#f2_ax2.set_xlabel(object_x)
-f2_ax2.set_ylabel('Residuals / %')
-f2_ax2.set_ylim([-120,200])
-
-
-f2_ax2 = fig2.add_subplot(gs[9:,7:])
-f2_ax2.plot(SIM_total_flux_spectrum_model_bins[0][swap:],residuals[swap:]*100,'ko',markersize=1)
-#f2_ax2.set_xlabel(object_x)
-#f2_ax2.set_ylabel('Residuals / %')
-#f2_ax2.set_ylim([-120,200])
-#f2_ax2.set(yticklabels=[])
-
-#plt.tight_layout()
-
-fig2.add_subplot(111,frameon=False)
-plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-plt.xlabel(object_x)
-
-#f2_ax2 = fig2.add_subplot(gs[3:,:])
-#f2_ax2.plot(SIM_total_flux_spectrum_model_bins[0],residuals*100,'ko',markersize=1)
-#f2_ax2.set_xlabel(object_x)
-#f2_ax2.set_ylabel('Residuals / %')
-#f2_ax2.set_ylim([-120,200])
-'''
-'''
-plt.rcParams.update({'font.size': 20})
-from useful_funcs import lorentzian
-from scipy.optimize import curve_fit
-data_x = SIM_spec_continuum_removed[0,coord_feature-coord_range:coord_feature+coord_range]
-data_y = SIM_spec_continuum_removed[1,coord_feature-coord_range:coord_feature+coord_range]
-popt,pcov = curve_fit(lorentzian,data_x,data_y,p0=[cen_wl,SIM_spec_continuum_removed[1][coord_feature],SIM_spec_continuum_removed[1][coord_feature],0.5],maxfev=10000)
-x = np.linspace(data_x[0],data_x[-1],100000)
-y = lorentzian(np.linspace(data_x[0],data_x[-1],100000),*popt)
-ax3 = fig2.add_axes([0.1,0.65,0.25,0.25])
-ax3.plot(data_x,data_y,'bx')
-ax3.plot(x,y,'g-')
-ax3.set_xlabel('Wavelength')
-ax3.set_ylabel('Flux')
-#ax3.set_xlim([726,731])
-#'''
-#fig2.text(0.73,0.70,'%s '%object_name)
-
 
 time_took = datetime.datetime.now() - time_start
 
@@ -647,8 +569,7 @@ f.write('Seeing: %.1f arcseconds \n'%seeing)
 f.write('Airmass: %.1f \n\n'%airmass)
 
 f.write('Slit width: %.2f arcseconds \n\n'%slit_width)
-#f.write('Slit length: %.2f arcseconds \n'%slit_length)
-#f.write('Slicers: %i \n\n'%slicers)
+
 
 if IR_arm == True:
     f.write('OPT arm incidence angle: %.1f deg \n'%alpha_val)
