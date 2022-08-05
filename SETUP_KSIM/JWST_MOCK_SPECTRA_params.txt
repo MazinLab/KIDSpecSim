@@ -1,8 +1,8 @@
 object_name = JWST_MOCK_SPECTRUM_REDSHIFT_2                    
-object_file = z_2_jwst_mock_spec.txt           
+object_file = jwst_mock_spec_z_2_spec.txt            
 object_x = Wavelength / $nm$
 object_y = Flux / $ergcm^{-2}s^{-1}\AA^{-1}$         
-binstep = 0.28585841600807127               
+binstep = 0.2858537414839335               
 mirr_diam = 800       
 seeing = 0.8         
 h = 6.626e-27 

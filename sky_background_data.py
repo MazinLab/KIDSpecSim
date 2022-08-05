@@ -200,7 +200,8 @@ def ESO_sky_model(file):
     sky_mod[1] += sky_mod_flux
     bin_width = (sky_mod_lam[-1] - sky_mod_lam[0]) / len(sky_mod_lam)
     
-    units_conv = exposure_t*(np.pi*(0.5*(mirr_diam/100))**2)*(bin_width/1000)*(slit_width*slit_width)   #*fov
+    units_conv = exposure_t*(np.pi*(0.5*(mirr_diam/100))**2)*(bin_width/1000)*(slit_width*2.10) 
+    #units_conv = exposure_t*(np.pi*(0.5*(mirr_diam/100))**2)*(bin_width/1000)*(slit_width*slit_width)#*fov
     
     sky_mod[1] *= units_conv
     low_coord = np.where(sky_mod[0]>lambda_low_val)[0][0]

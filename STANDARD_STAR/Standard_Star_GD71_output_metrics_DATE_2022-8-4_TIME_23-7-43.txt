@@ -1,0 +1,47 @@
+> Output metrics for KIDSpec Simulation of object Standard_Star_GD71
+
+Date run: 2022-08-04 23:07:43.916592 
+
+> Input Parameters for simulation and instrument: 
+
+Telescope mirror diameter: 800 cm 
+Exposure time: 30 s 
+Seeing: 0.8 arcseconds 
+Airmass: 1.5 
+
+Slit width: 0.60 arcseconds 
+Pixel plate scale: 0.30 arcseconds 
+
+KIDSpec grating incidence angle: 25.0 deg 
+KIDSpec grating blaze angle: 25.0 deg 
+KIDSpec grating grooves: 173.8 /mm 
+
+Number of spectral pixels in each arm: 3800 
+Pixel plate scale: 0.3 
+Chosen MKID energy resolution at fiducial point: 40 
+Flux reduced in total by factor of 1.0
+Spectrum redshifted by 0.000
+
+> Result parameters: 
+
+OPT orders observed: 13 
+IR orders observed: 0 
+Wavelength range tested: 350 - 1900 nm 
+ 
+Simulation limiting magnitudes [Wavelength/nm, Vega band, Vega magnitude, SNR at limit]:
+1616.65371 | H | 15.75917 | 9.37035 
+1212.49030 | J | 16.48220 | 9.89167 
+969.99224 | I | 17.32528 | 9.76366 
+808.32683 | R | 17.73190 | 9.60256 
+692.85160 | V | 17.68118 | 9.84384 
+606.24517 | V | 17.17290 | 9.63756 
+538.88457 | V | 16.62188 | 9.51091 
+484.99612 | B | 16.84138 | 9.36025 
+440.90556 | B | 15.79857 | 9.56435 
+404.16347 | U | 14.17765 | 9.48295 
+373.07394 | U | 14.17765 | 3.06552 
+346.42580 | U | 11.57416 | 0.02180 
+323.33071 | U | 11.57416 | 0.00000 
+Array coordinates for magnitudes:
+8 7 4 3 2 2 2 1 1 0 0 0 0 
+Simulation run duration: 1:26:38.414366 (hours:minutes:seconds)

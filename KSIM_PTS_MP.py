@@ -81,10 +81,11 @@ if __name__ == '__main__':
     photon_spec_no_eff_original = photons_conversion(model_spec,model_spec,plotting=extra_plots)
     
     #increasing number of points in model spectrum
-    photon_spec_no_eff = model_interpolator(photon_spec_no_eff_original,400000)
+    photon_spec_no_eff = model_interpolator(photon_spec_no_eff_original,200000)
     
     #generating sky
-    photon_spec_of_sky = sky_spectrum_load(plotting=extra_plots)
+    photon_spec_of_sky_orig = sky_spectrum_load(plotting=extra_plots)
+    photon_spec_of_sky = model_interpolator_sky(photon_spec_of_sky_orig,200000)
      
     #calculating magnitudes of model spectrum
     SIM_obj_mags = mag_calc(model_spec,plotting=False,wls_check=True)
@@ -166,7 +167,7 @@ if __name__ == '__main__':
                                                                                                                           orders_opt,efficiencies_opt,cutoff,IR=False,OPT=True,plotting=extra_plots)
     
         print('\n OPT arm sky photons.')
-        pixel_sums_opt_sky,_= grating_binning_high_enough_R_sky(sky_QE,order_wavelengths_opt,order_wavelengths,
+        pixel_sums_opt_sky,_= grating_binning_high_enough_R(sky_QE,order_wavelengths_opt,order_wavelengths,
                                                       orders_opt,efficiencies_opt,cutoff,IR=False,OPT=True,plotting=extra_plots)
         
         #adding the object and sky grids together
@@ -192,7 +193,7 @@ if __name__ == '__main__':
                                                                                                                     orders_ir,efficiencies_ir,cutoff,IR=True,OPT=False,
                                                                                                                         plotting=extra_plots)
         print('\n NIR arm sky photons.')
-        pixel_sums_ir_sky,_ = grating_binning_high_enough_R_sky(sky_QE,order_wavelengths_ir,
+        pixel_sums_ir_sky,_ = grating_binning_high_enough_R(sky_QE,order_wavelengths_ir,
                                                                     order_wavelengths,orders_ir,efficiencies_ir,
                                                                     cutoff,IR=True,OPT=False,plotting=extra_plots)
         

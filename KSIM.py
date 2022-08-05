@@ -22,7 +22,7 @@ from useful_funcs import data_extractor, telescope_effects, optics_transmission,
                 atmospheric_effects,rebinner_with_bins, \
                     R_value,redshifter,order_merge_reg_grid,grid_plotter,SNR_calc_grid,SNR_calc_pred_grid,grid_plotter_opp, \
                         model_interpolator,model_interpolator_sky,fwhm_fitter_lorentzian,continuum_removal, \
-                            fwhm_fitter_gaussian, rebinner_2d, fwhm_fitter_lorentzian_double
+                            fwhm_fitter_gaussian, rebinner_2d, fwhm_fitter_lorentzian_double, rebin_and_calc_SNR
 from parameters import *
 from flux_to_photons_conversion import photons_conversion,flux_conversion,flux_conversion_3
 from apply_QE import QE
@@ -322,6 +322,11 @@ predicted_SNRs_s = SNR_calc_pred_grid(raw_sky_subbed_spec_pre_ord_merge,kidspec_
 av_SNR_x = np.median(predicted_SNRs_x[(order_wavelengths > model_spec[0][0])*(order_wavelengths < model_spec[0][-1])])
 av_SNR_s = np.median(predicted_SNRs_s[(order_wavelengths > model_spec[0][0])*(order_wavelengths < model_spec[0][-1])])
 
+
+
+blaze_pix = int(n_pixels/2)
+#print(np.mean(SNRs[:,blaze_pix][(order_wavelengths[:,blaze_pix]>550)*(order_wavelengths[:,blaze_pix]<model_spec[0][-1])]))
+
 #calculating spectral resolution of KIDSpec setup
 Rs = []
 for i in range(len(order_wavelengths)):
@@ -420,7 +425,8 @@ SIM_total_flux_spectrum_model_bins_pre_filt = flux_conversion_3(SIM_rebin_to_dat
 #SIM_total_flux_spectrum_model_bins = np.copy(SIM_total_flux_spectrum_model_bins_pre_filt)#
 SIM_total_flux_spectrum_model_bins = np.zeros_like(SIM_total_flux_spectrum_model_bins_pre_filt)#
 SIM_total_flux_spectrum_model_bins[0] += SIM_total_flux_spectrum_model_bins_pre_filt[0]
-SIM_total_flux_spectrum_model_bins[1] += SIM_total_flux_spectrum_model_bins_pre_filt[1]#gaussian_filter1d(SIM_total_flux_spectrum_model_bins_pre_filt[1],1)
+#SIM_total_flux_spectrum_model_bins[1] += SIM_total_flux_spectrum_model_bins_pre_filt[1]
+SIM_total_flux_spectrum_model_bins[1] += gaussian_filter1d(SIM_total_flux_spectrum_model_bins_pre_filt[1],2)
 
 #magnitude calculation from simulation result
 SIM_out_mags = mag_calc(SIM_total_flux_spectrum,plotting=False,wls_check=False)
@@ -509,20 +515,68 @@ fig3.text(0.73,0.70,'%s '%object_name)
 
 fig2 = plt.figure(constrained_layout=True)
 gs = fig2.add_gridspec(4, 4)
-
 f2_ax1 = fig2.add_subplot(gs[:3, :])
 f2_ax1.plot(model_spec[0],model_spec[1],'r-',label='Model spectrum')
 f2_ax1.plot(SIM_total_flux_spectrum_model_bins[0][:-1],SIM_total_flux_spectrum_model_bins[1][:-1],'b-',label='Spectrum from simulation rebinned',alpha = 0.6)
 f2_ax1.set_ylabel(object_y)
 f2_ax1.tick_params(axis='x',which='both',bottom=False,top=False,labelbottom=False)
-#f2_ax1.legend(loc='best')
+f2_ax1.legend(loc='best')
 
 f2_ax2 = fig2.add_subplot(gs[3:,:])
 f2_ax2.plot(SIM_total_flux_spectrum_model_bins[0],residuals*100,'ko',markersize=1)
 f2_ax2.set_xlabel(object_x)
 f2_ax2.set_ylabel('Residuals / %')
-f2_ax2.set_ylim([-100,200])
+f2_ax2.set_ylim([-70,70])
 
+'''
+plt.rcParams.update({'font.size': 20})
+fig2 = plt.figure(constrained_layout=False)
+gs = fig2.add_gridspec(13, 13)
+
+swap = 2271
+
+f2_ax1 = fig2.add_subplot(gs[:7, :6])
+f2_ax1.plot(model_spec[0][:swap],model_spec[1][:swap],'r-',label='Model spectrum')
+f2_ax1.plot(SIM_total_flux_spectrum_model_bins[0][:swap],SIM_total_flux_spectrum_model_bins[1][:swap],'b-',label='Spectrum from simulation rebinned',alpha = 0.6)
+f2_ax1.set_ylabel(object_y)
+f2_ax1.tick_params(axis='x',which='both',bottom=False,top=False,labelbottom=False)
+f2_ax1.set_ylim(0,2e-16)
+#f2_ax1.legend(loc='best')
+
+f2_ax1 = fig2.add_subplot(gs[:7, 7:])
+f2_ax1.plot(model_spec[0][swap:5069],model_spec[1][swap:5069],'r-',label='Model spectrum')
+f2_ax1.plot(SIM_total_flux_spectrum_model_bins[0][swap:],SIM_total_flux_spectrum_model_bins[1][swap:],'b-',label='Spectrum from simulation rebinned',alpha = 0.6)
+#f2_ax1.set_ylabel(object_y)
+f2_ax1.tick_params(axis='x',which='both',bottom=False,top=False,labelbottom=False)
+f2_ax1.set_ylim(0,2.8e-17)
+#f2_ax1.legend(loc='best')
+
+f2_ax2 = fig2.add_subplot(gs[9:,:6])
+f2_ax2.plot(SIM_total_flux_spectrum_model_bins[0][:swap],residuals[:swap]*100,'ko',markersize=1)
+#f2_ax2.set_xlabel(object_x)
+f2_ax2.set_ylabel('Residuals / %')
+f2_ax2.set_ylim([-120,200])
+
+
+f2_ax2 = fig2.add_subplot(gs[9:,7:])
+f2_ax2.plot(SIM_total_flux_spectrum_model_bins[0][swap:],residuals[swap:]*100,'ko',markersize=1)
+#f2_ax2.set_xlabel(object_x)
+#f2_ax2.set_ylabel('Residuals / %')
+#f2_ax2.set_ylim([-120,200])
+#f2_ax2.set(yticklabels=[])
+
+#plt.tight_layout()
+
+fig2.add_subplot(111,frameon=False)
+plt.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+plt.xlabel(object_x)
+
+#f2_ax2 = fig2.add_subplot(gs[3:,:])
+#f2_ax2.plot(SIM_total_flux_spectrum_model_bins[0],residuals*100,'ko',markersize=1)
+#f2_ax2.set_xlabel(object_x)
+#f2_ax2.set_ylabel('Residuals / %')
+#f2_ax2.set_ylim([-120,200])
+'''
 '''
 plt.rcParams.update({'font.size': 20})
 from useful_funcs import lorentzian
@@ -552,7 +606,7 @@ print('\n Simulation took', time_took,'(hours:minutes:seconds)')
 #GENERATING OUTPUT METRICS AND FILE
 #################################################################################################################################################################################################
 
-SNR_av = np.median(SNRs[(order_wavelengths > model_spec[0][0])*(order_wavelengths < model_spec[0][-1])])
+SNR_av = np.median(SNRs[(order_wavelengths > model_spec[0][0])*(order_wavelengths < model_spec[0][-1])*(SNRs >= 0)])
 SNR_spread = scipy.stats.median_abs_deviation(np.nan_to_num(SNRs[1])[np.nonzero(np.nan_to_num(SNRs[1]))])
 
 if r_e_spread == True:
@@ -645,8 +699,8 @@ f.write('Average residuals (absoluted): (%.3f +/- %.3f)%% \n'%(residuals_av,resi
 f.write('FWHM of residuals (not absoluted): %.3f \n'%residuals_fwhm)
 f.write('R value: %.3f \n'%R_value_stat)
 f.write('Average SNR: %.3f +/- %.3f \n'%(SNR_av,SNR_spread))
-f.write('Average X-Shooter Noise included SNR: %.3f \n'%(av_SNR_x))
-f.write('Average SOXS Noise included SNR: %.3f \n'%(av_SNR_s))
+f.write('Average X-Shooter CCD Noise included SNR: %.3f \n'%(av_SNR_x))
+f.write('Average SOXS CCD Noise included SNR: %.3f \n'%(av_SNR_s))
 if fwhm_fitter == True:
     if double_fit == True:
         f.write('KSIM feature at %.1f FWHM: %.3f +/- %.3f \n'%(cen_wl,fwhm[0],fwhm_err[0]))

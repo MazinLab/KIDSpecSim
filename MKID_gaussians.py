@@ -291,10 +291,6 @@ def MKID_response_V2(spec,order_list,w_o,w_o_arm,n_pixels,pixel_sums,
 def MKID_response_Express(order_list,w_o,w_o_arm,n_pixels,pixel_sums,
                   IR=False,sky=False,dual_arm_=True,make_folder=False):
     
-    if make_folder == True:
-        os.mkdir('%s/Resample/'%(folder))
-    file_path_resample = '%s/Resample/'%(folder)
-    
     if r_e_spread == True and IR == False:
         pixel_R_Es = np.load('R_E_PIXELS/R_E_PIXELS_OPT.npy')
     elif r_e_spread == True and IR == True:

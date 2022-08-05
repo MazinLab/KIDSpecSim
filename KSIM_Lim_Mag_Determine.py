@@ -25,12 +25,13 @@ from parameters import *
 from flux_to_photons_conversion import photons_conversion,flux_conversion,flux_conversion_3
 from apply_QE import QE
 from grating import * #grating_orders_2_arms,grating_binning,grating_binning_high_enough_R,grating_binning_high_enough_R_sky
-from MKID_gaussians import MKID_response_Express,recreator
+from MKID_gaussians import MKID_response_Express,MKID_response_V2,recreator
 
 plt.rcParams.update({'font.size': 28}) #sets the fontsize of any plots
 time_start = datetime.datetime.now() #beginning timer
 
 extra_plots = False
+extra_fast = True  
 
 print('\n Simulating the grating orders and calculating efficiencies.')
 orders,order_wavelengths,grating_efficiency,orders_opt,order_wavelengths_opt, \
@@ -79,7 +80,7 @@ def KSIM_looper(mag_reduce_fac,blaze_coords):
     print('\n Simulating observation of %s.'%object_name)
     
     #sectioning the spectrum to chosen KIDSpec bandpass
-    model_spec1 = (original_spec[0],original_spec[1] / mag_reduce_fac) 
+    model_spec1 = (original_spec[0],original_spec[1] / mag_reduce_fac) *10000
     model_spec = np.zeros((2,len(model_spec[0])))
     model_spec[0] += model_spec1[0]
     model_spec[1] += np.max(model_spec1[1])
@@ -92,11 +93,11 @@ def KSIM_looper(mag_reduce_fac,blaze_coords):
     photon_spec_no_eff_original = photons_conversion(model_spec,model_spec,plotting=extra_plots)
     
     #increasing number of points in model spectrum
-    photon_spec_no_eff = model_interpolator(photon_spec_no_eff_original,1000000)
+    photon_spec_no_eff = model_interpolator(photon_spec_no_eff_original,200000)
     
     #generating sky
     photon_spec_of_sky_orig = sky_spectrum_load(plotting=extra_plots)
-    photon_spec_of_sky = model_interpolator_sky(photon_spec_of_sky_orig,1000000)
+    photon_spec_of_sky = model_interpolator_sky(photon_spec_of_sky_orig,200000)
      
     #calculating magnitudes of model spectrum
     SIM_obj_mags = mag_calc(model_spec,plotting=False,wls_check=True)
@@ -209,26 +210,53 @@ def KSIM_looper(mag_reduce_fac,blaze_coords):
     
     print('\n Beginning MKID response simulation for each arm and simultaneous sky exposure.')
     
-    #OPT object mkid response
-    kidspec_resp_opt,kidspec_mis_opt = MKID_response_Express(orders_opt,order_wavelengths,order_wavelengths_opt,n_pixels,pixel_sums_opt,
-                      IR=False,sky=False,dual_arm_=True,make_folder=True)
-    print('\nOPT object observation complete. 1/4')
-    
-    #OPT sky mkid response
-    kidspec_sky_resp_opt,kidspec_sky_mis_opt = MKID_response_Express(orders_opt,order_wavelengths,order_wavelengths_opt,n_pixels,pixel_sums_opt_sky,
-                      IR=False,sky=True,dual_arm_=True,make_folder=False)
-    print('\nOPT sky observation complete. 2/4')
-    
-    
-    #NIR object mkid response
-    kidspec_resp_ir,kidspec_mis_ir = MKID_response_Express(orders_ir,order_wavelengths,order_wavelengths_ir,n_pixels,pixel_sums_ir,
-                      IR=True,sky=False,dual_arm_=True,make_folder=False)
-    print('\nNIR object observation complete. 3/4')
-    
-    #NIR sky mkid response
-    kidspec_sky_resp_ir,kidspec_sky_mis_ir = MKID_response_Express(orders_ir,order_wavelengths,order_wavelengths_ir,n_pixels,pixel_sums_ir_sky,
-                      IR=True,sky=True,dual_arm_=True,make_folder=False)
-    print('\nNIR sky observation complete. 4/4')
+    if extra_fast == True:
+        #OPT object mkid response
+        kidspec_resp_opt,kidspec_mis_opt = MKID_response_Express(orders_opt,order_wavelengths,order_wavelengths_opt,n_pixels,pixel_sums_opt,
+                          IR=False,sky=False,dual_arm_=True,make_folder=True)
+        print('\nOPT object observation complete. 1/4')
+        
+        #OPT sky mkid response
+        kidspec_sky_resp_opt,kidspec_sky_mis_opt = MKID_response_Express(orders_opt,order_wavelengths,order_wavelengths_opt,n_pixels,pixel_sums_opt_sky,
+                          IR=False,sky=True,dual_arm_=True,make_folder=False)
+        print('\nOPT sky observation complete. 2/4')
+        
+        if IR_arm == True:
+            #NIR object mkid response
+            kidspec_resp_ir,kidspec_mis_ir = MKID_response_Express(orders_ir,order_wavelengths,order_wavelengths_ir,n_pixels,pixel_sums_ir,
+                              IR=True,sky=False,dual_arm_=True,make_folder=False)
+            print('\nNIR object observation complete. 3/4')
+            
+            #NIR sky mkid response
+            kidspec_sky_resp_ir,kidspec_sky_mis_ir = MKID_response_Express(orders_ir,order_wavelengths,order_wavelengths_ir,n_pixels,pixel_sums_ir_sky,
+                              IR=True,sky=True,dual_arm_=True,make_folder=False)
+            print('\nNIR sky observation complete. 4/4')
+        else:
+            print('\nIR arm not selected, observations complete. 4/4')
+        
+    else:
+        #OPT object mkid response
+        kidspec_resp_opt,kidspec_mis_opt = MKID_response_V2(spec_QE,orders_opt,order_wavelengths,order_wavelengths_opt,n_pixels,pixel_sums_opt,
+                          IR=False,sky=False,dual_arm_=IR_arm)
+        print('\nOPT object observation complete. 1/4')
+        
+        #OPT sky mkid response
+        kidspec_sky_resp_opt,kidspec_sky_mis_opt = MKID_response_V2(sky_QE,orders_opt,order_wavelengths,order_wavelengths_opt,n_pixels,pixel_sums_opt_sky,
+                          IR=False,sky=True,dual_arm_=IR_arm)
+        print('\nOPT sky observation complete. 2/4')
+        
+        
+        if IR_arm == True:
+            #NIR object mkid response
+            kidspec_resp_ir,kidspec_mis_ir = MKID_response_V2(spec_QE,orders_ir,order_wavelengths,order_wavelengths_ir,n_pixels,pixel_sums_ir,
+                              IR=True,sky=False,dual_arm_=IR_arm)
+            print('\nNIR object observation complete. 3/4')
+            
+            #NIR sky mkid response
+            kidspec_sky_resp_ir,kidspec_sky_mis_ir = MKID_response_V2(sky_QE,orders_ir,order_wavelengths,order_wavelengths_ir,n_pixels,pixel_sums_ir_sky,
+                              IR=True,sky=True,dual_arm_=IR_arm)
+        else:
+            print('\nIR arm not selected, observations complete. 4/4')
     
     
     print('\nFinalising MKID response grids.')
@@ -267,10 +295,6 @@ def KSIM_looper(mag_reduce_fac,blaze_coords):
     
     #kidspec_raw_output_sky,misidentified_sky_spectrum,percentage_sky_misidentified_pp, \
     #    percentage_sky_misidentified_tot,no_misident_sky = recreator(spec_QE,n_pixels,order_wavelengths,orders_ir,sky=True)
-    
-    
-    if delete_folders == True:
-        shutil.rmtree('%s/Resample'%folder)
     
     
     #############################################################################################################################################################################################
@@ -359,7 +383,7 @@ while stop_condition != len(blaze_wl_mag_found_check):
     if mag_reduce_fac >= 20000:
         mag_reduce_fac += 2000
     if mag_reduce_fac_prev == mag_reduce_fac:
-        mag_reduce_fac += 10
+        mag_reduce_fac += 1
             
     print('\nCurrent time taken:',datetime.datetime.now() - time_start)
 
@@ -400,9 +424,9 @@ f.write('Seeing: %.1f arcseconds \n'%seeing)
 f.write('Airmass: %.1f \n\n'%airmass)
 
 f.write('Slit width: %.2f arcseconds \n'%slit_width)
-f.write('Slit length: %.2f arcseconds \n'%slit_length)
-f.write('Pixel plate scale: %.2f arcseconds \n'%pix_fov)
-f.write('Slicers: %i \n\n'%slicers)
+#f.write('Slit length: %.2f arcseconds \n'%slit_length)
+f.write('Pixel plate scale: %.2f arcseconds \n\n'%pix_fov)
+#f.write('Slicers: %i \n\n'%slicers)
 
 if IR_arm == True:
     f.write('OPT arm incidence angle: %.1f deg \n'%alpha_val)
