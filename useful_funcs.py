@@ -1326,7 +1326,7 @@ def photon_stream_SIM(pixel_sum,w_o,orders,R,plotting=False):
         expect_count = tot_count/time_steps #expected count of photon arrivals over one time bin
         
         #MKID gaussian
-        KID_R =  R / np.sqrt(mu/400) #energy resolution of the current pixel and the wavelengths it observes
+        KID_R =  R / (mu/400) #energy resolution of the current pixel and the wavelengths it observes
         
         sig = mu / (KID_R * (2*np.sqrt( 2*np.log(2) )))  #1-sigma calculation using an equation from 'GIGA-Z: A 100,000 OBJECT SUPERCONDUCTING SPECTROPHOTOMETER FOR LSST FOLLOW-UP' 
         
@@ -1490,8 +1490,6 @@ def multiprocessing_PTS_IR(pixel_sum,w_o,orders,R,i,file_path_overlap):
     if sat_ph > 0:
         f = open('SAT_PIX/Pixel_%i_IR_%i_time_bins.txt'%(i,sat_ph),'w+')
         f.close()
-        #print('\nPHOTONS PIXEL %i:'%i,pix_order_ph)
-        #print('\nMIS PIXEL %i:'%i,pix_order_mis)
     with open('%sIR.txt'%file_path_overlap, 'r+') as f:
         f.write('\n%i'%i)
         pix_done = len(f.readlines())
@@ -1500,8 +1498,6 @@ def multiprocessing_PTS_IR(pixel_sum,w_o,orders,R,i,file_path_overlap):
 
     print('\r%.2f %% of pixels complete'%(perc_done),end='',flush=True)
     
-    #if (int(perc_done) == np.array([10,20,30,40,50,60,70,80,90])).any():
-    #    print('%.1f%% of pixels complete.'%perc_done)
     return
 
 
@@ -1523,18 +1519,12 @@ def multiprocessing_PTS_OPT(pixel_sum,w_o,orders,R,i,file_path_overlap):
         f = open('SAT_PIX/Pixel_%i_OPT_%i_time_bins.txt'%(i,sat_ph),'w+')
         f.close()
 
-    #perc_done = ((len(os.listdir('%s/'%file_path_overlap)))/(n_pixels*3))*100
-    #if (int(perc_done) == np.array([10,20,30,40,50,60,70,80,90])).any():
-    #    print('%.1f%% of pixels complete.'%perc_done)
-
     with open('%sOPT.txt'%file_path_overlap, 'r+') as f:
         f.write('\n%i'%i)
         pix_done = len(f.readlines())
         f.close()
     perc_done = (pix_done/n_pixels)*100
     print('\r%.2f %% of pixels complete'%(perc_done),end='',flush=True)
-    #if (int(perc_done) == np.array([10,20,30,40,50,60,70,80,90])).any():
-    #    print('%.1f%% of pixels complete.'%perc_done)
     return
 
 

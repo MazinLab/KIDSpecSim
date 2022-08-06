@@ -11,7 +11,6 @@ import os
 import scipy.stats
 from matplotlib import pyplot as plt
 from scipy.interpolate import interp1d
-from scipy.ndimage import gaussian_filter1d
 import shutil
 
 from scipy import interpolate
@@ -26,10 +25,10 @@ from useful_funcs import data_extractor, telescope_effects, optics_transmission,
 from parameters import *
 from flux_to_photons_conversion import photons_conversion,flux_conversion,flux_conversion_3
 from apply_QE import QE
-from grating import grating_orders_2_arms,grating_binning,grating_binning_high_enough_R,grating_binning_high_enough_R_sky
+from grating import grating_orders_2_arms,grating_binning_high_enough_R,grating_binning_high_enough_R_sky
 from MKID_gaussians import MKID_response_V2,recreator
 
-plt.rcParams.update({'font.size': 32}) #sets the fontsize of any plots
+#plt.rcParams.update({'font.size': 32}) #sets the fontsize of any plots
 time_start = datetime.datetime.now() #beginning timer
 
 
@@ -97,7 +96,7 @@ photon_sky_post_atmos = atmospheric_effects(photon_spec_of_sky,plotting=False,re
 photon_spec_pre_optics = telescope_effects(photon_spec_post_atmos,plotting=extra_plots) 
 photon_sky_pre_optics = telescope_effects(photon_sky_post_atmos,plotting=False)
 
-photon_spec_to_instr = optics_transmission(photon_spec_pre_optics,20)
+photon_spec_to_instr = optics_transmission(photon_spec_pre_optics,20) #number input is how many optical surfaces in path
 photon_sky_to_instr = optics_transmission(photon_sky_pre_optics,20)
 
 if gen_model_seeing_eff == True:
@@ -148,9 +147,6 @@ orders,order_wavelengths,grating_efficiency,orders_opt,order_wavelengths_opt, \
     efficiencies_opt,orders_ir,order_wavelengths_ir,efficiencies_ir, \
          = grating_orders_2_arms('Casini',cutoff,plotting=extra_plots)
         
-detec_spec = wavelength_array_maker(order_wavelengths) #forms a 1D array based on the wavelengths each order sees
-
-
 
 #############################################################################################################################################################################################
 #BINNING PHOTONS ONTO MKIDS AND THEIR ORDER WAVELENGTHS FOR >>OPTICAL<< ARM
@@ -183,9 +179,9 @@ if orders_opt[0] != 1:
     sat_pix_opt = []
     for i in range(n_pixels):
         sum_ph = np.sum(pixel_sums_opt[i]) #checking the MKIDs arent seeing too many photons
-        if sum_ph > 1000*exposure_t: 
+        if sum_ph > 100000*exposure_t: 
             sat_pix_opt.append([i+1,int(sum_ph)])
-            print('WARNING: Pixel %i sees too many photons, %i/%i'%(i+1,int(sum_ph),int(1000*exposure_t)) )
+            print('WARNING: Pixel %i sees too many photons, %i/%i'%(i+1,int(sum_ph),int(100000*exposure_t)) )
         
         
 
@@ -199,7 +195,7 @@ if orders_opt[0] != 1:
 if len(orders_ir) == 0:
     orders_ir = np.append(orders_ir,200)
 if orders_ir[0] != 1:
-    #FIRST DOING IR / LOWER ORDERS 
+    
     #bins the photons onto relevant MKIDs and orders
     print('\nBinning photons for NIR arm (incoming object photons).')
     pixel_sums_ir,order_wavelength_bins_ir = grating_binning_high_enough_R(spec_QE,order_wavelengths_ir,order_wavelengths,
@@ -219,9 +215,9 @@ if orders_ir[0] != 1:
     sat_pix_ir = []
     for i in range(n_pixels):
         sum_ph = np.sum(pixel_sums_ir[i]) #checking the MKIDs arent seeing too many photons
-        if sum_ph > 1000*exposure_t: 
+        if sum_ph > 100000*exposure_t: 
             sat_pix_opt.append([i+1,int(sum_ph)])
-            print('WARNING: Pixel %i sees too many photons, %i/%i'%(i+1,int(sum_ph),int(1000*exposure_t)) )
+            print('WARNING: Pixel %i sees too many photons, %i/%i'%(i+1,int(sum_ph),int(100000*exposure_t)) )
 
 
 #############################################################################################################################################################################################
@@ -258,7 +254,7 @@ if IR_arm == True:
                       IR=True,sky=True,dual_arm_=IR_arm)
     print('\nNIR sky observation complete. 4/4')
 else:
-    print('\nIR arm not selected, observations complete. 4/4')
+    print('\nNIR arm not selected, observations complete. 4/4')
 
 
 print('\nFinalising MKID response grids.')
@@ -333,7 +329,7 @@ spec_R_post_cutoff = np.arange(cutoff,lambda_high_val,lambda_high_val/R_low)
 spec_R = np.append(spec_R_pre_cutoff,spec_R_post_cutoff)
 
 print('\nMerging orders.')
-#merging orders here onto grid with many bins
+#merging orders here onto large regular grid
 raw_sky_subbed_spec = order_merge_reg_grid(order_wavelengths,raw_sky_subbed_spec_pre_ord_merge) 
 
 #rebinning to KIDSpec's current spectral resolution
@@ -413,8 +409,7 @@ except:
 
 #flux conversion
 SIM_total_flux_spectrum_model_bins_pre_filt = flux_conversion_3(SIM_rebin_to_data)
-#SIM_total_flux_spectrum_model_bins = np.copy(SIM_total_flux_spectrum_model_bins_pre_filt)#
-SIM_total_flux_spectrum_model_bins = np.zeros_like(SIM_total_flux_spectrum_model_bins_pre_filt)#
+SIM_total_flux_spectrum_model_bins = np.zeros_like(SIM_total_flux_spectrum_model_bins_pre_filt)
 SIM_total_flux_spectrum_model_bins[0] += SIM_total_flux_spectrum_model_bins_pre_filt[0]
 SIM_total_flux_spectrum_model_bins[1] += SIM_total_flux_spectrum_model_bins_pre_filt[1]
 
@@ -422,7 +417,7 @@ SIM_total_flux_spectrum_model_bins[1] += SIM_total_flux_spectrum_model_bins_pre_
 SIM_out_mags = mag_calc(SIM_total_flux_spectrum,plotting=False,wls_check=False)
 
 #R value statistic between model and simulation output
-R_value_stat = R_value(SIM_total_flux_spectrum_model_bins,model_spec,plotting=True)
+R_value_stat = R_value(SIM_total_flux_spectrum_model_bins,model_spec,plotting=extra_plots)
 
 #FWHM calculator
 if fwhm_fitter == True:
