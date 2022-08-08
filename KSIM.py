@@ -21,11 +21,11 @@ from useful_funcs import data_extractor, telescope_effects, optics_transmission,
                 atmospheric_effects,rebinner_with_bins, \
                     R_value,redshifter,order_merge_reg_grid,grid_plotter,SNR_calc_grid,SNR_calc_pred_grid,grid_plotter_opp, \
                         model_interpolator,model_interpolator_sky,fwhm_fitter_lorentzian,continuum_removal, \
-                            fwhm_fitter_gaussian, rebinner_2d, fwhm_fitter_lorentzian_double, rebin_and_calc_SNR
+                            rebinner_2d, fwhm_fitter_lorentzian_double, rebin_and_calc_SNR
 from parameters import *
 from flux_to_photons_conversion import photons_conversion,flux_conversion,flux_conversion_3
 from apply_QE import QE
-from grating import grating_orders_2_arms,grating_binning_high_enough_R,grating_binning_high_enough_R_sky
+from grating import grating_orders_2_arms,grating_binning_high_enough_R
 from MKID_gaussians import MKID_response_V2,recreator
 
 #plt.rcParams.update({'font.size': 32}) #sets the fontsize of any plots

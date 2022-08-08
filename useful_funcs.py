@@ -541,7 +541,7 @@ def SNR_calc_pred(obj,sky,SOX=False,plotting=False): #spectra in photons ideally
     #sky_res = rebinner(sky_interp,bin_size,sky_interp[0][0],sky_interp[0][-1])
     #SNR = np.sqrt(np.sum(SNRs[1]**2)) #summing SNRs together for overall SNR
     if SOX == True:
-        SNRs_inst= obj[1] / np.sqrt(obj[1] + sky[1] + (6*(3**2)) + (6*0.0*exposure_t))
+        SNRs_inst= obj[1] / np.sqrt(obj[1] + sky[1] + (6*(3**2)) + (6*0.0*exposure_t)) #SOXS CCD/NIR detector noise
         inst = 'SOXS'
         #VIS arm readout noise 3 e-
         #VIS arm dark current negligible e-/s
@@ -551,7 +551,7 @@ def SNR_calc_pred(obj,sky,SOX=False,plotting=False): #spectra in photons ideally
         #NIR arm pixels over which the sky signal is integrated  4 pixels
         
     else:
-        SNRs_inst = obj[1] / np.sqrt(obj[1] + sky[1] + (15*0.000722222*exposure_t) + (15*(3.4**2)))
+        SNRs_inst = obj[1] / np.sqrt(obj[1] + sky[1] + (15*0.000722222*exposure_t) + (15*(3.4**2))) #X-Shooter CCD/NIR detector noise
         inst = 'X-Shooter'
         #VIS arm readout noise 3.4 e-
         #VIS arm dark current 0.000722222 e-/s
@@ -597,7 +597,7 @@ def SNR_calc_pred_grid(obj,sky,SOX=False,plotting=False): #spectra in photons id
     
     if SOX == True:
         #SNRs_inst = obj / np.sqrt(obj + sky + (4*(7**2)) + (4*0.1*exposure_t))
-        SNRs_inst = obj / np.sqrt(obj + sky + (6*(3**2)) + (6*0.0*exposure_t))
+        SNRs_inst = obj / np.sqrt(obj + sky + (6*(3**2)) + (6*0.0*exposure_t)) #SOXS CCD/NIR detector noise
         inst = 'SOXS'
         #VIS arm readout noise 3 e-
         #VIS arm dark current negligible e-/s
@@ -608,7 +608,7 @@ def SNR_calc_pred_grid(obj,sky,SOX=False,plotting=False): #spectra in photons id
         
     else:
         #SNRs_inst = obj / np.sqrt(obj + sky + (8*0.0125*exposure_t) + (8*(9.9**2)))
-        SNRs_inst = obj / np.sqrt(obj + sky + (15*0.000722222*exposure_t) + (15*(3.4**2)))
+        SNRs_inst = obj / np.sqrt(obj + sky + (15*0.000722222*exposure_t) + (15*(3.4**2))) #X-Shooter CCD/NIR detector noise
         inst = 'X-Shooter'
         #VIS arm readout noise 3.4 e-
         #VIS arm dark current 0.000722222 e-/s
@@ -724,15 +724,13 @@ def mag_calc(spec,wls_check=False,return_flux=False,plotting=False):
             filter_for_spec_2 = filter_for_spec_1/np.max(filter_for_spec_1)
             filtered_spec = spec[1]*filter_for_spec_2
             
-            f_mag_res = np.trapz(filtered_spec,spec[0])#integrate.quad(lambda x: f_mag_spec(x),spec[0][0],spec[0][-1])[0]
+            f_mag_res = np.trapz(filtered_spec,spec[0])
             
             filtered_spec_zero = filter_for_spec_2*zero_fluxes[i]
             
             f_mag_zero = np.trapz(filtered_spec_zero,spec[0])
             
-            final_mag = (-2.5*np.log10(f_mag_res/f_mag_zero))#(-2.5*np.log10(f_mag_res/f_mag_zero))
-            
-            #final_mag = -2.5*np.log10(np.sum(filtered_spec)/zero_fluxes[i])
+            final_mag = (-2.5*np.log10(f_mag_res/f_mag_zero))
             
             obj_mags.append(final_mag)
             flux_incoming.append(f_mag_res)
@@ -816,7 +814,7 @@ def rebin_and_calc_SNR(spec,sky,wls,desired_R):
 
 
 ##########################################################################################################################################
-#R value statistic
+#R value statistic for correlation between two datasets
 #########################################################################################################################################
 
 
@@ -972,24 +970,6 @@ def order_merge_reg_grid(wls,resps,del_lam=None):
     
     return out_spec
 
-'''
-test2 = np.zeros(len(test2_wls))
-for i in range(len(test)):
-    if i == len(test)-1:
-        curr_del_lam = test_wls[i]-test_wls[i-1]
-    else:
-        curr_del_lam =  test_wls[i+1]-test_wls[i]
-    low_range = nearest(test2_wls,test_wls[i]-(curr_del_lam/2),'coord')
-    high_range = nearest(test2_wls,test_wls[i]+(curr_del_lam/2),'coord')
-    diff_range = (high_range-low_range)+1#(curr_del_lam*2) / del_lam
-    test2[low_range:high_range+1] += test[i]/len(test2[low_range:high_range+1])
-    print(test[i])
-    print(curr_del_lam)
-    print(diff_range)
-    print(test2[low_range:high_range+1])
-    print(sum(test2[low_range:high_range+1]))
-    print('\n')
-'''
 #########################################################################################################################################
 #plotting a grid (2D array) by row
 #########################################################################################################################################
@@ -1028,7 +1008,6 @@ def model_interpolator(spec,no_points):
     binstep_factor = (binstep/1e-7) / binstep_interpolation
     f_int = interpolate.interp1d(spec[0], spec[1]/binstep_factor, bounds_error = False, fill_value = 0) #interpolating data
     
-    stand_star = np.loadtxt('STANDARD_STAR/GD71_spec.txt')
     spec_out = np.zeros((2,no_points))
     spec_out[0] += np.linspace(spec[0][0],spec[0][-1],no_points)
     spec_out[1] += f_int(spec_out[0])
@@ -1056,7 +1035,7 @@ def model_interpolator_sky(spec,no_points):
 
 
 #########################################################################################################################################
-#KSIM express function
+#KSIM express function, less detail on MKID response but much faster
 #########################################################################################################################################
 
 def KIDSpec_Express_V2(pix_sum,ord_wl,order_list,pix_no,IR=False,sky=False):
@@ -1099,195 +1078,10 @@ def KIDSpec_Express_V2(pix_sum,ord_wl,order_list,pix_no,IR=False,sky=False):
                 
             else:
                 pix_order_ph[1,i] += photons_in_ord
-        
-    '''
-    if sky == False:
-        if IR == True:
-            np.save('%s/spectrum_order_pixel_IR_%i.npy'%(file_path,pix_no),pix_order_ph)
-            np.save('%s/spectrum_misident_pixel_IR_%i.npy'%(file_path,pix_no),pix_order_mis)
-        else:
-            #print('OBJ',pix_order_ph)
-            np.save('%s/spectrum_order_pixel_OPT_%i.npy'%(file_path,pix_no),pix_order_ph)
-            np.save('%s/spectrum_misident_pixel_OPT_%i.npy'%(file_path,pix_no),pix_order_mis)
-    else:
-        if IR == True:
-            np.save('%s/spectrum_order_pixel_IR_sky_%i.npy'%(file_path,pix_no),pix_order_ph)
-            np.save('%s/spectrum_misident_pixel_IR_sky_%i.npy'%(file_path,pix_no),pix_order_mis)
-        else:
-            #print('SKY',pix_order_ph)
-            np.save('%s/spectrum_order_pixel_OPT_sky_%i.npy'%(file_path,pix_no),pix_order_ph)
-            np.save('%s/spectrum_misident_pixel_OPT_sky_%i.npy'%(file_path,pix_no),pix_order_mis)
-    '''  
+     
     return pix_order_ph,pix_order_mis
 
     
-    
-
-def KIDSpec_Express(pix_sum,pix_sky,ord_waves,pixels,bad_pix=[False,1.0],R_E_shift=[False,0],IR=False):
-    
-    if IR == True:
-        ARM = 'IR'
-    else:
-        ARM = 'OPT'
-    
-    
-    print('\n Beginning %s MKIDs pixel response estimation:\n'%ARM)
-    
-    file_path = '%s/Resample/'%(folder)
-    
-    R_E_data = np.array([[16.404,13.411],[4.238,2.478],[4.083,2.297],[4.016,2.249],[4.065,2.306],[4.059,2.274]])
-    R_E_pix = np.array([1500,3000])
-    R_E_vals = np.array([10,20,30,40,50,60])
-    close_pixels = nearest(R_E_pix,pixels,'coord')
-    R_E_trend = interpolate.interp1d(R_E_vals,R_E_data[:,close_pixels])
-    
-    R_E_store = np.zeros_like(pix_sum)
-    
-    int_steps = np.ndarray.astype((np.linspace(0,n_pixels,100)),dtype='int') 
-    prog = 0
-    
-    for pix in range(pixels):
-        
-        pix_order_ph = np.zeros((2,len(pix_sum[pix,:])))
-        pix_order_mis = np.zeros((2,len(pix_sum[pix,:])))
-    
-        
-        for i in range(len(pix_sum[0,:])):
-            diff_poiss_sky = pix_sky[pix,i]
-            if pix_sum[pix,i]-pix_sky[pix,i] < 0:
-                diff_poiss_obj = 0
-            else:
-                diff_poiss_obj = pix_sum[pix,i]-pix_sky[pix,i]
-            
-            pix_sky[pix,i] = diff_poiss_sky
-            #print('SKY',pix_sky[pix,i])
-            pix_sum[pix,i] = diff_poiss_sky + diff_poiss_obj
-            #print('OBJ',pix_sum[pix,i])
-            
-            if pix_sum[pix,i] < 0.0:
-                pix_sum[pix,i] = 0
-            
-            
-        if bad_pix[0] == True:
-            pix_sum[pix,:] *= bad_pix[1]
-            pix_sky[pix,:] *= bad_pix[1]
-            
-        
-        
-        PIX_Rs =  ER_band_low / np.sqrt(ord_waves[:,pix]/400)
-        
-        
-        if R_E_shift[0] == True:
-            for i in range(len(PIX_Rs)):
-                PIX_Rs[i] += ((-1*R_E_shift[1]) + (np.random.random()*(R_E_shift[1]*2)))
-                if PIX_Rs[i] < min(PIX_Rs[i]):
-                    PIX_Rs[i] = min(PIX_Rs[i])
-                R_E_store[pix,i] += PIX_Rs[i]
-        else:
-            R_E_store[pix,:] += PIX_Rs
-            
-            
-        #sky and object portion
-        
-        
-        pix_order_ph[0,:] += ord_waves[:,pix]
-        pix_order_mis[0,:] += ord_waves[:,pix]
-        
-        for i in range(len(PIX_Rs)):
-            id_photons = 0
-            mis_photons = 0
-            if PIX_Rs[i] < min(R_E_vals):
-                PIX_Rs[i] = min(R_E_vals)
-            id_photons += pix_sum[pix,i] * (1-(R_E_trend(PIX_Rs[i])/100))
-            mis_photons += pix_sum[pix,i] - id_photons
-            
-            pix_order_mis[1,i] += mis_photons
-            pix_order_ph[1,i] += id_photons
-            
-            up_and_down_mis = np.random.random()
-            up_mis = up_and_down_mis*mis_photons
-            down_mis = mis_photons - up_mis
-            
-            if i == 0:
-                pix_order_ph[1,i] += down_mis
-                pix_order_ph[1,i+1] += up_mis
-            elif i == (len(PIX_Rs)-1):
-                pix_order_ph[1,i] += up_mis
-                pix_order_ph[1,i-1] += down_mis
-            else:
-                pix_order_ph[1,i-1] += down_mis
-                pix_order_ph[1,i+1] += up_mis
-        
-        for i in range(len(pix_order_ph[1])):
-            if pix_sum[pix,i] == 0:
-                pix_order_ph[1,i] = 0
-        
-        if IR == True:
-            np.save('%s/spectrum_order_pixel_IR_%i.npy'%(file_path,pix),pix_order_ph)
-            np.save('%s/spectrum_misident_pixel_IR_%i.npy'%(file_path,pix),pix_order_mis)
-        else:
-            #print('OBJ',pix_order_ph)
-            np.save('%s/spectrum_order_pixel_OPT_%i.npy'%(file_path,pix),pix_order_ph)
-            np.save('%s/spectrum_misident_pixel_OPT_%i.npy'%(file_path,pix),pix_order_mis)
-    
-        
-            
-            
-            
-        #Sky portion
-        
-        
-        pix_order_ph = np.zeros((2,len(pix_sum[pix,:])))
-        pix_order_mis = np.zeros((2,len(pix_sum[pix,:])))
-        
-        pix_order_ph[0,:] += ord_waves[:,pix]
-        pix_order_mis[0,:] += ord_waves[:,pix]
-        for i in range(len(PIX_Rs)):
-            id_photons = 0
-            mis_photons = 0
-            id_photons += pix_sky[pix,i] * (1-(R_E_trend(PIX_Rs[i])/100))
-            mis_photons += pix_sky[pix,i] - id_photons
-            
-            pix_order_mis[1,i] += mis_photons
-            pix_order_ph[1,i] += id_photons
-            
-            up_and_down_mis = np.random.random()
-            up_mis = up_and_down_mis*mis_photons
-            down_mis = mis_photons - up_mis
-            
-            if i == 0:
-                pix_order_ph[1,i] += down_mis
-                pix_order_ph[1,i+1] += up_mis
-            elif i == (len(PIX_Rs)-1):
-                pix_order_ph[1,i] += up_mis
-                pix_order_ph[1,i-1] += down_mis
-            else:
-                pix_order_ph[1,i-1] += down_mis
-                pix_order_ph[1,i+1] += up_mis
-        
-        for i in range(len(pix_order_ph[1])):
-            if pix_sky[pix,i] == 0:
-                pix_order_ph[1,i] = 0
-        
-        
-        
-        if IR == True:
-            np.save('%s/spectrum_order_pixel_IR_sky_%i.npy'%(file_path,pix),pix_order_ph)
-            np.save('%s/spectrum_misident_pixel_IR_sky_%i.npy'%(file_path,pix),pix_order_mis)
-        else:
-            #print('SKY',pix_order_ph)
-            np.save('%s/spectrum_order_pixel_OPT_sky_%i.npy'%(file_path,pix),pix_order_ph)
-            np.save('%s/spectrum_misident_pixel_OPT_sky_%i.npy'%(file_path,pix),pix_order_mis)
-    
-            
-        if (pix == int_steps).any():
-            prog += 1
-            print('\r%i%% of pixels complete.'%prog,end='',flush=True)
-            
-            
-            
-    print('\r100% of pixels complete.',end='',flush=True)
-    return 
     
 
 #########################################################################################################################################
@@ -1593,138 +1387,7 @@ def multiprocessing_use(jobs,cpu_count,IR=False,sky=False):
 
 
 #########################################################################################################################################
-#Photometry incoming flux 
-#########################################################################################################################################
-
-
-def spec_slicer_photometry(spec,return_dimensions=False,photon_noise=True):
-    
-    object_x = np.linspace(-seeing*3,seeing*3,10000) + (off_centre * seeing) #x coordinates of intensity gaussian with off centre factor
-    
-    mean = (np.max(object_x) + np.min(object_x)) / 2       #finding central point of gaussian
-    
-    sigmas = sigma_calc(seeing,spec[0],airmass) #finding the sigma value for the intensity gaussians depending on wavelength
-    
-    interval_factors_opt = [] #storing the transmissions
-    interval_factors_ir = []
-    interval_factors = []
-    no_pixels_ir = []
-    no_pixels_opt = []
-    x_range_opt = []
-    x_range_ir = []
-    y_range_opt = []
-    y_range_ir = []
-    x_range = []
-    y_range = []
-    
-    plot_amount = 0
-    
-    print('\nBeginning seeing transmission calculations for spectrum.')
-    for i in range(len(sigmas)):
-        
-        if spec[0][i] > 1000:
-            pix_width = 0.9 #arcsec
-            pix_length = 0.2
-        elif spec[0][i] < 1000:
-            pix_width = 0.45
-            pix_length = 0.15
-        
-        object_y_pre = gaussian_eq(np.linspace(-seeing*3,seeing*3,10000),mu=mean,sig=sigmas[i]) #y values for intensity (arbitrary units)
-        object_y = object_y_pre / np.sum(object_y_pre) #normalisation
-        
-        object_y_min = np.max(object_y)*0.01
-        
-        object_y_range = (np.where(object_y_min > object_y[:int(len(object_y)/2)])[0][-1],int(len(object_y)/2)+np.where(object_y_min > object_y[int(len(object_y)/2):])[0][0])
-        object_x_range = abs(object_x[object_y_range[0]] - object_x[object_y_range[1]])
-        
-        pixels_area = np.pi * np.square((0.5*object_x_range))
-        #no_pixels.append(pixels_area/(pix_width*pix_length))
-        
-        x_range.append(object_x_range)
-        y_range.append(object_y_range)
-        interval_factors.append(object_y[object_y_range[0]:object_y_range[1]])
-        
-        if spec[0][i] > 1000:
-            interval_factors_ir.append(object_y[object_y_range[0]:object_y_range[1]])
-            interval_factors_opt.append(0)
-            no_pixels_ir.append(np.sqrt(pixels_area/(pix_width*pix_length)))
-            x_range_ir.append(object_x_range)
-            y_range_ir.append(object_y_range)
-        elif spec[0][i] < 1000:
-            interval_factors_opt.append(object_y[object_y_range[0]:object_y_range[1]])
-            interval_factors_ir.append(0)
-            no_pixels_opt.append(np.sqrt(pixels_area/(pix_width*pix_length)))
-            x_range_opt.append(object_x_range)
-            y_range_opt.append(object_y_range)
-        
-        perc_done = ((i+1)/len(sigmas))*100
-        print('\r%.2f %% of wavelengths complete'%(perc_done),end='',flush=True)
-    
-    opt_max_pix = int(max(no_pixels_opt))+1
-    ir_max_pix = int(max(no_pixels_ir))+1
-    opt_max_pix_range = object_x[y_range_opt[np.argmax(no_pixels_opt)][0]:y_range_opt[np.argmax(no_pixels_opt)][1]]
-    ir_max_pix_range = object_x[y_range_ir[np.argmax(no_pixels_ir)][0]:y_range_ir[np.argmax(no_pixels_ir)][1]]
-    
-    bins_opt = np.linspace(opt_max_pix_range[0],opt_max_pix_range[-1],opt_max_pix)
-    bins_ir = np.linspace(ir_max_pix_range[0],ir_max_pix_range[-1],ir_max_pix)
-    
-    transmission_cube_opt = np.zeros((opt_max_pix,opt_max_pix,len(sigmas)))
-    transmission_cube_ir = np.zeros((ir_max_pix,ir_max_pix,len(sigmas)))
-    
-    print('\nBeginning specific pixel transmission calculations.')
-    for i in range(len(sigmas)):
-        
-        y_sec = interval_factors[i]
-        x_sec = object_x[y_range[i][0]:y_range[i][1]]
-        
-        if spec[0][i] > 1000:
-            rebinned_interval = rebinner_with_bins((x_sec,y_sec),bins_ir)
-            x, y = np.meshgrid(rebinned_interval[0],rebinned_interval[0])
-            dst = np.sqrt(x*x+y*y)
-            gauss = np.zeros_like(dst)
-            for j in range(len(rebinned_interval[0])):
-                gauss[j] += np.interp(dst[j],rebinned_interval[0],rebinned_interval[1])
-            transmission_cube_ir[:,:,i] += (gauss/np.sum(gauss))
-        elif spec[0][i] < 1000:
-            rebinned_interval = rebinner_with_bins((x_sec,y_sec),bins_opt)
-            x, y = np.meshgrid(rebinned_interval[0],rebinned_interval[0])
-            dst = np.sqrt(x*x+y*y)
-            gauss = np.zeros_like(dst)
-            for j in range(len(rebinned_interval[0])):
-                gauss[j] += np.interp(dst[j],rebinned_interval[0],rebinned_interval[1])
-            transmission_cube_opt[:,:,i] += (gauss/np.sum(gauss))
-        
-        perc_done = ((i+1)/len(sigmas))*100
-        print('\r%.2f %% of wavelengths complete'%(perc_done),end='',flush=True)
-    
-    print('\nApplying spectrum to pixels.')
-    
-    pixel_specs_ir = np.zeros_like(transmission_cube_ir)
-    pixel_specs_opt = np.zeros_like(transmission_cube_opt)
-    pixel_specs_ir += transmission_cube_ir
-    pixel_specs_opt += transmission_cube_opt
-    
-    for i in range(len(spec[0])):
-        if photon_noise == True:
-            if spec[0][i] > 1000:
-                pixel_specs_ir[:,:,i] *= (np.random.poisson(spec[1][i]))
-            elif spec[0][i] < 1000:
-                pixel_specs_opt[:,:,i] *= (np.random.poisson(spec[1][i]))
-        else:
-            if spec[0][i] > 1000:
-                pixel_specs_ir[:,:,i] *= spec[1][i]
-            elif spec[0][i] < 1000:
-                pixel_specs_opt[:,:,i] *= spec[1][i]
-
-    if return_dimensions == True:
-        print('\nOptical incoming flux width:',len(pixel_specs_opt[:,0,0])*0.45,'x',len(pixel_specs_opt[:,0,0])*0.15,'arcseconds')
-        print('\nInfrared incoming flux width:',len(pixel_specs_ir[:,0,0])*0.9,'x',len(pixel_specs_ir[:,0,0])*0.2,'arcseconds')
-    return pixel_specs_opt,pixel_specs_ir,transmission_cube_opt,transmission_cube_ir
-
-
-
-#########################################################################################################################################
-#Bin array onto 3D array, for photometry
+#Bin array onto 3D array
 #########################################################################################################################################
 
 
@@ -1760,17 +1423,11 @@ def reduced_chi_test(data,model,error,norm=True):
 #FWHM calculator via fitting
 #########################################################################################################################################
 
-def gaussian_2(x,mu,sig,offset,amp):
-    return (-amp * np.exp( (x-mu)**2 / (-2. * sig**2) )) + offset
-
 def lorentzian(x,mu,amp,offset,fwhm):
     return ((-amp * ((fwhm/2)) / np.pi) / (  np.square(x-mu) + np.square((fwhm/2))  )) + offset
 
 def double_lorentzian(x,mu1,amp1,offset1,fwhm1,mu2,amp2,offset2,fwhm2):
     return lorentzian(x,mu1,amp1,offset1,fwhm1) + lorentzian(x,mu2,amp2,offset2,fwhm2)
-
-def exp_func(x,mu,amp,offset,fac):
-    return (-amp * np.exp(-fac*abs(mu-x))) + offset
 
 def straight_line_continuum_removal(x,m,c):
     return (m*x) + c
@@ -1788,19 +1445,6 @@ def continuum_removal(spec,poly=False):
         continuum_removed_spec[1] -= straight_line_continuum_removal(spec[0],*popt)
     return continuum_removed_spec
 
-
-def fwhm_fitter_exp(data_x, data_y,mu,amp,offset,fac):
-    popt,pcov = curve_fit(exp_func,data_x,data_y,p0=[mu,amp,offset,fac],maxfev=10000)
-    fwhm = popt[3]
-    fwhm_error = np.sqrt(pcov[3,3])
-    print('\nFWHM:',fwhm,'+/-',fwhm_error)
-    plt.figure()
-    plt.plot(data_x,data_y,'rx',label='Data')
-    plt.plot(data_x,exp_func(data_x,*popt),'b-',alpha=0.7,label='Fit')
-    plt.xlabel('Wavelength / nm')
-    plt.ylabel(object_y)
-    plt.legend(loc='best')
-    return fwhm,fwhm_error
 
 def fwhm_fitter_lorentzian_double(data_x,data_y,mu,amp,offset,fwhm,mu2,amp2,offset2,fwhm2):
     
@@ -1859,83 +1503,6 @@ def fwhm_fitter_lorentzian_ret_popt(data_x, data_y,mu,amp,offset,fwhm):
     plt.legend(loc='best')
     return fwhm,fwhm_error,popt
 
-
-def fwhm_fitter_gaussian(data_x, data_y,mu,amp,offset,sig):
-    popt,pcov = curve_fit(gaussian_2,data_x,data_y,p0=[mu,sig,offset,amp],maxfev=10000)
-    sigma = popt[1]
-    sigma_error = np.sqrt(pcov[1,1])
-    fwhm = 2*np.sqrt(2*np.log(2))*sigma
-    fwhm_error = 2*np.sqrt(2*np.log(2))*sigma_error
-    print('\nFWHM:',fwhm,'+/-',fwhm_error)
-    plt.figure()
-    plt.plot(data_x,data_y,'rx',label='Data')
-    plt.plot(np.linspace(data_x[0],data_x[-1],100000),gaussian_2(np.linspace(data_x[0],data_x[-1],100000),*popt),'b-',alpha=0.7,label='Fit')
-    plt.xlabel('Wavelength / nm')
-    plt.ylabel(object_y)
-    plt.legend(loc='best')
-    return fwhm,fwhm_error
-
-
-'''
-plt.rcParams.update({'font.size': 20})
-fig,ax = plt.subplots(1,3)
-
-
-mu = cen_wl
-amp = pts[1][coord_feature]
-offset = pts[1][coord_feature]
-fwhm = 2
-
-data_x = pts[0,coord_feature-coord_range:coord_feature+coord_range]
-data_y = pts[1,coord_feature-coord_range:coord_feature+coord_range]
-popt,pcov = curve_fit(lorentzian,data_x,data_y,p0=[mu,amp,offset,fwhm],maxfev=10000)
-fwhm = popt[3]
-fwhm_error = np.sqrt(pcov[3,3])
-print('\nFWHM:',fwhm,'+/-',fwhm_error)
-
-
-ax[0].plot(data_x,data_y,'rx',markersize=3,label='PTS simulation')
-ax[0].plot(data_x,lorentzian(data_x,*popt),'b-',alpha=0.7,label='Fit')
-#plt.xlabel('Wavelength / nm')
-#plt.ylabel(object_y)
-#ax[0].legend(loc='best')
-ax[0].set_ylim(-1.3e-12,0)
-ax[0].set_ylabel(object_y)
-
-amp = mod[1][coord_feature]
-offset = mod[1][coord_feature]
-data_x = mod[0,coord_feature-coord_range:coord_feature+coord_range]
-data_y = mod[1,coord_feature-coord_range:coord_feature+coord_range]
-popt,pcov = curve_fit(lorentzian,data_x,data_y,p0=[mu,amp,offset,fwhm],maxfev=10000)
-fwhm = popt[3]
-fwhm_error = np.sqrt(pcov[3,3])
-print('\nFWHM:',fwhm,'+/-',fwhm_error)
-
-
-ax[1].plot(data_x,data_y,'rx',markersize=3,label='HD212442 spectrum')
-ax[1].plot(data_x,lorentzian(data_x,*popt),'b-',alpha=0.7,label='Fit')
-#ax[1].legend(loc='best')
-ax[1].set_ylim(-1.3e-12,0)
-ax[1].tick_params(labelleft=False, left=False)
-ax[1].set_xlabel('Wavelength / nm')
-
-amp = ordg[1][coord_feature]
-offset = ordg[1][coord_feature]
-data_x = ordg[0,coord_feature-coord_range:coord_feature+coord_range]
-data_y = ordg[1,coord_feature-coord_range:coord_feature+coord_range]
-popt,pcov = curve_fit(lorentzian,data_x,data_y,p0=[mu,amp,offset,fwhm],maxfev=10000)
-fwhm = popt[3]
-fwhm_error = np.sqrt(pcov[3,3])
-print('\nFWHM:',fwhm,'+/-',fwhm_error)
-
-
-ax[2].plot(data_x,data_y,'rx',markersize=3,label='Order Gaussian simulation')
-ax[2].plot(data_x,lorentzian(data_x,*popt),'b-',alpha=0.7,label='Fit')
-#ax[2].legend(loc='best')
-ax[2].set_ylim(-1.3e-12,0)
-ax[2].tick_params(labelleft=False, left=False)
-    
-'''
 
 
 

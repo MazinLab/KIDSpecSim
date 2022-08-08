@@ -383,7 +383,7 @@ while stop_condition != len(blaze_wl_mag_found_check):
     if mag_reduce_fac >= 20000:
         mag_reduce_fac += 2000
     if mag_reduce_fac_prev == mag_reduce_fac:
-        mag_reduce_fac += 0.1
+        mag_reduce_fac += 10.0
             
     print('\nCurrent time taken:',datetime.datetime.now() - time_start)
 

@@ -101,29 +101,26 @@ row = int(params[38].split(' ')[2])
 redshift = float(params[39].split(' ')[2])
 redshift_orig = float(params[40].split(' ')[2])
 mag_reduce = float(params[41].split(' ')[2])
-sky = str_2_bool(params[42].split(' ')[2])
-gen_sky_seeing_eff = str_2_bool(params[43].split(' ')[2])
-sky_seeing_eff_file_save_or_load = params[44].split(' ')[2]
-gen_model_seeing_eff = str_2_bool(params[45].split(' ')[2])
-model_seeing_eff_file_save_or_load = params[46].split(' ')[2]
-extra_plots = str_2_bool(params[47].split(' ')[2])
-stand_star_factors_run = str_2_bool(params[48].split(' ')[2])
-stand_star_filename_detail = params[49].split(' ')[2]
-supported_file_extraction = str_2_bool(params[50].split(' ')[2])
-fwhm_fitter = str_2_bool(params[51].split(' ')[2])
-cen_wl = float(params[52].split(' ')[2])
-cen_wl_2 = float(params[53].split(' ')[2])
-double_fit = str_2_bool(params[54].split(' ')[2])
-cont_rem_poly = str_2_bool(params[55].split(' ')[2])
-reset_R_Es = str_2_bool(params[56].split(' ')[2])
-reset_dead_pixels = str_2_bool(params[57].split(' ')[2])
-reg_grid_factor = float(params[58].split(' ')[2])
+gen_sky_seeing_eff = str_2_bool(params[42].split(' ')[2])
+sky_seeing_eff_file_save_or_load = params[43].split(' ')[2]
+gen_model_seeing_eff = str_2_bool(params[44].split(' ')[2])
+model_seeing_eff_file_save_or_load = params[45].split(' ')[2]
+extra_plots = str_2_bool(params[46].split(' ')[2])
+stand_star_factors_run = str_2_bool(params[47].split(' ')[2])
+stand_star_filename_detail = params[48].split(' ')[2]
+supported_file_extraction = str_2_bool(params[49].split(' ')[2])
+fwhm_fitter = str_2_bool(params[50].split(' ')[2])
+cen_wl = float(params[51].split(' ')[2])
+cen_wl_2 = float(params[52].split(' ')[2])
+double_fit = str_2_bool(params[53].split(' ')[2])
+cont_rem_poly = str_2_bool(params[54].split(' ')[2])
+reset_R_Es = str_2_bool(params[55].split(' ')[2])
+reset_dead_pixels = str_2_bool(params[56].split(' ')[2])
+reg_grid_factor = float(params[57].split(' ')[2])
 
 pix_mult = np.ndarray.astype((np.linspace(1,n_pixels,10)),dtype='int') #for progress updates during sections of the code involving looping through pixels
  
 seeing_str = str(seeing)[0] + '_' + str(seeing)[2]
-#refl_start_val = alpha_val - ((n_pixels*pix_fov)/3600) # Diffraction angles in degrees
-#refl_end_val = alpha_val + ((n_pixels*pix_fov)/3600) 
 
 slit_R_factor = slit_width/pix_fov
 
