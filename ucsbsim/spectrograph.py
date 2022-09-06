@@ -1,6 +1,7 @@
-from .detector import MKIDDetector
+from detector import MKIDDetector
 import numpy as np
 import astropy.units as u
+
 
 class GratingSetup:
     def __init__(self, alpha, delta, groove_length):
@@ -61,7 +62,7 @@ class GratingSetup:
 
     def angular_dispersion(self, m, beta):
         """Schroder A dbeta/dlambda"""
-        return m / (self.d * np.cos(beta))*u.rad
+        return m / (self.d * np.cos(beta)) * u.rad
 
 
 class SpectrographSetup:
@@ -112,8 +113,8 @@ class SpectrographSetup:
         If fsr_edge is true mask at the FSR limit otherwise mask at the detector edge
         """
         if fsr_edge:
-            o=self.orders[:,None]
-            return np.abs(wave-self.central_wave(o))<self.fsr(o)
+            o = self.orders[:, None]
+            return np.abs(wave - self.central_wave(o)) < self.fsr(o)
         else:
             x = self.wavelength_to_pixel(wave, self.orders[:, None])
             mask = (x >= 0) & (x < self.detector.n_pixels)

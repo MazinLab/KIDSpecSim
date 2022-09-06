@@ -1,6 +1,7 @@
 import numpy as np
 import astropy.units as u
-from mkidsim.filterphot import mask_deadtime
+from filterphot import mask_deadtime
+
 
 class MKIDDetector:
     def __init__(self, n, pixel_size, R0, wave_R0):
@@ -43,17 +44,17 @@ class MKIDDetector:
         from mkidcore.binfile.mkidbin import PhotonNumpyType
 
         pixel_count = np.array([x.size for x in arrival_times])
-        total_photons=pixel_count.sum()
+        total_photons = pixel_count.sum()
 
         print(f'Simulated dataset may take up to {total_photons * 16 / 1024 ** 3:.2} GB of RAM')
 
-        merge_time_window_s = 1e-6*u.s
+        merge_time_window_s = 1e-6 * u.s
         MIN_TRIGGER_ENERGY = 1 / (1.5 * u.um)
-        SATURATION_WAVELENGTH_NM = 350*u.nm
+        SATURATION_WAVELENGTH_NM = 350 * u.nm
         DEADTIME = 10 * u.us
 
         if resid_map is None:
-            resid_map = np.arange(pixel_count.size, dtype=int)*10 + 100  #something arbitrary
+            resid_map = np.arange(pixel_count.size, dtype=int) * 10 + 100  # something arbitrary
 
         photons = np.recarray(total_photons, dtype=PhotonNumpyType)
         photons[:] = 0
@@ -62,7 +63,7 @@ class MKIDDetector:
         total_merged = 0
         total_missed = []
         # Compute photon arrival times and wavelengths for each photon
-        for pixel, n in np.ndenumerate(pixel_count):
+        for pixel, n in enumerate(pixel_count):
             if not n:
                 continue
 
@@ -89,12 +90,12 @@ class MKIDDetector:
             measured_energies = energies
 
             # Filter those that wouldn't trigger
-            will_trigger = measured_energies.value > MIN_TRIGGER_ENERGY
+            will_trigger = measured_energies > MIN_TRIGGER_ENERGY
             if not will_trigger.any():
                 continue
 
             # Drop photons that arrive within the deadtime
-            detected = mask_deadtime(a_times[will_trigger], DEADTIME.to(u.s).value)
+            detected = mask_deadtime(a_times[will_trigger], DEADTIME.to(u.s))
 
             missed = will_trigger.sum() - detected.sum()
             total_missed.append(missed)
@@ -107,7 +108,7 @@ class MKIDDetector:
             sl = slice(observed, observed + a_times.size)
             photons.wavelength[sl] = measured_wavelengths
             photons.time[sl] = (a_times * 1e6)  # in microseconds
-            photons.resID[sl] = resid_map[pixel[::-1]]
+            photons.resID[sl] = resid_map[pixel]
             observed += a_times.size
         print(f'A total of {total_merged} photons had their energies '
               f'merged and {np.sum(total_missed)} were missed due to deadtime, {observed} observed.')

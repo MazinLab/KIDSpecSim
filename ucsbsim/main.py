@@ -3,38 +3,36 @@ import scipy.interpolate as interp
 import scipy
 import scipy.signal as sig
 import scipy.ndimage as ndi
-import numpy as np
 import matplotlib.pyplot as plt
 import time
 
 import astropy.units as u
-from ucsbsim.spectra import PhoenixModel, AtmosphericTransmission, FilterTransmission, TelescopeTransmission
-from ucsbsim.spectrograph import GratingSetup, SpectrographSetup
-from ucsbsim.detector import MKIDDetector
-from ucsbsim.engine import Engine
-from ucsbsim.spectra import clip_spectrum
+from spectra import PhoenixModel, AtmosphericTransmission, FilterTransmission, TelescopeTransmission
+from spectrograph import GratingSetup, SpectrographSetup
+from detector import MKIDDetector
+from engine import Engine
+from spectra import clip_spectrum
 
+tic = time.time()
 
-tic=time.time()
-
-#TODO move some of this into grating
-u.photlam=u.photon/u.s/u.cm**2/u.AA
-exptime = 1*u.s
+# TODO move some of this into grating
+u.photlam = u.photon / u.s / u.cm ** 2 / u.AA
+exptime = 1 * u.s
 # c_beta = .1  # cos(beta)/cos(beta_center) at the end of m0
 npix = 2048
-R0=15
-l0=800 * u.nm
-m0=5
+R0 = 15
+l0 = 800 * u.nm
+m0 = 5
 m_max = 9
-l0_center=l0/(1+1/(2*m0))
+l0_center = l0 / (1 + 1 / (2 * m0))
 # l0_fsr = l0_center/m0
-R0_min=.8*R0
-n_sigma_mkid=3
+R0_min = .8 * R0
+n_sigma_mkid = 3
 osamp = 10
-minwave=400 * u.nm
-maxwave=800 * u.nm
+minwave = 400 * u.nm
+maxwave = 800 * u.nm
 pixels_per_res_elem = 2.5
-pixel_size = 20 * u.micron  #20 um in nm
+pixel_size = 20 * u.micron  # 20 um in nm
 focal_length = 350 * u.mm
 
 # The groove length and angles need to be ~self-consistent
@@ -46,10 +44,10 @@ focal_length = 350 * u.mm
 # DELTA lambda = (l0_center/m0)
 # two equations two unknowns:
 
-angular_dispersion=2*np.arctan(pixel_size*npix/2/focal_length)/(l0_center/m0)
-incident_angle = np.arctan((l0_center/2 * angular_dispersion).value)*u.rad
-groove_length = m0*l0_center/2/np.sin(incident_angle)
-blaze_angle = incident_angle#+10*u.deg  # a good bit off blaze
+angular_dispersion = 2 * np.arctan(pixel_size * npix / 2 / focal_length) / (l0_center / m0)
+incident_angle = np.arctan((l0_center / 2 * angular_dispersion).value) * u.rad
+groove_length = m0 * l0_center / 2 / np.sin(incident_angle)
+blaze_angle = incident_angle  # +10*u.deg  # a good bit off blaze
 
 beta_central_pixel = incident_angle
 
@@ -64,12 +62,10 @@ bandpasses = [AtmosphericTransmission(),
 
 spectra = [PhoenixModel(4300, 0, 4.8)]
 
-
 engine = Engine(spectrograph)
 
-
 # Pre grating throughput effects, operates on wavelength grid of inbound flux
-for i,s in enumerate(spectra):
+for i, s in enumerate(spectra):
     for b in bandpasses:
         s *= b
     spectra[i] = s
@@ -85,11 +81,12 @@ blaze_efficiencies = spectrograph.blaze(inbound.waveset)
 # plt.legend()
 # plt.show()
 
-blazed_spectrum = blaze_efficiencies*inbound(inbound.waveset) # .blaze returns 2D array of blaze efficiencies [wave.size, norders]
+blazed_spectrum = blaze_efficiencies * inbound(
+    inbound.waveset)  # .blaze returns 2D array of blaze efficiencies [wave.size, norders]
 
 broadened_spectrum = engine.opticaly_broaden(inbound.waveset, blazed_spectrum)
 
-full_convolution=True
+full_convolution = True
 if full_convolution:
     sampling_data = engine.determine_mkid_convolution_sampling(oversampling=osamp)
 
@@ -98,7 +95,6 @@ if full_convolution:
 else:
     result_wave, result = engine.multiply_mkid_response(inbound.waveset, broadened_spectrum,
                                                         oversampling=osamp, n_sigma_mkid=n_sigma_mkid)
-
 
 # # Compare the convolved result with the "crude" approximation where a gaussian is scaled to the pixels average flux
 # flux = u.photlam*interp.interp1d(inbound.waveset.to('nm').value, broadened_spectrum[0],
@@ -114,6 +110,7 @@ photons, observed = detector.observe(t_photons, l_photons)
 # Dump to HDF5
 # TODO this will need work as the pipeline will probably default to MEC HDF headers
 from mkidpipeline.steps import buildhdf
+
 buildhdf.buildfromarray(photons[:observed], user_h5file=f'./spec.h5')
-toc=time.time()
-print(f"Done in {toc-tic} s")
+toc = time.time()
+print(f"Done in {toc - tic} s")

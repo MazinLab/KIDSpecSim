@@ -3,12 +3,11 @@ import scipy.interpolate as interp
 import scipy
 import scipy.signal as sig
 import scipy.ndimage as ndi
-import numpy as np
 import astropy.units as u
 
-from ucsbsim.spectra import PhoenixModel, AtmosphericTransmission, FilterTransmission, TelescopeTransmission
-from ucsbsim.spectrograph import GratingSetup, SpectrographSetup
-from ucsbsim.detector import MKIDDetector
+from spectra import PhoenixModel, AtmosphericTransmission, FilterTransmission, TelescopeTransmission
+from spectrograph import GratingSetup, SpectrographSetup
+from detector import MKIDDetector
 
 
 class Engine:
@@ -41,7 +40,7 @@ class Engine:
         For now though just treat it as constant and defined at the midle of the wavelength range
         """
         sample_width = wave.mean() * self.spectrograph.nondimensional_lsf_width / np.diff(wave).mean()
-        return ndi.gaussian_filter1d(flux, sample_width, axis=0)*flux.unit
+        return ndi.gaussian_filter1d(flux, sample_width, axis=0) * flux.unit
 
     def build_mkid_kernel(self, n_sigma, width, sampling):
         """
@@ -53,7 +52,8 @@ class Engine:
         mkid_kernel_npoints = np.ceil((max_mkid_kernel_width / sampling).si.value).astype(int)
         if not mkid_kernel_npoints % 2:
             mkid_kernel_npoints += 1
-        return sig.gaussian(mkid_kernel_npoints, (width / sampling).si.value)  # width/sampling is the dimensionless width
+        return sig.gaussian(mkid_kernel_npoints,
+                            (width / sampling).si.value)  # width/sampling is the dimensionless width
 
     def determin_apodization(self, pixel_samples_frac, pixel_max_npoints):
         """
@@ -85,26 +85,26 @@ class Engine:
 
         """
         # TODO this many not be quite right, cf. interp_wave
-        x = np.linspace(-pixel_max_npoints/2, pixel_max_npoints/2, num=pixel_max_npoints)
-        in_pixel = np.abs(x[:, None, None]) <= (pixel_samples_frac/2)
+        x = np.linspace(-pixel_max_npoints / 2, pixel_max_npoints / 2, num=pixel_max_npoints)
+        in_pixel = np.abs(x[:, None, None]) <= (pixel_samples_frac / 2)
 
-        edge = pixel_samples_frac/2
+        edge = pixel_samples_frac / 2
         last = edge.astype(int)
         caseb = last == np.round(edge).astype(int)
 
-        apod = edge-edge.astype(int)-.5  # compute case A
-        apod[caseb] += 1                 # correct values to caseb
+        apod = edge - edge.astype(int) - .5  # compute case A
+        apod[caseb] += 1  # correct values to caseb
 
-        apod_ndx = last+(~caseb)  # Case A needs to go one further
-        apod_ndx = np.array([pixel_max_npoints//2 - apod_ndx, pixel_max_npoints//2 + apod_ndx])
-        apod_ndx.clip(0, pixel_max_npoints-1, out=apod_ndx)
+        apod_ndx = last + (~caseb)  # Case A needs to go one further
+        apod_ndx = np.array([pixel_max_npoints // 2 - apod_ndx, pixel_max_npoints // 2 + apod_ndx])
+        apod_ndx.clip(0, pixel_max_npoints - 1, out=apod_ndx)
 
-        interp_apod = np.zeros((pixel_max_npoints,)+pixel_samples_frac.shape)
+        interp_apod = np.zeros((pixel_max_npoints,) + pixel_samples_frac.shape)
         ord_ndx = np.arange(interp_apod.shape[1], dtype=int)[None, :, None]
         pix_ndx = np.arange(interp_apod.shape[2], dtype=int)[None, None, :]
         interp_apod[in_pixel] = 1
-        interp_apod[apod_ndx[0], ord_ndx, pix_ndx]=apod
-        interp_apod[apod_ndx[1], ord_ndx, pix_ndx]=apod
+        interp_apod[apod_ndx[0], ord_ndx, pix_ndx] = apod
+        interp_apod[apod_ndx[1], ord_ndx, pix_ndx] = apod
 
         return interp_apod
 
@@ -151,7 +151,7 @@ class Engine:
         max_beta_m0 = spectrograph.grating.beta(spectrograph.l0, spectrograph.m0)
         min_beta_mmax = spectrograph.grating.beta(spectrograph.minimum_wave, spectrograph.m_max)
         # The maximum and minimum change in wavelength across a pixel
-        #  NB You can get a crude approximation by using the collowing where c_beta the fractional change in beta across the order
+        #  NB You can get a crude approximation by using the following where c_beta the fractional change in beta across the order
         #   e.g. for 6 degrees with acenteral angle of 45 about .1 in the minimum order
         #   dl_pix_min_wave = spectrograph.central_wave(m0)/npix*(1-c_beta*m0/m_max)/m_max
         #   dl_pix_max_wave = spectrograph.central_wave(m0)/npix*(1+c_beta)/m0
@@ -178,7 +178,6 @@ class Engine:
         dl_pixel = spectrograph.pixel_scale / spectrograph.angular_dispersion()
         dl_mkid_pixel = detector.mkid_resolution_width(lambda_pixel, detector.pixel_indices)
 
-
         # Each pixel width is some fraction of the kernel's sigma, to handle the stretching properly we need to make sure the
         # correct number of samples are used for the pixel flux. dl_mkid_max/sampling points is mkid sigma
         # so a pixel of dl_pixel width with a mkid sigma of dl_mkid_pixel has dl_mkid_max/sampling points in dl_mkid_pixel
@@ -192,7 +191,7 @@ class Engine:
         if not pixel_max_npoints % 2:  # ensure there is a point at the pixel center
             pixel_max_npoints += 1
 
-        return (pixel_samples_frac, pixel_max_npoints, pixel_rescale, dl_pixel,lambda_pixel,
+        return (pixel_samples_frac, pixel_max_npoints, pixel_rescale, dl_pixel, lambda_pixel,
                 dl_mkid_max, sampling)
 
     def convolve_mkid_response(self, wave, spectral_fluxden,
@@ -213,13 +212,13 @@ class Engine:
         :return: result wavelengths and flux arrays [nsamples, norder, npixel] each
         """
 
-        x = np.linspace(-pixel_max_npoints//2, pixel_max_npoints//2, num=pixel_max_npoints)
-        interp_wave = (x[:, None, None]/pixel_samples_frac)*dl_pixel+lambda_pixel
+        x = np.linspace(-pixel_max_npoints // 2, pixel_max_npoints // 2, num=pixel_max_npoints)
+        interp_wave = (x[:, None, None] / pixel_samples_frac) * dl_pixel + lambda_pixel
 
         interp_apod = self.determin_apodization(pixel_samples_frac, pixel_max_npoints)
 
         # Compute the convolution data
-        convoldata=np.zeros(interp_apod.shape)
+        convoldata = np.zeros(interp_apod.shape)
         for i, bs in enumerate(spectral_fluxden):
             specinterp = interp.interp1d(wave.to('nm').value, bs, fill_value=0, bounds_error=False, copy=False)
             convoldata[:, i, :] = specinterp(interp_wave[:, i, :].to('nm').value)
@@ -229,7 +228,7 @@ class Engine:
 
         # Do the convolution
         mkid_kernel = self.build_mkid_kernel(n_sigma_mkid, dl_mkid_max, sampling)
-        sl = slice(pixel_max_npoints//2, -(pixel_max_npoints//2))
+        sl = slice(pixel_max_npoints // 2, -(pixel_max_npoints // 2))
         result = sig.oaconvolve(convoldata, mkid_kernel[:, None, None], mode='full', axes=0)[sl]
 
         result *= u.photlam
@@ -237,7 +236,8 @@ class Engine:
         # TODO I'm not sure this is right, might should be simply sampling
         result *= pixel_rescale[None, ...]  # To photons
         # Compute the wavelengths for the output, converting back to the original sampling, cleverness is done
-        result_wave = (np.arange(result.shape[0]) - result.shape[0]//2)[:, None, None]*pixel_rescale[None, ...] + lambda_pixel
+        result_wave = (np.arange(result.shape[0]) - result.shape[0] // 2)[:, None, None] * pixel_rescale[
+            None, ...] + lambda_pixel
 
         return result_wave, result
 
@@ -275,7 +275,7 @@ class Engine:
 
         return result_wave, result
 
-    def draw_photons(self, result_wave, result, area=np.pi*(4*u.cm)**2, exptime=1*u.s, limit_to=1000):
+    def draw_photons(self, result_wave, result, area=np.pi * (4 * u.cm) ** 2, exptime=1 * u.s, limit_to=1000):
         """result and result_wave are [nconvolution_output, nords, npixels] arrays, units of result should be
         photlambda*dwave
 
@@ -287,17 +287,18 @@ class Engine:
         result_pix = result.reshape(cdf_shape)
         wave_pix = result_wave.reshape(cdf_shape)
         cdf = np.cumsum(result_pix, axis=0)
-
-        rest_of_way_to_photons = area*exptime
-        cdf*=rest_of_way_to_photons
-        cdf = cdf.decompose()  #todo this is a slopy copy
+        rest_of_way_to_photons = area * exptime
+        cdf *= rest_of_way_to_photons
+        cdf = cdf.decompose()  # todo this is a slopy copy
         total_photons = cdf[-1, :]
 
-        N = np.random.poisson(total_photons.value)  # Now assume that you want N photons as a Poisson random number
-
-        if N.max() > limit_to:
+        # putting Poisson draw after limiting because int64 error
+        if total_photons.value.max() > limit_to:
             print(f'Limiting to {limit_to} photons per pixel max')
-            N = (N/N.max()*limit_to).astype(int)  # crappy limit to 100 photons per pixel for testing
+            total_photons_ltd = (total_photons.value / total_photons.value.max() * limit_to).astype(int)  # crappy limit to 1000 photons per pixel for testing
+            N = np.random.poisson(total_photons_ltd)  # Now assume that you want N photons as a Poisson random number
+        else:
+            N = np.random.poisson(total_photons.value)
 
         cdf /= total_photons
         # Decide on wavelengths and times
@@ -305,7 +306,6 @@ class Engine:
 
         for i, (x, n) in enumerate(zip(cdf.T, N)):  # for each pixel
             cdf_interp = interp.interp1d(x, wave_pix[:, i].to('nm').value, fill_value=0, bounds_error=False, copy=False)
-            l_photons.append(cdf_interp(np.random.rand(n)))
-            t_photons.append(np.random.uniform(n)*exptime)
-
+            l_photons.append(cdf_interp(np.random.uniform(0, 1, size=n)) * u.nm)
+            t_photons.append(np.random.uniform(0, 1, size=n) * exptime)
         return t_photons, l_photons
