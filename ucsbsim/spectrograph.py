@@ -14,6 +14,8 @@ class GratingSetup:
         self.alpha = alpha
         self.delta = delta
         self.d = groove_length
+        print(f"\nConfigured the grating.\n\tBlaze angle: {self.delta:.3e}"
+              f"\n\tGroove length: {self.d:.3}")
 
     def blaze(self, beta, m):
         """
@@ -22,12 +24,13 @@ class GratingSetup:
         m = order
         """
         k = np.cos(beta) * np.cos(self.alpha - self.delta) / (np.cos(self.alpha) * np.cos(beta - self.delta))
-        k[k > 1] = 1
-        # q1 = np.cos(alpha) / np.cos(alpha - delta)
-        # q3=np.cos(delta)-np.sin(delta)*np.cot((alpha+beta)/2)
-        # return k*np.sinc(m*q1*q3)**2
+        k[k > 1] = 1  # k must be the minimum value between k and 1
         q4 = np.cos(self.delta) - np.sin(self.delta) / np.tan((self.alpha + beta) / 2)
-        rho = np.cos(self.delta) if self.alpha < self.delta else np.cos(self.alpha) / np.cos(self.alpha - self.delta)
+        if self.alpha < self.delta:
+            rho = np.cos(self.delta)  # 2 different rho depending on whether alpha or delta is larger
+        else:
+            rho = np.cos(self.alpha) / np.cos(self.alpha - self.delta)
+        print(f"\nCalculated relative transmission (blaze efficiencies).")
         return k * np.sinc((m * rho * q4).value) ** 2  # omit np.pi as np.sinc includes it
 
     def beta(self, wave, m):
@@ -35,7 +38,7 @@ class GratingSetup:
         wave = wavelengths
         m = order
         """
-        return np.arcsin(m * wave / self.d - np.sin(self.alpha))
+        return np.arcsin(m * wave / self.d - np.sin(self.alpha))  # rad
 
     def wave(self, beta, m):
         """
@@ -62,7 +65,7 @@ class GratingSetup:
 
     def angular_dispersion(self, m, beta):
         """Schroder A dbeta/dlambda"""
-        return m / (self.d * np.cos(beta)) * u.rad
+        return m / (self.d * np.cos(beta)) * u.rad  # rad per wavelength unit
 
 
 class SpectrographSetup:
@@ -77,7 +80,7 @@ class SpectrographSetup:
         self.grating = grating
         self.detector = detector
         self.focal_length = focal_length
-        self.pixel_scale = np.arctan(self.detector.pixel_size / self.focal_length)
+        self.pixel_scale = np.arctan(self.detector.pixel_size / self.focal_length)  # angle in rad
         self.beta_central_pixel = beta_central_pixel
         self.orders = np.arange(min_order, max_order + 1, dtype=int)
         self.nominal_pixels_per_res_elem = pixels_per_res_elem
@@ -87,6 +90,8 @@ class SpectrographSetup:
         # slit image at some fiducial wavelength and that the resolution element has some known width there
         # (and that the slit image is a gaussian)
         self.nondimensional_lsf_width = 1 / self.design_res
+        print(f"\nConfigured the spectrograph.\n\tNo. of pixels per resolution element: "
+              f"{self.nominal_pixels_per_res_elem}\n\tFocal length: {self.focal_length}")
 
     def pixel_for_beta(self, beta):
         """

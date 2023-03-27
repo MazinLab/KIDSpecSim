@@ -12,23 +12,23 @@ class MKIDDetector:
         self.design_R0 = R0
         self.pixel_indices = np.arange(self.n_pixels, dtype=int)
         self._R0s = None
+        print(f"\nConfigured the detector.\n\tNo. of pixels: {self.n_pixels}\n\tPixel size: {self.pixel_size}")
 
     def R0(self, pixel):
+        """Returning randomly assigned spectral resolution for given pixel around the given R0."""
         if self._R0s is None:
             self._R0s = np.random.uniform(.85, 1.15, size=self.n_pixels) * self.design_R0
         return self._R0s[pixel.astype(int)]
 
     def mkid_constant(self, pixel):
-        """ R0*l0 divide by wave to get effective R and """
+        """MKID constant for given pixel. R0*l0 divided by wavelength to get effective R."""
         return self.R0(pixel) * self.waveR0
 
     def mkid_resolution_width(self, wave, pixel):
-        """ Returns the wavelength width of the mkid at wave, pixel
-        last axis should be npixel
-        """
+        """ Returns the wavelength width of the MKID at given wavelength and pixel.
+        Last axis should be n_pixel."""
         rc = self.mkid_constant(pixel)
         try:
-
             if wave.shape != rc.shape:
                 if wave.ndim == rc.ndim:
                     raise ValueError('Arrays of the same dimensions much have matching shapes')
@@ -40,13 +40,13 @@ class MKIDDetector:
         return wave ** 2 / rc  # (nord, npixel) actual mkid sigma at each pixel/order center
 
     def observe(self, arrival_times, arrival_wavelengths, resid_map=None):
-
+        """Simulated observation sequence for photons."""
         from mkidcore.binfile.mkidbin import PhotonNumpyType
-
+        print("\nBeginning detector observation sequence.")
         pixel_count = np.array([x.size for x in arrival_times])
         total_photons = pixel_count.sum()
 
-        print(f'Simulated dataset may take up to {total_photons * 16 / 1024 ** 3:.2} GB of RAM')
+        print(f'\tWARNING: Simulated dataset may take up to {total_photons * 16 / 1024 ** 3:.2} GB of RAM.')
 
         merge_time_window_s = 1e-6 * u.s
         MIN_TRIGGER_ENERGY = 1 / (1.5 * u.um)
@@ -62,7 +62,11 @@ class MKIDDetector:
         observed = 0
         total_merged = 0
         total_missed = []
-        # Compute photon arrival times and wavelengths for each photon
+
+        print(f"\tComputing detected arrival times and wavelengths for individual photons."
+              f"\n\tMinimum trigger energy: {MIN_TRIGGER_ENERGY:.3e}"
+              f"\n\tPhoton merge time: {merge_time_window_s:.0e}\n\tSaturation wavelength: {SATURATION_WAVELENGTH_NM}"
+              f"\n\tDeadtime: {DEADTIME}")
         for pixel, n in enumerate(pixel_count):
             if not n:
                 continue
@@ -107,9 +111,9 @@ class MKIDDetector:
             # Add photons to the pot
             sl = slice(observed, observed + a_times.size)
             photons.wavelength[sl] = measured_wavelengths
-            photons.time[sl] = (a_times * 1e6)  # in microseconds
+            photons.time[sl] = a_times * 1e6  # in microseconds
             photons.resID[sl] = resid_map[pixel]
             observed += a_times.size
-        print(f'A total of {total_merged} photons had their energies '
-              f'merged and {np.sum(total_missed)} were missed due to deadtime, {observed} observed.')
+        print(f'Completed detector observation sequence. {total_merged} photons had their energies merged, '
+              f'{np.sum(total_missed)} photons were missed due to deadtime, and {observed} photons were observed.')
         return photons, observed

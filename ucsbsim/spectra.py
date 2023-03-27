@@ -5,9 +5,8 @@ from astropy.io import fits
 
 from astropy import units as u
 from specutils import Spectrum1D
-from synphot import SpectralElement
+from synphot import SpectralElement, SourceSpectrum
 from synphot.models import Box1D
-from synphot import SourceSpectrum
 
 _atm = None
 
@@ -29,7 +28,7 @@ def _get_atm():
     x = x[::-1]
     y = y[::-1]
     trans = np.vstack((x[x[:, 0] < 1.111], y[y[:, 0] >= 1.111]))
-    atmosphere = trans[(trans[:, 0] > .8) & (trans[:, 0] < 1.4)]
+    atmosphere = trans[(trans[:, 0] > .5) & (trans[:, 0] < 1.4)]
     _atm = atmosphere[:, 0] * u.micron, atmosphere[:, 1] * u.dimensionless_unscaled
     return _atm
 
@@ -37,6 +36,7 @@ def _get_atm():
 def AtmosphericTransmission():
     w, t = _get_atm()
     spec = Spectrum1D(spectral_axis=w, flux=t)
+    print("\nObtained atmospheric transmission bandpass.")
     return SpectralElement.from_spectrum1d(spec)
 
 
@@ -44,12 +44,14 @@ def TelescopeTransmission(reflectivity=.75):
     w = np.linspace(300, 1500, 10000) * u.nm
     t = np.linspace(1, .95, 10000) * reflectivity * u.dimensionless_unscaled
     spec = Spectrum1D(spectral_axis=w, flux=t)
+    print(f"Obtained telescope bandpass with reflectivity {reflectivity}.")
     return SpectralElement.from_spectrum1d(spec)
 
 
 def FilterTransmission(min, max):
     wid = max - min
     center = (max + min) / 2
+    print(f"Obtained {min} to {max} filter bandpass.")
     return SpectralElement(Box1D, amplitude=1, x_0=center, width=wid)
 
 
@@ -65,4 +67,5 @@ def clip_spectrum(x, minw, maxw):
     """Clip out and return a chunk of the specutils.SourceSpectrum"""
     mask = (x.waveset >= minw) & (x.waveset <= maxw)
     w = x.waveset[mask]
+    print(f"Clipped spectrum from {minw} to {maxw}.")
     return SourceSpectrum.from_spectrum1d(Spectrum1D(spectral_axis=w, flux=x(w)))
