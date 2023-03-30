@@ -13,26 +13,28 @@ from detector import MKIDDetector
 from engine import Engine
 
 """
-BEFORE RUNNING THIS MAIN.PY SCRIPT,
+***BEFORE RUNNING THIS MAIN.PY SCRIPT***
 
-CHOOSE THE TYPE OF SPECTRA TO SIMULATE:
-'phoenix' -     Phoenix model spectrum of a 4300 K star with 0.
-'blackbody' -   Blackbody model spectrum of a 4300 K star with R_sun and 1kpc distance
+*CHOOSE THE TYPE OF SPECTRA TO SIMULATE:
+'phoenix' -     Phoenix model spectrum of a 4300 K star with 0 (default).
+'blackbody' -   Blackbody model spectrum of a 4300 K star with R_sun at 1kpc.
 'delta' -       Narrow-width delta-like spectrum at the central wavelength 600 nm.
 
-CHOOSE TO DISPLAY INTERMEDIATE PLOTS OR NOT.
-CHOOSE TO CONDUCT A FULL OR SIMPLIFIED MKID CONVOLUTION.
+*CHOOSE TO DISPLAY INTERMEDIATE PLOTS (SLOWER) OR NOT (DEFAULT).
+*CHOOSE TO CONDUCT A FULL MKID CONVOLUTION (SLOWER, DEFAULT) OR NOT.
+*CHOOSE MAX # OF PHOTONS PER PIXEL (LARGER IS SLOWER, 1000 TAKES ~MINS).
 """
 type_of_spectra = 'phoenix'
 plot_int = True
 full_convolution = True
+pixel_lim = 200
+exptime = 20 * u.s
 
 tic = time.time()
 print("***Beginning the MKID Spectrometer spectrum simulation.***")
 
 # TODO move some of this into grating
 u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # photon flux per wavelength
-exptime = 1 * u.s
 # c_beta = .1  # cos(beta)/cos(beta_center) at the end of m0
 npix = 2048
 R0 = 15
@@ -221,9 +223,9 @@ for i in range(5):  # broadening previous dictionary of variable-length arrays
 if plot_int:
     print("\nPlotting optically-broadened spectrum...")
     plt.grid()
-    for i in range(5):
+    for i in range(4):
         plt.plot(checker[f'Order {i + 5} Wavelength'], checker[f'Order {i + 5} Fluxden'], 'k')
-    plt.plot(checker[f'Order {i + 5} Wavelength'], checker[f'Order {i + 5} Fluxden'], 'k',
+    plt.plot(checker[f'Order 9 Wavelength'], checker[f'Order 9 Fluxden'], 'k',
              label="Input (Blazed)")
     for i in range(5):
         plt.plot(checker[f'Order {i + 5} Wavelength'], broad_checker[f'Order {i + 5} Fluxden'],
@@ -235,7 +237,26 @@ if plot_int:
     plt.legend()
     plt.tight_layout()
     plt.show()
+
+    blaze_interp = []
+    for i in range(5):
+        blaze_interp.append(interp.interp1d(inbound.waveset.to(u.nm),blaze_efficiencies[i,:],fill_value=0, bounds_error=False,
+                                            copy=False)(checker[f'Order {i + 5} Wavelength']))
     plt.grid()
+    for i in range(4):
+        plt.plot(checker[f'Order {i + 5} Wavelength'], checker[f'Order {i + 5} Fluxden']/blaze_interp[i], 'k')
+    plt.plot(checker[f'Order 9 Wavelength'], checker[f'Order 9 Fluxden']/blaze_interp[4], 'k',
+             label="Input")
+    for i in range(5):
+        plt.plot(checker[f'Order {i + 5} Wavelength'], broad_checker[f'Order {i + 5} Fluxden']/blaze_interp[i],
+                 label=f"Order {i + 5}")
+    plt.title("Optically-broadened Spectrum (divided out blaze)")
+    plt.xlabel("Wavelength (nm)")
+    plt.ylabel("Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
+    plt.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
     print("Shown.")
 
 if full_convolution:
@@ -314,7 +335,7 @@ if plot_int:
     plt.show()
     print("Shown.")
 
-t_photons, l_photons = engine.draw_photons(result_wave, result, limit_to=20000, plot_int=plot_int)
+t_photons, l_photons = engine.draw_photons(result_wave, result, exptime=exptime, limit_to=pixel_lim, plot_int=plot_int)
 
 if plot_int:
     print("\nPlotting drawn photon list by rough histogram...")
@@ -370,11 +391,10 @@ if plot_int:
         final[:, j], bin_edges = np.histogram(final_list[j], bins=hist_bins[:, j], density=False)
     plt.grid()
     for i in range(4):
-        plt.plot(lambda_pixel[i, :], final[i, :], 'orange')
-    plt.plot(lambda_pixel[4, :], final[4, :], 'orange', label='Output')
-    for i in range(4):
         plt.plot(lambda_pixel[i, :], result_raw[i, :], 'blue')
     plt.plot(lambda_pixel[4, :], result_raw[4, :], 'blue', label='Input')
+    for i in range(5):
+        plt.plot(lambda_pixel[i, :], final[i, :], '.', label=f'Order {9-i}')
     plt.title("Input and Observed Spectra")
     plt.ylabel("Total Photons")
     plt.xlabel("Wavelength (nm)")
@@ -392,18 +412,19 @@ if plot_int:
     final_sumd = np.sum(final_interp, axis=0)
     result_sumd = np.sum(result_interp, axis=0)
 
+    with open('convolved_blaze.csv') as f:
+        conv_blaze = np.loadtxt(f, delimiter=",")[::-1,:]
     blaze_interp = np.empty([5, 10000])  # interpolating blaze efficiencies to divide out of spectrum
     for i in range(5):
-        blaze_interp[i] = interp.interp1d(inbound.waveset[order_mask[i]].to(u.nm).value, blaze_efficiencies[i, order_mask[i]],
+        blaze_interp[i] = interp.interp1d(lambda_pixel[i,:], conv_blaze[i,:],
                                           fill_value=0, bounds_error=False, copy=False)(wave)
     blaze_sumd = np.sum(blaze_interp, axis=0)
     final_sumd /= blaze_sumd
     result_sumd /= blaze_sumd
 
     plt.grid()
+    plt.plot(wave, result_sumd, 'k', label='Input')
     plt.plot(wave, final_sumd, label='Output')
-    plt.plot(wave, result_sumd, label='Input')
-    #plt.ylim([0, 9000])  # division by very small # on order 9 causing issues, limit flux to view data better
     plt.title("Input and Observed Spectra (Divided Out Blaze)")
     plt.ylabel("Total Photons")
     plt.xlabel("Wavelength (nm)")
@@ -415,8 +436,10 @@ if plot_int:
 # TODO this will need work as the pipeline will probably default to MEC HDF headers
 from mkidpipeline.steps import buildhdf
 
-buildhdf.buildfromarray(photons[:observed], user_h5file=f'./spec_{type_of_spectra}.h5')
+buildhdf.buildfromarray(photons[:observed], user_h5file=f'./spec_{type_of_spectra}_{pixel_lim}ppp.h5')
 # at this point we are simulating the pipeline and have gone past the "wavecal" part. Next is >to spectrum.
 print("\nCompiled data to h5 file.")
 toc = time.time()
 print(f"\n***Completed MKID Spectrometer spectrum simulation in {round((toc - tic) / 60, 2)} minutes.***")
+
+#print(f"\n***Beginning spectral order sorting via Gaussian Mixture Models.***")
