@@ -21,13 +21,16 @@ from engine import Engine
 'delta' -       Narrow-width delta-like spectrum at the central wavelength 600 nm.
 
 *CHOOSE TO DISPLAY INTERMEDIATE PLOTS (SLOWER) OR NOT (DEFAULT).
+*CHOOSE TO GENERATE RANDOM MKID R0s OR RETRIEVE FROM FILE (MUST GENERATE FILE 1ST).
 *CHOOSE TO CONDUCT A FULL MKID CONVOLUTION (SLOWER, DEFAULT) OR NOT.
 *CHOOSE MAX # OF PHOTONS PER PIXEL (LARGER IS SLOWER, 1000 TAKES ~MINS).
+*CHOOSE EXPOSURE TIME (LONGER RESULTS IN FEWER MERGED PHOTONS).
 """
-type_of_spectra = 'phoenix'
-plot_int = True
+type_of_spectra = 'blackbody'
+plot_int = False
+generate_R0 = True
 full_convolution = True
-pixel_lim = 200
+pixel_lim = 10000
 exptime = 20 * u.s
 
 tic = time.time()
@@ -80,14 +83,12 @@ else:
     print(f"\tIncident angle: {incident_angle:.3e}"
           f"\n\tAngle of central pixel: {beta_central_pixel:.3e}")
 
-detector = MKIDDetector(npix, pixel_size, R0, l0)
+detector = MKIDDetector(npix, pixel_size, R0, l0, generate_R0=generate_R0)
 grating = GratingSetup(incident_angle, blaze_angle, groove_length)
 spectrograph = SpectrographSetup(m0, m_max, l0, pixels_per_res_elem, focal_length, beta_central_pixel,
                                  grating, detector)
 
-bandpasses = [AtmosphericTransmission(),
-              TelescopeTransmission(reflectivity=.9),
-              FilterTransmission(minwave, maxwave)]
+bandpasses = [AtmosphericTransmission(), TelescopeTransmission(reflectivity=.9), FilterTransmission(minwave, maxwave)]
 
 if type_of_spectra == 'phoenix':
     spectra = [PhoenixModel(4300, 0, 4.8)]
@@ -120,7 +121,7 @@ elif type_of_spectra == 'delta':
     print(f"\nObtained 0.01 photlam narrow width spectrum at 600 nm "
           f"that is 10 nm wide with 0 photlam elsewhere.")
 else:
-    pass
+    raise ValueError("Spectra must be 'phoenix,' 'blackbody,' or 'delta.'")
 
 if plot_int:
     print("\nPlotting original spectrum...")

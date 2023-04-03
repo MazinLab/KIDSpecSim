@@ -4,7 +4,7 @@ from filterphot import mask_deadtime
 
 
 class MKIDDetector:
-    def __init__(self, n, pixel_size, R0, wave_R0):
+    def __init__(self, n, pixel_size, R0, wave_R0, generate_R0=False):
         self.n_pixels = n
         self.pixel_size = pixel_size
         self.length = self.n_pixels * pixel_size
@@ -12,12 +12,17 @@ class MKIDDetector:
         self.design_R0 = R0
         self.pixel_indices = np.arange(self.n_pixels, dtype=int)
         self._R0s = None
+        self.generate_R0 = generate_R0
         print(f"\nConfigured the detector.\n\tNo. of pixels: {self.n_pixels}\n\tPixel size: {self.pixel_size}")
 
     def R0(self, pixel):
-        """Returning randomly assigned spectral resolution for given pixel around the given R0."""
-        if self._R0s is None:
+        """Returns randomly assigned spectral resolution for given pixel around the given R0."""
+        if self.generate_R0:
             self._R0s = np.random.uniform(.85, 1.15, size=self.n_pixels) * self.design_R0
+            np.savetxt('generated_R0s.csv', self._R0s, delimiter=',')
+        else:
+            with open('generated_R0s.csv') as f:
+                self._R0s = np.loadtxt(f, delimiter=",")
         return self._R0s[pixel.astype(int)]
 
     def mkid_constant(self, pixel):
