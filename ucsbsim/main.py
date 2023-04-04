@@ -30,8 +30,8 @@ type_of_spectra = 'blackbody'
 plot_int = False
 generate_R0 = True
 full_convolution = True
-pixel_lim = 10000
-exptime = 20 * u.s
+pixel_lim = 50000
+exptime = 200 * u.s
 
 tic = time.time()
 print("***Beginning the MKID Spectrometer spectrum simulation.***")
@@ -273,6 +273,29 @@ else:
 
 pixel_samples_frac, pixel_max_npoints, pixel_rescale, dl_pixel, lambda_pixel, dl_mkid_max, sampling = sampling_data
 pix_leftedge = spectrograph.pixel_to_wavelength(detector.pixel_indices, spectrograph.orders[:, None])
+
+if generate_R0:  # must save calibration spectrum to file before running through detector sim
+    norms = np.empty([5, 2048])  # obtaining and dividing by the normalization constants
+    for i in range(5):
+        for j in range(2048):
+            x = np.linspace(
+                -3 * pixel_rescale[i, j].to(u.nm).value * dl_mkid_max.to(u.nm).si.value / sampling.to(
+                    u.nm).si.value / 2.355,
+                3 * pixel_rescale[i, j].to(u.nm).value * dl_mkid_max.to(u.nm).si.value / sampling.to(
+                    u.nm).si.value / 2.355,
+                len(mkid_kernel))
+            dx = x[1] - x[0]
+            norms[i, j] = np.sum(mkid_kernel) * dx / 0.9973
+    blaze_result = result / norms
+
+    # interpolate the result so they can be added
+    blaze_sumd = np.empty([5, 2048])
+    for i in range(5):
+        dx = result_wave[1, i, :].to(u.nm).value - result_wave[0, i, :].to(u.nm).value
+        blaze_sumd[i, :] = np.sum(blaze_result[:, i, :].value, axis=0) * dx
+        blaze_sumd[i, :] /= np.max(blaze_sumd[i, :])
+    np.savetxt('blaze_sumd.csv', blaze_sumd, delimiter=',')
+    np.savetxt('lambda_pixel.csv', lambda_pixel.to(u.nm).value, delimiter=',')
 
 if plot_int:
     print("\nPlotting post-convolved spectrum by rough integration...")
