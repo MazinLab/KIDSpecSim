@@ -21,14 +21,14 @@ from engine import Engine
 'delta' -       Narrow-width delta-like spectrum at the central wavelength 600 nm.
 
 *CHOOSE TO DISPLAY INTERMEDIATE PLOTS (SLOWER) OR NOT (DEFAULT).
-*CHOOSE TO GENERATE RANDOM MKID R0s OR RETRIEVE FROM FILE (MUST GENERATE FILE 1ST).
+*CHOOSE TO GENERATE RANDOM MKID R0s FOR CALIBRATION OR RETRIEVE FROM FILE (MUST GENERATE FILE 1ST).
 *CHOOSE TO CONDUCT A FULL MKID CONVOLUTION (SLOWER, DEFAULT) OR NOT.
 *CHOOSE MAX # OF PHOTONS PER PIXEL (LARGER IS SLOWER, 1000 TAKES ~MINS).
 *CHOOSE EXPOSURE TIME (LONGER RESULTS IN FEWER MERGED PHOTONS).
 """
 type_of_spectra = 'blackbody'
 plot_int = False
-generate_R0 = True
+generate_R0 = False
 full_convolution = True
 pixel_lim = 50000
 exptime = 200 * u.s
@@ -149,13 +149,19 @@ if plot_int:
 engine = Engine(spectrograph)
 
 # Pre grating throughput effects, operates on wavelength grid of inbound flux
-for i, s in enumerate(spectra):
-    for b in bandpasses:
-        s *= b
-    spectra[i] = s
-print("\nApplied atmospheric, telescopic, and filter bandpasses to spectrum.")
+if not generate_R0:  # don't apply bandpasses to calibration spectra
+    for i, s in enumerate(spectra):
+        for b in bandpasses:
+            s *= b
+        spectra[i] = s
+    print("\nApplied atmospheric, telescopic, and filter bandpasses to spectrum.")
+else:
+    pass
 
-inbound = clip_spectrum(spectra[0], minwave, maxwave)
+if generate_R0:  # ensure blaze interpolation isnt cut off
+    inbound = clip_spectrum(spectra[0], 340 * u.nm, maxwave)
+else:
+    inbound = clip_spectrum(spectra[0], minwave, maxwave)
 
 if plot_int:
     print("\nPlotting post-atmospheric spectrum...")
@@ -305,7 +311,7 @@ if plot_int:
             if pix_leftedge[j, i].to(u.nm).value > 400:
                 split_indices[j, i] = np.where(np.abs(
                     checker[f'Order {j + 5} Wavelength'].to(u.nm).value - pix_leftedge[j, i].to(
-                        u.nm).value) < 5e-4)[0][0]
+                        u.nm).value) < 1e-3)[0][0]
             else:
                 pass
 
