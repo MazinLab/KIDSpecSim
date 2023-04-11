@@ -1,6 +1,6 @@
 Run setup.py to compile C code.
 
-Run main.py with blackbody spectrum and generate_R0=True to create calibration data.
+Run main.py with blackbody spectrum and gen_cal=True to create calibration data.
 
 Run MSF.py to fit for Gaussian parameters and generate covariance matrices.
 
