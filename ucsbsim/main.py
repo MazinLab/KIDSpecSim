@@ -15,20 +15,21 @@ from engine import Engine
 """
 ***BEFORE RUNNING THIS MAIN.PY SCRIPT***
 
+*CHOOSE WHETHER TO GENERATE FAKE CALIBRATION DATA OR NOT (DEFAULT).
+
 *CHOOSE THE TYPE OF SPECTRA TO SIMULATE:
 'phoenix' -     Phoenix model spectrum of a 4300 K star with 0 (default).
-'blackbody' -   Blackbody model spectrum of a 4300 K star with R_sun at 1kpc.
+'blackbody' -   Blackbody model spectrum of a 4300 K star with R_sun at 1kpc (choose for calibration data).
 'delta' -       Narrow-width delta-like spectrum at the central wavelength 600 nm.
 
 *CHOOSE TO DISPLAY INTERMEDIATE PLOTS (SLOWER) OR NOT (DEFAULT).
-*CHOOSE TO GENERATE RANDOM MKID R0s FOR CALIBRATION OR RETRIEVE FROM FILE (MUST GENERATE FILE 1ST).
 *CHOOSE TO CONDUCT A FULL MKID CONVOLUTION (SLOWER, DEFAULT) OR NOT.
 *CHOOSE MAX # OF PHOTONS PER PIXEL (LARGER IS SLOWER, 1000 TAKES ~MINS).
 *CHOOSE EXPOSURE TIME (LONGER RESULTS IN FEWER MERGED PHOTONS).
 """
+gen_cal = False
 type_of_spectra = 'blackbody'
 plot_int = False
-generate_R0 = False
 full_convolution = True
 pixel_lim = 50000
 exptime = 200 * u.s
@@ -83,7 +84,7 @@ else:
     print(f"\tIncident angle: {incident_angle:.3e}"
           f"\n\tAngle of central pixel: {beta_central_pixel:.3e}")
 
-detector = MKIDDetector(npix, pixel_size, R0, l0, generate_R0=generate_R0)
+detector = MKIDDetector(npix, pixel_size, R0, l0, generate_R0=gen_cal)
 grating = GratingSetup(incident_angle, blaze_angle, groove_length)
 spectrograph = SpectrographSetup(m0, m_max, l0, pixels_per_res_elem, focal_length, beta_central_pixel,
                                  grating, detector)
@@ -149,17 +150,23 @@ if plot_int:
 engine = Engine(spectrograph)
 
 # Pre grating throughput effects, operates on wavelength grid of inbound flux
-if not generate_R0:  # don't apply bandpasses to calibration spectra
+if not gen_cal:  # don't apply bandpasses to calibration spectra
     for i, s in enumerate(spectra):
         for b in bandpasses:
             s *= b
         spectra[i] = s
     print("\nApplied atmospheric, telescopic, and filter bandpasses to spectrum.")
 else:
-    pass
+    from specutils import Spectrum1D
+    from synphot import SpectralElement
+    # finer grid spacing
+    w = np.linspace(300, 1000, 1400000) * u.nm
+    t = np.ones(1400000) * u.dimensionless_unscaled
+    ones = Spectrum1D(spectral_axis=w, flux=t)
+    spectra[0] *= SpectralElement.from_spectrum1d(ones)
 
-if generate_R0:  # ensure blaze interpolation isnt cut off
-    inbound = clip_spectrum(spectra[0], 340 * u.nm, maxwave)
+if gen_cal:  # ensure blaze interpolation isnt cut off
+    inbound = clip_spectrum(spectra[0], 340 * u.nm, 900*u.nm)
 else:
     inbound = clip_spectrum(spectra[0], minwave, maxwave)
 
@@ -185,10 +192,11 @@ order_mask = spectrograph.order_mask(inbound.waveset.to(u.nm), fsr_edge=False)
 blazed_spectrum = blaze_efficiencies * inbound(inbound.waveset)
 print(f"Multiplied blaze efficiencies with spectrum.")
 
-checker = {}  # holds order-masked spectrum in dictionary for variable array size
+checker = []  # holds order-masked spectrum in list for variable size
+check_wave = []
 for i in range(5):
-    checker[f'Order {i + 5} Fluxden'] = blazed_spectrum[i, order_mask[i]]
-    checker[f'Order {i + 5} Wavelength'] = inbound.waveset[order_mask[i]].to(u.nm)
+    checker.append(blazed_spectrum[i, order_mask[i]])
+    check_wave.append(inbound.waveset[order_mask[i]].to(u.nm))
 
 if plot_int:
     print("\nPlotting transmission rate for each order...")
@@ -208,8 +216,7 @@ if plot_int:
     plt.plot(inbound.waveset.to('nm'), inbound(inbound.waveset), label="Post-Atmo")
     plt.xlim([400, 800])
     for i in range(5):
-        plt.plot(checker[f'Order {i + 5} Wavelength'], checker[f'Order {i + 5} Fluxden'],
-                 label=f'Order {i + 5}')
+        plt.plot(check_wave[i], checker[i], label=f'Order {i + 5}')
     plt.ylabel("Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
     plt.xlabel("Wavelength (nm)")
     plt.title("Blazed Spectrum")
@@ -222,21 +229,18 @@ if plot_int:
 broadened_spectrum = engine.optically_broaden(inbound.waveset, blazed_spectrum)
 print("\nOptically broadened the spectrum.")
 
-broad_checker = {}
-for i in range(5):  # broadening previous dictionary of variable-length arrays
-    broad_checker[f'Order {i + 5} Fluxden'] = engine.optically_broaden(checker[f'Order {i + 5} Wavelength'],
-                                                                       checker[f'Order {i + 5} Fluxden'], axis=0)
+broad_checker = []
+for i in range(5):  # broadening previous list of variable-length arrays
+    broad_checker.append(engine.optically_broaden(check_wave[i], checker[i], axis=0))
 
 if plot_int:
     print("\nPlotting optically-broadened spectrum...")
     plt.grid()
     for i in range(4):
-        plt.plot(checker[f'Order {i + 5} Wavelength'], checker[f'Order {i + 5} Fluxden'], 'k')
-    plt.plot(checker[f'Order 9 Wavelength'], checker[f'Order 9 Fluxden'], 'k',
-             label="Input (Blazed)")
+        plt.plot(check_wave[i], checker[i], 'k')
+    plt.plot(check_wave[4], checker[4], 'k', label="Input (Blazed)")
     for i in range(5):
-        plt.plot(checker[f'Order {i + 5} Wavelength'], broad_checker[f'Order {i + 5} Fluxden'],
-                 label=f"Order {i + 5}")
+        plt.plot(check_wave[i], broad_checker[i], label=f"Order {i + 5}")
     plt.title("Optically-broadened Spectrum")
     plt.xlabel("Wavelength (nm)")
     plt.ylabel("Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
@@ -244,27 +248,6 @@ if plot_int:
     plt.legend()
     plt.tight_layout()
     plt.show()
-
-    blaze_interp = []
-    for i in range(5):
-        blaze_interp.append(interp.interp1d(inbound.waveset.to(u.nm),blaze_efficiencies[i,:],fill_value=0, bounds_error=False,
-                                            copy=False)(checker[f'Order {i + 5} Wavelength']))
-    plt.grid()
-    for i in range(4):
-        plt.plot(checker[f'Order {i + 5} Wavelength'], checker[f'Order {i + 5} Fluxden']/blaze_interp[i], 'k')
-    plt.plot(checker[f'Order 9 Wavelength'], checker[f'Order 9 Fluxden']/blaze_interp[4], 'k',
-             label="Input")
-    for i in range(5):
-        plt.plot(checker[f'Order {i + 5} Wavelength'], broad_checker[f'Order {i + 5} Fluxden']/blaze_interp[i],
-                 label=f"Order {i + 5}")
-    plt.title("Optically-broadened Spectrum (divided out blaze)")
-    plt.xlabel("Wavelength (nm)")
-    plt.ylabel("Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
-    plt.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-    print("Shown.")
 
 if full_convolution:
     print("\nConducting full convolution with MKID response.")
@@ -280,7 +263,7 @@ else:
 pixel_samples_frac, pixel_max_npoints, pixel_rescale, dl_pixel, lambda_pixel, dl_mkid_max, sampling = sampling_data
 pix_leftedge = spectrograph.pixel_to_wavelength(detector.pixel_indices, spectrograph.orders[:, None])
 
-if generate_R0:  # must save calibration spectrum to file before running through detector sim
+if gen_cal:  # must save calibration spectrum to file before running through detector sim
     norms = np.empty([5, 2048])  # obtaining and dividing by the normalization constants
     for i in range(5):
         for j in range(2048):
@@ -307,12 +290,13 @@ if plot_int:
     split_indices = np.empty([5, 2048])  # splitting pixel flux by the left edges of the expected pixel wavelength
     for i in range(2048):
         for j in range(5):
-            if pix_leftedge[j, i].to(u.nm).value > 400:
-                split_indices[j, i] = np.where(np.abs(
-                    checker[f'Order {j + 5} Wavelength'].to(u.nm).value - pix_leftedge[j, i].to(
-                        u.nm).value) < 1e-3)[0][0]
+            if not gen_cal:
+                if pix_leftedge[j, i].to(u.nm).value > 400:
+                    split_indices[j, i] = np.where(np.abs(
+                        check_wave[j].to(u.nm).value - pix_leftedge[j, i].to(u.nm).value) < 5e-4)[0][0]
             else:
-                pass
+                split_indices[j, i] = np.where(np.abs(
+                    check_wave[j].to(u.nm).value - pix_leftedge[j, i].to(u.nm).value) < 5e-4)[0][0]
 
     fluxden = np.empty([5, 2048])  # regaining flux density by summing flux by previous indices and multiplying by dx
     for j in range(5):
@@ -320,8 +304,8 @@ if plot_int:
             idx_left = int(split_indices[j, i])
             idx_right = int(split_indices[j, i + 1])
             fluxden[j, i] = scipy.integrate.trapz(
-                broad_checker[f'Order {j + 5} Fluxden'][idx_left:idx_right].to(u.photlam).value,
-                x=checker[f'Order {j + 5} Wavelength'][idx_left:idx_right].to(u.nm).value)
+                broad_checker[j][idx_left:idx_right].to(u.photlam).value,
+                x=check_wave[j][idx_left:idx_right].to(u.nm).value)
             fluxden[j, 2047] = fluxden[j, 2046]
 
     norms = np.empty([5, 2048])  # obtaining and dividing by the normalization constants
