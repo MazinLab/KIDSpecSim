@@ -294,12 +294,11 @@ if generate_R0:  # must save calibration spectrum to file before running through
             norms[i, j] = np.sum(mkid_kernel) * dx / 0.9973
     blaze_result = result / norms
 
-    # interpolate the result so they can be added
     blaze_sumd = np.empty([5, 2048])
     for i in range(5):
         dx = result_wave[1, i, :].to(u.nm).value - result_wave[0, i, :].to(u.nm).value
         blaze_sumd[i, :] = np.sum(blaze_result[:, i, :].value, axis=0) * dx
-        blaze_sumd[i, :] /= np.max(blaze_sumd[i, :])
+        blaze_sumd[i, :] /= np.max(blaze_sumd)
     np.savetxt('blaze_sumd.csv', blaze_sumd, delimiter=',')
     np.savetxt('lambda_pixel.csv', lambda_pixel.to(u.nm).value, delimiter=',')
 
