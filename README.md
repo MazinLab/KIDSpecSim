@@ -1,7 +1,9 @@
 Run setup.py to compile C code.
 
-Run main.py with desired initial parameters.
+Run main.py with blackbody spectrum and generate_R0=True to create calibration data.
 
-Run ordersort_calibration.py to generate fake calibration data and new blaze efficiencies.
+Run MSF.py to fit for Gaussian parameters and generate covariance matrices.
 
-Run ordersort.py to turn photon table into spectrum.
+Run main.py with desired initial parameters for observation.
+
+Use cal_bins.csv (bin edges) and cov_matrix#.csv from MSF.py to bin and plot resulting photon table.
