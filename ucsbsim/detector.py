@@ -82,17 +82,20 @@ class MKIDDetector:
             a_times = a_times[arrival_order]
             energies = 1 / arrival_wavelengths[pixel].to(u.um)[arrival_order]
 
-            # merge photon energies within 1us
-            to_merge = (np.diff(a_times) < merge_time_window_s).nonzero()[0]
-            if to_merge.size:
-                cluster_starts = to_merge[np.concatenate(([0], (np.diff(to_merge) > 1).nonzero()[0] + 1))]
-                cluser_last = to_merge[(np.diff(to_merge) > 1).nonzero()[0]] + 1
-                cluser_last = np.append(cluser_last, to_merge[-1] + 1)  # inclusive
-                for start, stop in zip(cluster_starts, cluser_last):
-                    merge = slice(start + 1, stop + 1)
-                    energies[start] += energies[merge].sum()
-                    energies[merge] = np.nan
-                    total_merged += energies[merge].size
+            if not self.generate_R0:
+                # merge photon energies within 1us
+                to_merge = (np.diff(a_times) < merge_time_window_s).nonzero()[0]
+                if to_merge.size:
+                    cluster_starts = to_merge[np.concatenate(([0], (np.diff(to_merge) > 1).nonzero()[0] + 1))]
+                    cluser_last = to_merge[(np.diff(to_merge) > 1).nonzero()[0]] + 1
+                    cluser_last = np.append(cluser_last, to_merge[-1] + 1)  # inclusive
+                    for start, stop in zip(cluster_starts, cluser_last):
+                        merge = slice(start + 1, stop + 1)
+                        energies[start] += energies[merge].sum()
+                        energies[merge] = np.nan
+                        total_merged += energies[merge].size
+            else:
+                total_merged = 0
 
             # TODO for LANL we determined the energies via the R AFTER coincidence
             #  binning. That isn't possible with his approach (as far as I can tell)

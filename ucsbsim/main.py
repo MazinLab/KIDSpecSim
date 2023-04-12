@@ -403,47 +403,16 @@ if plot_int:
     for j in range(2048):  # sorting by histogram bins as before
         final[:, j], bin_edges = np.histogram(final_list[j], bins=hist_bins[:, j], density=False)
     plt.grid()
-    for i in range(4):
-        plt.plot(lambda_pixel[i, :], result_raw[i, :], 'blue')
-    plt.plot(lambda_pixel[4, :], result_raw[4, :], 'blue', label='Input')
     for i in range(5):
-        plt.plot(lambda_pixel[i, :], final[i, :], '.', label=f'Order {9-i}')
+        plt.plot(lambda_pixel[i, :], final[i, :], label=f'Order {9-i}')
+    for i in range(4):
+        plt.plot(lambda_pixel[i, :], result_raw[i, :], 'k', linewidth=1)
+    plt.plot(lambda_pixel[4, :], result_raw[4, :], 'k', linewidth=1, label='Input')
     plt.title("Input and Observed Spectra")
     plt.ylabel("Total Photons")
     plt.xlabel("Wavelength (nm)")
     plt.legend()
     plt.show()
-
-    final_interp = np.empty([5, 10000])  # interpolating both to sum to complete spectrum
-    result_interp = np.empty([5, 10000])
-    wave = np.linspace(350, 800, 10000)
-    for i in range(5):
-        final_interp[i, :] = interp.interp1d(lambda_pixel[i, :], final[i, :],
-                                             fill_value=0, bounds_error=False, copy=False)(wave)
-        result_interp[i, :] = interp.interp1d(lambda_pixel[i, :], result_raw[i, :],
-                                              fill_value=0, bounds_error=False, copy=False)(wave)
-    final_sumd = np.sum(final_interp, axis=0)
-    result_sumd = np.sum(result_interp, axis=0)
-
-    with open('convolved_blaze.csv') as f:
-        conv_blaze = np.loadtxt(f, delimiter=",")[::-1,:]
-    blaze_interp = np.empty([5, 10000])  # interpolating blaze efficiencies to divide out of spectrum
-    for i in range(5):
-        blaze_interp[i] = interp.interp1d(lambda_pixel[i,:], conv_blaze[i,:],
-                                          fill_value=0, bounds_error=False, copy=False)(wave)
-    blaze_sumd = np.sum(blaze_interp, axis=0)
-    final_sumd /= blaze_sumd
-    result_sumd /= blaze_sumd
-
-    plt.grid()
-    plt.plot(wave, result_sumd, 'k', label='Input')
-    plt.plot(wave, final_sumd, label='Output')
-    plt.title("Input and Observed Spectra (Divided Out Blaze)")
-    plt.ylabel("Total Photons")
-    plt.xlabel("Wavelength (nm)")
-    plt.legend()
-    plt.show()
-    print("Shown.")
 
 # Dump to HDF5
 # TODO this will need work as the pipeline will probably default to MEC HDF headers

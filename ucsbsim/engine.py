@@ -301,8 +301,7 @@ class Engine:
         photlambda*dwave
         """
         # Now, compute the CDF from dNdE and set up an interpolating function
-        print("\nBeginning photon draw, accounting for exposure time and telescope area."
-              "\n\t Sorting the array by increasing wavelength is the longest step.")
+        print("\nBeginning photon draw, accounting for exposure time and telescope area.")
         cdf_shape = int(np.prod(result.shape[:2])), result.shape[-1]  # reshaped to 5 * photons, 2048 pix
         result_p = result.reshape(cdf_shape)
         wave_p = result_wave.reshape(cdf_shape)
