@@ -70,7 +70,8 @@ class MKIDDetector:
 
         print(f"\tComputing detected arrival times and wavelengths for individual photons."
               f"\n\tMinimum trigger energy: {MIN_TRIGGER_ENERGY:.3e}"
-              f"\n\tPhoton merge time: {merge_time_window_s:.0e}\n\tSaturation wavelength: {SATURATION_WAVELENGTH_NM}"
+              f"\n\tPhoton merge time: {merge_time_window_s:.0e}"
+              f"\n\tSaturation wavelength: {SATURATION_WAVELENGTH_NM}"
               f"\n\tDeadtime: {DEADTIME}")
         for pixel, n in enumerate(pixel_count):
             if not n:
@@ -82,7 +83,9 @@ class MKIDDetector:
             a_times = a_times[arrival_order]
             energies = 1 / arrival_wavelengths[pixel].to(u.um)[arrival_order]
 
-            if not self.generate_R0:
+            if self.generate_R0:
+                pass
+            else:
                 # merge photon energies within 1us
                 to_merge = (np.diff(a_times) < merge_time_window_s).nonzero()[0]
                 if to_merge.size:
@@ -94,8 +97,6 @@ class MKIDDetector:
                         energies[start] += energies[merge].sum()
                         energies[merge] = np.nan
                         total_merged += energies[merge].size
-            else:
-                total_merged = 0
 
             # TODO for LANL we determined the energies via the R AFTER coincidence
             #  binning. That isn't possible with his approach (as far as I can tell)

@@ -166,7 +166,7 @@ else:
     spectra[0] *= SpectralElement.from_spectrum1d(ones)
 
 if gen_cal:  # ensure blaze interpolation isnt cut off
-    inbound = clip_spectrum(spectra[0], 340 * u.nm, 900*u.nm)
+    inbound = clip_spectrum(spectra[0], 390 * u.nm, 900*u.nm)
 else:
     inbound = clip_spectrum(spectra[0], minwave, maxwave)
 
@@ -293,10 +293,11 @@ if plot_int:
             if not gen_cal:
                 if pix_leftedge[j, i].to(u.nm).value > 400:
                     split_indices[j, i] = np.where(np.abs(
-                        check_wave[j].to(u.nm).value - pix_leftedge[j, i].to(u.nm).value) < 5e-4)[0][0]
+                        check_wave[j].to(u.nm).value - pix_leftedge[j, i].to(u.nm).value) < 1e-3)[0][0]
             else:
-                split_indices[j, i] = np.where(np.abs(
-                    check_wave[j].to(u.nm).value - pix_leftedge[j, i].to(u.nm).value) < 5e-4)[0][0]
+                if pix_leftedge[j, i].to(u.nm).value > 390:
+                    split_indices[j, i] = np.where(np.abs(
+                        check_wave[j].to(u.nm).value - pix_leftedge[j, i].to(u.nm).value) < 1e-3)[0][0]
 
     fluxden = np.empty([5, 2048])  # regaining flux density by summing flux by previous indices and multiplying by dx
     for j in range(5):
@@ -418,10 +419,8 @@ if plot_int:
 # TODO this will need work as the pipeline will probably default to MEC HDF headers
 from mkidpipeline.steps import buildhdf
 
-buildhdf.buildfromarray(photons[:observed], user_h5file=f'./spec_{type_of_spectra}_{pixel_lim}ppp.h5')
+buildhdf.buildfromarray(photons[:observed], user_h5file=f'./{type_of_spectra}_{pixel_lim}_R0{R0}.h5')
 # at this point we are simulating the pipeline and have gone past the "wavecal" part. Next is >to spectrum.
 print("\nCompiled data to h5 file.")
 toc = time.time()
 print(f"\n***Completed MKID Spectrometer spectrum simulation in {round((toc - tic) / 60, 2)} minutes.***")
-
-#print(f"\n***Beginning spectral order sorting via Gaussian Mixture Models.***")
