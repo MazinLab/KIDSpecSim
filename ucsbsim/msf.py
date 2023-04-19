@@ -2,55 +2,73 @@ import numpy as np
 import scipy.interpolate as interp
 from scipy import optimize
 import scipy
-from scipy.constants import h, c, k
 import matplotlib.pyplot as plt
 from mkidpipeline import photontable as pt
-# from synphot import SourceSpectrum, SpectralElement
-# from synphot.models import BlackBodyNorm1D
+from synphot import SourceSpectrum, SpectralElement
+from synphot.models import BlackBodyNorm1D
 from specutils import Spectrum1D
 import astropy.units as u
 import fit
 
 """
 This script:
--Takes calibration file (generated from main.py) from a smooth blackbody and fits Gaussians to each pixel. These values
-are known as the MKID spread function (MSF).
--Separately generates the relative amplitudes of the blackbody function multiplied with the blaze function all
-convolved to go from fluxden to flux space. Divides this out of the Gaussian amplitude fit to make normalized spectrum.
+
+-Takes calibration file (see syntax below) and fits Gaussians to each pixel.
+-If using simulation-generated calibration file, separately generates the relative amplitudes of the blackbody function
+multiplied with the blaze function all convolved to go from fluxden to flux space.
+-If using IRL calibration file, convolves the theoretical shape of the calibration spectrum with MKID response.
+-Divides this convolved shape out of the Gaussian amplitude fit to make normalized spectrum. These normalized Gaussian
+fits are known as the MKID spread function (MSF).
+
 -Uses overlap points of the Gaussians to get bins for each order.
--Calculates relative overlap between fitted Gaussians and converts them into a fractional "covariance" matrix. This
-matrix details what fraction of each order Gaussian was grouped into another order Gaussian.
+
+-Calculates relative overlap between Gaussians and converts them into a fractional "covariance" matrix. This
+matrix details what fraction of each order Gaussian was grouped into another order Gaussian due to binning.
 -Saves blackbody-blaze amplitudes, order bins, and covariance to files.
 
-***BEFORE RUNNING THIS MSF.PY SCRIPT***
-*CHOOSE TO ENABLE 'CLICKTHROUGHS' FOR CHECKING PARAMETER FIT AT EACH PIXEL OR NOT (DEFAULT).
-*ENSURE PIXEL_LIM/R0 ARE EQUAL TO PRE-GENERATED CALIBRATION SPECTRUM FROM MAIN.PY.
+
+*********BEFORE RUNNING THIS msf.py SCRIPT*********
+
+*USE SIM-GENERATED CALIBRATION FILE FROM main.py (generated_cal=True):
+ ENSURE SPECTYPE/PIXEL_LIM/R0 ARE EQUAL TO SIM-GENERATED CALIBRATION SPECTRUM FROM MAIN.PY.
+
+*OR IMPORT IRL CALIBRATION FILE (generated_cal=False).
+ SUPPLY FILE NAME FOR CALIBRATION DATA FROM IRL OBSERVATION AND THEORETICAL SHAPE (BB, THORIUM, ETC.).
+
+*CHOOSE TO ENABLE 'CHECKFITS' FOR CHECKING PARAMETER FIT AT EACH PIXEL OR NOT (DEFAULT).
 """
-clickthrough = True
-pixel_lim = 50000
-R0 = 8
+generated_cal = True
+checkfits = True
+if generated_cal:
+    spec_type = 'blackbody'
+    pixel_lim = 50000
+    R0 = 8
+    table = f'{spec_type}_{pixel_lim}_R0{R0}.h5'
+else:
+    cal_file = 'write_filename_here.h5'
+    spec_type = 'supply_shape_here'  # as calibration sources are added, list will be expanded
+    with open(cal_file) as f:
+        table = np.loadtxt(f, delimiter=",")
+
 
 # import pixel central wavelengths
-with open(f'lambda_pixel.csv') as f:
+with open('lambda_pixel.csv') as f:
     lambda_pixel = np.loadtxt(f, delimiter=",")
 # randomized R0s that deviate slightly from theoretical
-with open(f'generated_R0s.csv') as f:
+with open('generated_R0s.csv') as f:
     R0s = np.loadtxt(f, delimiter=",")
+# opening the h5 file containing the photon table
+file = pt.Photontable(table)
+waves = file.query(column='wavelength')
+resID = file.query(column='resID')
 
 if __name__ == '__main__':
-    # analytic normalized blackbody equation in PHOTLAM, verified to match BlackbodyNorm1D used in main.py
-    u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # photon flux per wavelength
-    u.flam = u.erg / u.s / u.cm ** 2 / u.AA  # energy flux per wavelength
-    wave = np.linspace(100, 1000, 10000) * u.nm
-    B_lam = (2 * (h * u.J * u.s) * (c * u.m / u.s) ** 2 / wave ** 5 /
-             (np.exp((h * u.J / u.Hz) * (c * u.m / u.s) / wave / (k * u.J / u.K) / (4300 * u.K)) - 1)).to(u.flam)
-    # ^ blackbody equation in energy fluxden per steradian for 4300 K source
-    R_sun = 695700 * u.km
-    d = 1 * u.kpc
-    Omega = np.pi * R_sun ** 2 / d ** 2  # steradian calculation for source of size R_sun at distance of 1 kpc
-    norm_B = (B_lam * Omega).decompose().to(u.flam)  # multiplying out steradians
-    B_photlam = (wave / (h * u.J * u.s) / (c * u.m / u.s) * norm_B * u.ph).to(
-        u.photlam)  # energy to photon fluxden calc
+    # TODO pull all these from grating/spectrograph setup
+    bb = [SourceSpectrum(BlackBodyNorm1D, temperature=4300)]  # flux for star of 1 R_sun at distance of 1 kpc
+    wave = np.linspace(300, 1000, 10000) * u.nm
+    f = np.ones(10000) * u.dimensionless_unscaled
+    ones = Spectrum1D(spectral_axis=w, flux=f)
+    bb[0] *= SpectralElement.from_spectrum1d(ones)  # place spectrum on desired grid spacing
 
     # calculating the blaze equation with excess edges for calibration
     l0 = 800 * u.nm  # < v relevant spectrograph properties
@@ -69,7 +87,7 @@ if __name__ == '__main__':
     center_offset = pixel_size * (np.arange(npix, dtype=int) + 0.5 - npix / 2)
     new_beta = beta_central_pixel + np.arctan(center_offset / focal_length)
 
-    blaze_bb = np.zeros([5, 10000])
+    blaze_bb = []
     dl_pixel = np.zeros([5, 2048])
     for i in range(5):
         beta = np.arcsin((i + 5) * wave / d - np.sin(alpha))
@@ -83,9 +101,7 @@ if __name__ == '__main__':
         blaze_i = w * np.sinc(((i + 5) * rho * q4).value) ** 2  # omit np.pi as np.sinc includes it
         delta_angle = np.tan(beta - beta_central_pixel)
         x = focal_length * delta_angle / pixel_size + npix / 2
-        mask = (x >= -int(npix * (0.3 - i / 20))) & (x < int(npix * (1.35 - i / 20)))
-        blaze_bb[i, mask] = blaze_i[mask]  # applying mask that is slightly beyond edges of array
-        blaze_bb[i, :] *= B_photlam.value  # multiplying the blackbody through each order blaze
+        blaze_bb.append(interp.inter1d(wave,blaze_i*B_photlam.value,fill_value=0))
         dl_pixel[i, :] = pixel_scale / ((i + 5) / (d * np.cos(new_beta)) * u.rad)  # wavelength extent of each pixel
 
     # theoretical sigma of each pixel
@@ -99,11 +115,6 @@ if __name__ == '__main__':
     sigma_mkid = sigma_mkid[::-1, :].value
     dl_pixel = dl_pixel[::-1, :]
 
-    # opening the h5 file containing the photon table
-    file = pt.Photontable(f'blackbody_{pixel_lim}_R0{R0}.h5')
-    waves = file.query(column='wavelength')
-    resID = file.query(column='resID')
-
     colors = ['red', 'orange', 'green', 'blue', 'purple']
     cov = np.zeros([5, 5, 2048])
     photon_bins = np.zeros([6, 2048])
@@ -111,7 +122,7 @@ if __name__ == '__main__':
     photon_bins[-1, :] = 1000
     resid_map = np.arange(2048, dtype=int) * 10 + 100
     p = 0
-    if clickthrough:
+    if checkfits:
         fig, axes = plt.subplots(5, 2, figsize=(8.5, 14))
         ax = [sub for x in axes for sub in x]
 
@@ -132,8 +143,7 @@ if __name__ == '__main__':
         opt_A = opt_p[int(2*len(opt_p) / 3):]  # splitting array to amplitudes
 
         # unblazing routine, value of bb+blaze * pixel extent in lambda / sigma
-        const = np.array([blaze_bb[5 - n + i, np.where(np.abs(wave.value - lambda_pixel[5 - n + i, j]) <
-                                                       5e-2)[0][0]] for i in range(n)])
+        const = [blaze_bb[5 - n + i](lambda_pixel[5 - n + i, j]) for i in range(n)]
         unblazer[5 - n:, j] = const * dl_pixel[5 - n:, j] / opt_sig  # from analytic convolution
         #unblaze_A = opt_A
         unblaze_A = opt_A / unblazer[5-n:, j]  # divide out bb/blaze to get flat field spectrum for fitted Gaussians
@@ -143,13 +153,13 @@ if __name__ == '__main__':
             photon_bins[m, j] = m if o == 0 else photon_bins[m, j]  # ensure bins are increasing if many 0s
         # cov: calculate % of photons that will fall into other orders from any given order (9 -> 5 for index 0 -> 4)
         for i in range(n):
-            sum_i = np.sum(fit.gauss(np.arange(wave[0].value, wave[-1].value, .01), opt_mu[i], opt_sig[i], unblaze_A[i]))
-            for k in range(n):
-                cov[5 - n + i, 5 - n + k, j] = np.sum(
-                    fit.gauss(np.arange(photon_bins[5 - n + k, j], photon_bins[5 - n + k + 1, j], 0.01),
-                          opt_mu[i], opt_sig[i], unblaze_A[i])) / sum_i
+            sum_i = np.sum(fit.gauss(np.arange(wave[0].value, wave[-1].value, .01),
+                                     opt_mu[i], opt_sig[i], unblaze_A[i]))
+            cov[5 - n + i, 5 - n:, j] = [
+                np.sum(fit.gauss(np.arange(photon_bins[5 - n + k, j], photon_bins[5 - n + k + 1, j], 0.01),
+                                 opt_mu[i], opt_sig[i], unblaze_A[i])) / sum_i for k in range(n)]
         # TODO plot least squares sum also to check fit
-        if clickthrough:  # this will generate 2048 plots in 10 subplot increments to check for parameter fits
+        if checkfits:  # this will generate 2048 plots in 10 subplot increments to check for parameter fits
             if j % 10 == 0 and j != 0:
                 p = 0
                 fig, axes = plt.subplots(5, 2, sharex=True, sharey=True, figsize=(8.5, 14))
