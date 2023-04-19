@@ -4,7 +4,7 @@ from filterphot import mask_deadtime
 
 
 class MKIDDetector:
-    def __init__(self, n, pixel_size, R0, wave_R0, generate_R0=False):
+    def __init__(self, n=2048, pixel_size=20 * u.micron, R0=15, wave_R0=800 * u.nm, generate_R0=False):
         self.n_pixels = n
         self.pixel_size = pixel_size
         self.length = self.n_pixels * pixel_size

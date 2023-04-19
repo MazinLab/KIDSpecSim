@@ -4,16 +4,23 @@ import astropy.units as u
 
 
 class GratingSetup:
-    def __init__(self, alpha, delta, groove_length):
+    def __init__(self, l0=800 * u.nm, m0=5, pixel_size=20 * u.micron, npix=2048, focal_length=350 * u.mm, littrow=True):
         """
         alpha = incidence angle
         d = length/groove in units of wavelength (same as schroeder sigma)
         delta = blaze angle
         theta = off blaze angle
         """
-        self.alpha = alpha
-        self.delta = delta
-        self.d = groove_length
+        self.l0_center = l0 / (1 + 1 / (2 * m0))
+        self.angular_disp = 2 * np.arctan(pixel_size * npix / 2 / focal_length) / (self.l0_center / m0)
+        self.alpha = np.arctan((self.l0_center / 2 * self.angular_disp).value) * u.rad
+        self.d = m0 * self.l0_center / 2 / np.sin(self.alpha)
+        if littrow:
+            self.delta = self.alpha
+            self.beta_central_pixel = self.alpha
+        else:
+            self.delta = None
+            self.beta_central_pixel = None
         print(f"\nConfigured the grating.\n\tBlaze angle: {self.delta:.3e}"
               f"\n\tGroove length: {self.d:.3}")
 
@@ -69,10 +76,8 @@ class GratingSetup:
 
 
 class SpectrographSetup:
-    def __init__(self, min_order, max_order, final_wave, pixels_per_res_elem,
-                 focal_length, beta_central_pixel,
-                 grating: GratingSetup,
-                 detector: MKIDDetector):
+    def __init__(self, grating: GratingSetup, detector: MKIDDetector, min_order=5, max_order=9,
+                 final_wave=800*u.nm, pixels_per_res_elem=2.5, focal_length=350 * u.mm, littrow=True):
         """focal length must be in units of wavelength"""
         self.m0 = min_order
         self.l0 = final_wave
@@ -81,7 +86,10 @@ class SpectrographSetup:
         self.detector = detector
         self.focal_length = focal_length
         self.pixel_scale = np.arctan(self.detector.pixel_size / self.focal_length)  # angle in rad
-        self.beta_central_pixel = beta_central_pixel
+        if littrow:
+            self.beta_central_pixel = grating.beta_central_pixel
+        else:
+            self.beta_central_pixel = None
         self.orders = np.arange(min_order, max_order + 1, dtype=int)
         self.nominal_pixels_per_res_elem = pixels_per_res_elem
         self.minimum_wave = self.central_wave(max_order) - self.fsr(max_order) / 2
