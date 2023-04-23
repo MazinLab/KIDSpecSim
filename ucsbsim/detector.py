@@ -4,26 +4,32 @@ from filterphot import mask_deadtime
 
 
 class MKIDDetector:
-    def __init__(self, n=2048, pixel_size=20 * u.micron, R0=15, wave_R0=800 * u.nm, generate_R0=False):
+    def __init__(self, n=2048, pixel_size=20 * u.micron, R0=15, wave_R0=800 * u.nm, R0_fixed=False, generate_R0=False):
         self.n_pixels = n
         self.pixel_size = pixel_size
         self.length = self.n_pixels * pixel_size
         self.waveR0 = wave_R0
         self.design_R0 = R0
         self.pixel_indices = np.arange(self.n_pixels, dtype=int)
-        self._R0s = None
+        self.R0_fixed = R0_fixed
+        if self.R0_fixed:  # no random variability of R0s for each pixel
+            self.R0s = np.full(self.n_pixels, self.design_R0)
+        else:
+            with open('generated_R0s.csv') as f:
+                self.R0s = np.loadtxt(f, delimiter=",")
         self.generate_R0 = generate_R0
         print(f"\nConfigured the detector.\n\tNo. of pixels: {self.n_pixels}\n\tPixel size: {self.pixel_size}")
 
     def R0(self, pixel):
         """Returns randomly assigned spectral resolution for given pixel around the given R0."""
-        if self.generate_R0:
-            self._R0s = np.random.uniform(.85, 1.15, size=self.n_pixels) * self.design_R0
-            np.savetxt('generated_R0s.csv', self._R0s, delimiter=',')
-        else:
-            with open('generated_R0s.csv') as f:
-                self._R0s = np.loadtxt(f, delimiter=",")
-        return self._R0s[pixel.astype(int)]
+        if self.generate_R0 and not self.R0_fixed:
+            self.R0s = np.random.uniform(.85, 1.15, size=self.n_pixels) * self.design_R0
+            np.savetxt('generated_R0s.csv', self.R0s, delimiter=',')
+        elif not self.generate_R0 and self.R0_fixed:  # no random variability of R0s for each pixel
+            self.R0s = np.full(self.n_pixels, self.design_R0)
+        elif self.generate_R0 and self.R0_fixed:
+            raise ValueError("You cannot both generate random R0s and have them be fixed at 1.")
+        return self.R0s[pixel.astype(int)]
 
     def mkid_constant(self, pixel):
         """MKID constant for given pixel. R0*l0 divided by wavelength to get effective R."""

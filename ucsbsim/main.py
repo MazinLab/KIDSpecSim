@@ -28,8 +28,8 @@ from engine import Engine
 *CHOOSE EXPOSURE TIME (LONGER RESULTS IN FEWER MERGED PHOTONS).
 """
 new_spectrograting = False
-gen_cal = True
-type_of_spectra = 'blackbody'
+gen_cal = False
+type_of_spectra = 'phoenix'
 plot_int = False
 full_convolution = True
 pixel_lim = 50000
@@ -38,6 +38,9 @@ exptime = 200 * u.s
 if __name__ == '__main__':
     tic = time.time()
     print("***Beginning the MKID Spectrometer spectrum simulation.***")
+
+    if gen_cal:
+        print("\nGenerating new calibration spectrum.")
 
     u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # photon flux per wavelength
     n_sigma_mkid = 3
