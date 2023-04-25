@@ -1,0 +1,424 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import scipy
+import scipy.interpolate as interp
+import astropy.units as u
+import time
+
+from spectra import PhoenixModel, AtmosphericTransmission, FilterTransmission, TelescopeTransmission, clip_spectrum
+from spectrograph import GratingSetup, SpectrographSetup
+from detector import MKIDDetector
+from engine import Engine
+
+
+class Simulator:
+    def __init__(self, new_spectrograting=False, gen_cal=False, type_of_spectra='phoenix', plot_int=False,
+                 full_convolution=True, pixel_lim=50000, exptime=200 * u.s, minwave=400 * u.nm, maxwave=800 * u.nm,
+                 **properties):
+        """
+        Simulator for the MKID spectrometer. The default detector, spectrograph, and grating have:
+        npix = 2048,
+        R0 = 15,
+        l0 = 800 * u.nm,
+        m0 = 5,
+        m_max = 9,
+        pixels_per_res_elem = 2.5,
+        pixel_size = 20 * u.micron,
+        focal_length = 350 * u.mm,
+        littrow = True.
+        If ANY of these properties need to be changed, ALL keywords must be supplied and set new_spectrograting = True.
+        Supply these additional keywords in **properties.
+
+        :param bool new_spectrograting: True if changing fundamental properties of the default spectrograph or grating
+        :param bool gen_cal: True if generating a calibration spectrum, this will override any existing MKID R0s
+        :param str type_of_spectra: Type of spectrum being simulated, can be:
+            'phoenix' -     Phoenix model spectrum of a 4300 K star,
+            'blackbody' -   Blackbody model spectrum of a 4300 K star with R_sun at 1kpc,
+            'delta' -       Narrow-width delta-like spectrum at the central wavelength 600 nm.
+        :param bool plot_int: True if intermediate plots shall be shown
+        :param bool full_convolution: True if conducting a full convolution with the MKID response
+        :param int pixel_lim: Total number-of-photons limit for any pixel, 1000 takes a few minutes for full simulation
+        :param Quantity exptime: Total exposure time for observation in astropy units of time, longer results in fewer merges
+        :param Quantity minwave: Shorter wavelength minimum value
+        :param Quantity maxwave: Longer wavelength maximum value
+        :return: saves h5 file containing observed spectrum, syntax: '{type_of_spectra}_{pixel_lim}_R0{R0}.h5'
+        :rtype: None
+        """
+        self.new_spectrograting = new_spectrograting
+        self.gen_cal = gen_cal
+        self.type_of_spectra = type_of_spectra
+        self.plot_int = plot_int
+        self.full_convolution = full_convolution
+        self.pixel_lim = pixel_lim
+        self.exptime = exptime
+        self.minwave = minwave
+        self.maxwave = maxwave
+        if self.new_spectrograting:
+            for k in properties.keys():
+                acceptable_keys = ['npix', 'R0', 'l0', 'm0', 'm_max', 'pixels_per_res_elem', 'pixel_size',
+                                   'focal_length', 'littrow']
+                if k in [acceptable_keys]:
+                    self.__setattr__(k, properties[k])
+
+    def setup_spectrometer(self):
+        """
+        :return: detector, grating, and spectrograph class objects, and R0
+        """
+        if self.new_spectrograting:
+            detector = MKIDDetector(npix=self.npix, pixel_size=self.pixel_size, R0=self.R0, l0=self.l0,
+                                    generate_R0=self.gen_cal)
+            grating = GratingSetup(self.l0, self.m0, self.pixel_size, self.npix, self.focal_length,
+                                   littrow=self.littrow)
+            spectrograph = SpectrographSetup(grating, detector, self.m0, self.m_max, self.l0, self.pixels_per_res_elem,
+                                             self.focal_length, littrow=self.littrow)
+        else:
+            R0 = 15
+            grating = GratingSetup()
+            detector = MKIDDetector(generate_R0=self.gen_cal)
+            spectrograph = SpectrographSetup(grating, detector)
+            R0 = detector.design_R0
+        return detector, grating, spectrograph, R0
+
+    def setup_spectrum(self):
+        """
+        :return: SourceSpectrum object given type of spectra from Simulator class object
+        """
+        if self.type_of_spectra == 'phoenix':
+            spectra = PhoenixModel(4300, 0, 4.8)
+            title = 'Input Spectrum: 4300 K Phoenix Stellar Model'
+            print(f"\nObtained Phoenix model spectrum of star with T_eff of 4300 K.")
+        elif self.type_of_spectra == 'blackbody':
+            # Optional comparison with a blackbody model:
+            from synphot import SourceSpectrum
+            from synphot.models import BlackBodyNorm1D
+            spectra = SourceSpectrum(BlackBodyNorm1D, temperature=4300)
+            title = "Input Spectrum: 4300 K Blackbody Model ($R_\odot$, 1kpc)"
+            print(f"\nObtained blackbody model spectrum of 4300 K star.")
+        elif self.type_of_spectra == 'delta':
+            # Optional sanity check: the below produces a single block spectrum at 600 nm that is 40 nm wide.
+            from synphot import SourceSpectrum
+            from specutils import Spectrum1D
+
+            w = np.linspace(400, 800, 4000) * u.nm
+            tens = np.full(1950, 0)
+            sp = np.full(100, 0.01)
+            f = np.append(tens, sp)
+            f = np.append(f, tens) * u.photlam
+            spectra = SourceSpectrum.from_spectrum1d(Spectrum1D(spectral_axis=w, flux=f)) / 1e20
+            title = "Input Spectrum: 10 nm wide with 1 photlam flux at 600 nm"
+            print(f"\nObtained 0.01 photlam narrow width spectrum at 600 nm "
+                  f"that is 10 nm wide with 0 photlam elsewhere.")
+        else:
+            raise ValueError("type_of_spectra must be 'phoenix,' 'blackbody,' or 'delta.'")
+
+        if self.plot_int:
+            # TODO change this to 2 subplots
+            print("\nPlotting source spectrum...")
+            # In our bandpass of interest:
+            plt.plot(spectra.waveset.to('nm'), spectra(spectra.waveset))
+            plt.xlim([400, 800])
+            plt.ylabel("Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
+            plt.xlabel("Wavelength (nm)")
+            plt.title(title)
+            plt.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
+            plt.tight_layout()
+            plt.grid()
+            plt.show()
+            # The full input incl. outside of bandpass
+            plt.grid()
+            plt.plot(spectra.waveset.to('nm'), spectra(spectra.waveset))
+            plt.ylabel("Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
+            plt.xlabel("Wavelength (nm)")
+            plt.title(title)
+            plt.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
+            plt.tight_layout()
+            plt.show()
+            print("Shown.")
+        return spectra
+
+    def apply_bandpass(self, spectrum):
+        """
+        :param spectrum: SourceSpectrum object
+        :return: same spectrum multiplied by given bandpasses
+        """
+        spectra = [spectrum]
+        bandpasses = [AtmosphericTransmission(), TelescopeTransmission(reflectivity=.9),
+                      FilterTransmission(self.minwave, self.maxwave)]
+        if not self.gen_cal:  # don't apply bandpasses to calibration spectra
+            for i, s in enumerate(spectra):
+                for b in bandpasses:
+                    s *= b
+                spectra[i] = s
+            print("Applied atmospheric, telescopic, and filter bandpasses to spectrum.")
+        else:
+            from specutils import Spectrum1D
+            from synphot import SpectralElement
+
+            # finer grid spacing
+            w = np.linspace(300, 1000, 1400000) * u.nm
+            t = np.ones(1400000) * u.dimensionless_unscaled
+            ones = Spectrum1D(spectral_axis=w, flux=t)
+            spectra[0] *= SpectralElement.from_spectrum1d(ones)
+        return spectra
+
+    def apply_blaze(self, spectrograph, spectra):
+        """
+        :param spectrograph: Spectrograph class object
+        :param spectra: SourceSpectrum object
+        :return: unmasked and masked (w/ wavelength masks) blazed spectra
+        """
+        # Grating throughput impact, is a function of wavelength and grating angles, handled for each order
+        blaze_efficiencies = spectrograph.blaze(spectra.waveset)
+        order_mask = spectrograph.order_mask(spectra.waveset.to(u.nm), fsr_edge=False)
+        # spectrograph.blaze returns 2D array of blaze efficiencies [wave.size, norders]
+        blazed_spectrum = blaze_efficiencies * spectra(spectra.waveset)
+        print(f"Multiplied blaze efficiencies with spectrum.")
+
+        checker = [blazed_spectrum[i, order_mask[i]] for i in range(len(spectrograph.orders))]
+        check_wave = [spectra.waveset[order_mask[i]].to(u.nm) for i in range(len(spectrograph.orders))]
+
+        if self.plot_int:
+            print("\nPlotting transmission rate for each order...")
+            plt.grid()
+            for o, m, b in zip(spectrograph.orders, order_mask, blaze_efficiencies):
+                plt.plot(spectra.waveset[m], b[m], label=f'Order {o}')
+            plt.title("Blaze Efficiencies")
+            plt.ylabel("Normalized Transmission")
+            plt.xlabel("Wavelength (nm)")
+            plt.legend()
+            plt.show()
+            print("Shown.")
+        return blazed_spectrum, check_wave, checker
+
+    def apply_convolution(self, spectra, broadened, engine, n_sigma_mkid, osamp):
+        """
+        :param spectra: SourceSpectrum object
+        :param broadened: ndarray with flux unit
+        :param engine: Engine class object
+        :param n_sigma_mkid: number of sigma to calculate convolution with
+        :param osamp: how much to oversample using smallest pixel extent
+        :return: important intermediate values, resulting convolution arrays/wavelengths, MKID kernel
+        """
+        if self.full_convolution:
+            print("\nConducting full convolution with MKID response.")
+            sampling_data = engine.determine_mkid_convolution_sampling(oversampling=osamp)
+            result_wave, result, mkid_kernel = \
+                engine.convolve_mkid_response(spectra.waveset, broadened, *sampling_data,
+                                              n_sigma_mkid=n_sigma_mkid,
+                                              plot_int=self.plot_int)
+        else:
+            print("\nConducting simplied 'convolution' with MKID response.")
+            result_wave, result, mkid_kernel = engine.multiply_mkid_response(
+                inbound.waveset, broadened_spectrum, oversampling=osamp, n_sigma_mkid=n_sigma_mkid, plot_int=plot_int)
+        return sampling_data, result_wave, result, mkid_kernel
+
+    def simulate_spectrum(self):
+        """
+        :return: None (saves observed spectrum to h5 file)
+        """
+        tic = time.time()
+        print("Simulating spectrum from MKID Spectrometer.")
+        u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # photon flux per wavelength
+        n_sigma_mkid = 3
+        osamp = 10
+
+        detector, grating, spectrograph, R0 = self.setup_spectrometer()
+        nord = len(spectrograph.orders)
+        npix = detector.n_pixels
+
+        spectra_0 = self.setup_spectrum()
+
+        engine = Engine(spectrograph)
+
+        spectra = self.apply_bandpass(spectra_0)
+
+        inbound = clip_spectrum(spectra[0], self.minwave, self.maxwave)
+
+        if self.plot_int:
+            print("\nPlotting post-atmospheric and filtered spectrum...")
+            plt.grid()
+            plt.plot(spectra_0.waveset.to('nm'), spectra_0(spectra_0.waveset), label="Input")
+            plt.plot(inbound.waveset.to('nm'), inbound(inbound.waveset), label="Post-Atmo")
+            plt.xlim([minwave.value, maxwave.value])
+            plt.ylabel("Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
+            plt.xlabel("Wavelength (nm)")
+            plt.title("Post-Atmospheric and Filter Effects")
+            plt.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
+            plt.legend()
+            plt.tight_layout()
+            plt.show()
+            print("Shown.")
+
+        blazed_spectrum, mask_waves, blaze_masked = self.apply_blaze(spectrograph, inbound)
+        if self.plot_int:
+            print("\nPlotting blazed spectrum...")
+            plt.grid()
+            plt.plot(spectra_0.waveset.to('nm'), spectra_0(spectra_0.waveset), label="Input")
+            plt.plot(inbound.waveset.to('nm'), inbound(inbound.waveset), label="Post-Atmo")
+            plt.xlim([minwave.value, maxwave.value])
+            for i in range(nord):
+                plt.plot(mask_waves[i], blaze_masked[i], label=f'Order {i + spectrograph.m0}')
+            plt.ylabel("Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
+            plt.xlabel("Wavelength (nm)")
+            plt.title("Blazed Spectrum")
+            plt.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
+            plt.legend(loc='upper left')
+            plt.tight_layout()
+            plt.show()
+            print("Shown.")
+
+        broadened_spectrum = engine.optically_broaden(inbound.waveset, blazed_spectrum)
+        print("\nOptically broadened the spectrum.")
+
+        broad_masked = [engine.optically_broaden(mask_waves[i], blaze_masked[i], axis=0) for i in range(nord)]
+
+        if self.plot_int:
+            print("\nPlotting optically-broadened spectrum...")
+            plt.grid()
+            for i in range(nord - 1):
+                plt.plot(check_wave[i], checker[i], 'k')
+            plt.plot(check_wave[-1], checker[-1], 'k', label="Input (Blazed)")
+            for i in range(nord):
+                plt.plot(check_wave[i], broad_checker[i], label=f"Order {i + nord}")
+            plt.title("Optically-broadened Spectrum")
+            plt.xlabel("Wavelength (nm)")
+            plt.ylabel("Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
+            plt.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
+            plt.legend()
+            plt.tight_layout()
+            plt.show()
+
+        sampling_data, result_wave, result, mkid_kernel = self.apply_convolution(inbound, broadened_spectrum,
+                                                                                 engine, n_sigma_mkid, osamp)
+        pixel_samples_frac, pixel_max_npoints, pixel_rescale, dl_pixel, lambda_pixel, dl_mkid_max, sampling = \
+            sampling_data
+
+        if self.plot_int:
+            print("\nPlotting post-convolved spectrum by rough integration...")
+            pix_leftedge = spectrograph.pixel_to_wavelength(detector.pixel_indices, spectrograph.orders[:, None])
+            split_indices = np.empty([nord, npix])
+            for j in range(npix):
+                if pix_leftedge[-1, j].to(u.nm).value > self.minwave.value:
+                    split_indices[:, j] = [[np.where(np.abs(check_wave[j].to(u.nm).value -
+                                                            pix_leftedge[j, i].to(u.nm).value) < 1e-3)[0][0]
+                                            for j in range(npix)] for i in range(nord)]
+
+            fluxden = np.empty([nord, npix])
+            # regaining flux density by summing flux by previous indices and multiplying by dx
+            for j in range(nord):
+                for i in range(npix):
+                    idx_left = int(split_indices[j, i])
+                    idx_right = int(split_indices[j, i + 1])
+                    fluxden[j, i] = scipy.integrate.trapz(broad_checker[j][idx_left:idx_right].to(u.photlam).value,
+                                                          x=check_wave[j][idx_left:idx_right].to(u.nm).value)
+            fluxden[:, npix-1] = fluxden[:, npix-2]
+
+            x = [[np.linspace(-3 * pixel_rescale[i, j].to(u.nm).value * dl_mkid_max.to(u.nm).value /
+                              sampling.to(u.nm).value / 2.355, 3 * pixel_rescale[i, j].to(u.nm).value *
+                              dl_mkid_max.to(u.nm).si.value / sampling.to(u.nm).si.value / 2.355,len(mkid_kernel))
+                  for j in range(npix)] for i in range(nord)]
+            dx = x[:,:,1] - x[:,:,0]
+            norms = np.sum(mkid_kernel) * dx / 0.9973  # since 3 sigma on either side is not exactly 1
+            result_plot = (result / (norms * u.nm)).to(u.photlam)
+
+            dx = [[result_wave[1, i, j].to(u.nm).value - result_wave[0, i, j].to(u.nm).value for j in range(npix)] for i in range(nord)]
+            result_summed = np.sum(result_plot.to(u.photlam).value, axis=0) * dx
+
+            # flux in = flux out comparison of convolution
+            flux_prec = [scipy.integrate.trapz(fluxden[i, :], x=lambda_pixel[i, :].to(u.nm).value) for i in range(nord)]
+            flux_conv = [scipy.integrate.trapz(inted[i, :], x=lambda_pixel[i, :].to(u.nm).value) for i in range(nord)]
+            # ensuring flux before and after are roughly equal
+            for i in range(nord):
+                print(f'Order {nord+i}: Flux In {flux_prec:.3e}, Flux Out {flux_conv:.3e}')
+            plt.grid()
+            for i in range(nord-1):
+                plt.plot(lambda_pixel[i, :].to(u.nm).value, fluxden[i, :], 'k', markersize=1)
+            plt.plot(lambda_pixel[-1, :].to(u.nm).value, fluxden[-1, :], 'k', markersize=1, label='Input')
+            for i in range(nord):
+                plt.plot(lambda_pixel[i, :], inted[i, :], label=f"Order {i + nord}")
+            plt.ylabel("Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
+            plt.xlabel("Wavelength (nm)")
+            plt.title("Spectrum Convolved with MKID Response (Integrated)")
+            plt.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
+            plt.legend()
+            plt.show()
+            print("Shown.")
+
+        t_photons, l_photons = engine.draw_photons(result_wave, result, exptime=self.exptime,
+                                                   limit_to=self.pixel_lim, plot_int=self.plot_int)
+
+        if self.plot_int:
+            print("\nPlotting drawn photon list by rough histogram...")
+            lambda_pixel = lambda_pixel[::-1, :]  # flipping order of arrays since photon draw is list of wavelengths
+            result = result[:, ::-1, :]
+            result_wave = result_wave[:, ::-1, :]
+            fsr = spectrograph.fsr(spectrograph.orders)[::-1]
+            pixel_rescale = pixel_rescale[::-1, :]
+
+            hist_bins = np.empty((nord+1, npix))  # choosing histogram bins by using FSR of each pixel/wave
+            hist_bins[0, :] = (lambda_pixel[0, :] - fsr[0] / 2).to(u.nm).value
+            hist_bins[1:nord, :] = [(lambda_pixel[i, :] + fsr[i] / 2).to(u.nm).value for i in range(nord-1)]
+            hist_bins[nord, :] = np.full(npix, self.maxwave.value+100)
+
+            hist = np.empty((nord, npix))  # photons binned at this step
+            for j in range(npix):
+                hist[:, j], bin_edges = np.histogram(l_photons[j].to(u.nm).value, bins=hist_bins[:, j], density=False)
+
+            result_r = np.sum(result.decompose().to(u.ph / u.cm ** 2 / u.s).value, axis=0)
+            result_raw = result_r * hist.max() / result_r.max()  # normalizedish to compare better
+
+            plt.grid()
+            for i in range(nord):
+                plt.plot(lambda_pixel[i, :], hist[i, :], label=f'Order {spectrograph.m_max - i}')
+            for i in range(nord-1):
+                plt.plot(lambda_pixel[i, :], result_raw[i, :], 'k')
+            plt.plot(lambda_pixel[-1, :], result_raw[-1, :], 'k', label='Input')
+            plt.ylabel("Total Photons")
+            plt.xlabel("Wavelength (nm)")
+            plt.title("Drawn Photons vs. MKID Convolved Step")
+            plt.legend()
+            plt.show()
+            print("Shown.")
+
+        photons, observed = detector.observe(t_photons, l_photons)
+
+        if self.plot_int:  # checking original vs. final spectrum
+            print("\nPlotting output spectrum...")
+            final_list = []
+            resid_map = np.arange(npix, dtype=int) * 10 + 100
+            for i in range(npix):  # sorting photons by resID (i.e. pixel)
+                idx = np.where(photons.resID == resid_map[i])
+                final_list.append(photons[:observed].wavelength[idx].tolist())
+
+            final = np.empty((nord, npix))
+            for j in range(npix):  # sorting by histogram bins as before
+                final[:, j], bin_edges = np.histogram(final_list[j], bins=hist_bins[:, j], density=False)
+            plt.grid()
+            for i in range(nord):
+                plt.plot(lambda_pixel[i, :], final[i, :], label=f'Order {spectrograph.m_max - i}')
+            for i in range(nord-1):
+                plt.plot(lambda_pixel[i, :], result_raw[i, :], 'k', linewidth=1)
+            plt.plot(lambda_pixel[-1, :], result_raw[-1, :], 'k', linewidth=1, label='Input')
+            plt.title("Input and Observed Spectra")
+            plt.ylabel("Total Photons")
+            plt.xlabel("Wavelength (nm)")
+            plt.legend()
+            plt.show()
+
+        # Dump to HDF5
+        # TODO this will need work as the pipeline will probably default to MEC HDF headers
+        from mkidpipeline.steps import buildhdf
+
+        buildhdf.buildfromarray(photons[:observed],
+                                user_h5file=f'./{self.type_of_spectra}_{self.pixel_lim}_R0{R0}.h5')
+        # at this point we are simulating the pipeline and have gone past the "wavecal" part. Next is >to spectrum.
+        print("\nCompiled data to h5 file.")
+
+        toc = time.time()
+        print(f"\nMKID Spectrometer spectral simulation completed in {round((toc - tic) / 60, 2)} minutes.")
+
+
+if __name__ == '__main__':
+    # example spectral simulation with fewer pixels
+    sim = Simulator(pixel_lim=1000)
+    sim.simulate_spectrum()
