@@ -295,8 +295,7 @@ class Engine:
               "multiplied spectrum with average pixel flux density.")
         return result_wave, result, mkid_kernel
 
-    def draw_photons(self, result_wave, result, area=np.pi * (4 * u.cm) ** 2, exptime=1 * u.s, limit_to=1000,
-                     plot_int=False):
+    def draw_photons(self, result_wave, result, area=np.pi * (4 * u.cm) ** 2, exptime=1 * u.s, limit_to=1000):
         """result and result_wave are [nconvolution_output, nords, npixels] arrays, units of result should be
         photlambda*dwave
         """
@@ -308,24 +307,6 @@ class Engine:
         sort_idx = np.argsort(wave_p, axis=0)
         result_pix = sortarray.sort(result_p, sort_idx)  # sorting by wavelength for proper CDF shape
         wave_pix = sortarray.sort(wave_p, sort_idx)
-
-        if plot_int:
-            import matplotlib as mpl
-            mpl.rcParams['agg.path.chunksize'] = 10000
-            print("\n\tPlotting pre- and post-sorted example pixel flux for use in CDF...")
-            plt.grid()
-            plt.plot(wave_p[:, 999], result_p[:, 999])
-            plt.title("Pre-sorted Pixel 1000")
-            plt.xlabel("Wavelength (nm)")
-            plt.ylabel("Flux")
-            plt.show()
-            plt.grid()
-            plt.plot(wave_pix[:, 999], result_pix[:, 999])
-            plt.title("Post-sorted Pixel 1000")
-            plt.xlabel("Wavelength (nm)")
-            plt.ylabel("Flux")
-            plt.show()
-            print("\tShown.")
 
         cdf = np.cumsum(result_pix, axis=0)
         rest_of_way_to_photons = area * exptime
@@ -345,36 +326,7 @@ class Engine:
             N = np.random.poisson(total_photons.value.astype(int))
             print(f'\tMaximum photons per pixel: {total_photons.value.max():.2f}.')
 
-        if plot_int:
-            print("\n\tPlotting random Poisson draw for total in each pixel...")
-            x = range(1,2049)
-            plt.grid()
-            plt.plot(x, N, label='Poisson Draw')
-            plt.plot(x, total_photons_ltd, label='Original Dist.')
-            plt.title("Poisson Draw from Total # of Photons per Pixel")
-            plt.ylabel('Total # of Photons')
-            plt.xlabel('Pixel in Array (1 to 2048)')
-            plt.legend()
-            plt.show()
-            print("\tShown.")
-
         cdf /= total_photons
-
-        if plot_int:
-            print("\n\tPlotting example CDF and PDF...")
-            plt.grid()
-            plt.plot(wave_pix[:, 999], cdf[:, 999])
-            plt.title("CDF of Pixel 1000")
-            plt.xlabel("Wavelength (nm)")
-            plt.ylabel("Normalized")
-            plt.show()
-            plt.grid()
-            plt.plot(wave_pix[1:, 999], np.diff(cdf[:, 999]))
-            plt.title("PDF of Pixel 1000")
-            plt.xlabel("Wavelength (nm)")
-            plt.ylabel("Normalized")
-            plt.show()
-            print("\tShown.")
 
         print("\n\tBeginning random draw for photon wavelengths (from CDF) and arrival times (from uniform random).")
         # Decide on wavelengths and times
