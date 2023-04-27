@@ -205,7 +205,7 @@ class Engine:
 
 
     def convolve_mkid_response(self, wave, spectral_fluxden, pixel_samples_frac, pixel_max_npoints, pixel_rescale,
-                               dl_pixel, lambda_pixel, dl_mkid_max, sampling, n_sigma_mkid=3, plot_int=False):
+                               dl_pixel, lambda_pixel, dl_mkid_max, sampling, n_sigma_mkid=3):
         """
         :param plot_int:
         :param wave:
@@ -261,7 +261,7 @@ class Engine:
         print(f"Fully-convolved spectrum with MKID response.")
         return result_wave, result, mkid_kernel
 
-    def multiply_mkid_response(self, wave, spectral_fluxden, oversampling=10, n_sigma_mkid=3, plot_int=False):
+    def multiply_mkid_response(self, wave, spectral_fluxden, oversampling=10, n_sigma_mkid=3):
         """
         Instead of convolving the MKID response just multiply it by the average flux density in the pixel.
         """
