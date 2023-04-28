@@ -6,4 +6,9 @@ import numpy as np
 @cython.boundscheck(False)
 @cython.wraparound(False)
 def sort(array, sorting_index):
+    """
+    :param array: some ndarray
+    :param sorting_index: how to sort the array
+    :return: sorted array
+    """
     return np.take_along_axis(array, sorting_index, axis=0)
