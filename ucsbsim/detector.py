@@ -4,40 +4,66 @@ from filterphot import mask_deadtime
 
 
 class MKIDDetector:
-    def __init__(self, n=2048, pixel_size=20 * u.micron, R0=15, wave_R0=800 * u.nm, R0_fixed=False, generate_R0=False):
+    def __init__(
+            self,
+            n: int = 2048,
+            pixel_size: u.Quantity = 20 * u.micron,
+            R0: float = 15,
+            wave_R0: u.Quantity = 800 * u.nm,
+            R0_type: str = 'from_file'
+    ) -> MKIDDetector:
+        """
+        Simulation of an MKID detector array.
+
+        :param n: number of pixels in linear array
+        :param pixel_size: physical size of each pixel in astropy units
+        :param R0: spectral resolution of the longest wavelength in spectrometer range
+        :param wave_R0: longest wavelength in spectrometer range in astropy units
+        :param R0_type: where to obtain array of R0s for each pixel, can be:
+            'from_file' - load a file containing random R0s named 'generated_R0s.csv'
+            'fixed' - keep all R0s for all pixels fixed to the supplied R0
+            'generate' - generate a new list of randomized R0s about the given R0
+        :return: MKIDDetector class object
+        """
         self.n_pixels = n
         self.pixel_size = pixel_size
         self.length = self.n_pixels * pixel_size
         self.waveR0 = wave_R0
         self.design_R0 = R0
         self.pixel_indices = np.arange(self.n_pixels, dtype=int)
-        self.R0_fixed = R0_fixed
-        if self.R0_fixed:  # no random variability of R0s for each pixel
-            self.R0s = np.full(self.n_pixels, self.design_R0)
-        else:
+        self.R0_type = R0_type
+        self.R0s = None
+
+    def R0(self, pixel: int):
+        """
+        :param pixel: the pixel index or indices
+        :return: spectral resolution for given pixel
+        """
+        if pixel not in pixel_indices:
+            raise ValueError(f"Pixel {pixel} not in instantiated detector, max of {self.n_pixels}.")
+        if self.R0_type == 'from_file':
             with open('generated_R0s.csv') as f:
                 self.R0s = np.loadtxt(f, delimiter=",")
-        self.generate_R0 = generate_R0
-        print(f"\nConfigured the detector.\n\tNo. of pixels: {self.n_pixels}\n\tPixel size: {self.pixel_size}")
-
-    def R0(self, pixel):
-        """Returns randomly assigned spectral resolution for given pixel around the given R0."""
-        if self.generate_R0 and not self.R0_fixed:
+        elif self.R0_type == 'fixed':
+            self.R0s = np.full(self.n_pixels, self.design_R0)
+        elif self.R0_type == 'generate':
             self.R0s = np.random.uniform(.85, 1.15, size=self.n_pixels) * self.design_R0
             np.savetxt('generated_R0s.csv', self.R0s, delimiter=',')
-        elif not self.generate_R0 and self.R0_fixed:  # no random variability of R0s for each pixel
-            self.R0s = np.full(self.n_pixels, self.design_R0)
-        elif self.generate_R0 and self.R0_fixed:
-            raise ValueError("You cannot both generate random R0s and have them be fixed at 1.")
         return self.R0s[pixel.astype(int)]
 
-    def mkid_constant(self, pixel):
-        """MKID constant for given pixel. R0*l0 divided by wavelength to get effective R."""
+    def mkid_constant(self, pixel: int):
+        """
+        :param pixel: the pixel index or indices
+        :return: MKID constant for given pixel, R0*l0
+        """
         return self.R0(pixel) * self.waveR0
 
-    def mkid_resolution_width(self, wave, pixel):
-        """ Returns the wavelength width of the MKID at given wavelength and pixel.
-        Last axis should be n_pixel."""
+    def mkid_resolution_width(self, wave: Any, pixel: int):
+        """
+        :param wave: wavelength(s) as float, int, or u.Quantity
+        :param pixel: the pixel index or indices
+        :return: FWHM of the MKID at given wavelength and pixel
+        """
         rc = self.mkid_constant(pixel)
         try:
             if wave.shape != rc.shape:
@@ -48,10 +74,19 @@ class MKIDDetector:
                 rc = rc[None, :]
         except AttributeError:  # allow non-array args
             pass
-        return wave ** 2 / rc  # (nord, npixel) actual mkid sigma at each pixel/order center
+        return wave ** 2 / rc
 
-    def observe(self, arrival_times, arrival_wavelengths, resid_map=None):
-        """Simulated observation sequence for photons."""
+    def observe(self,
+                arrival_times: u.Quantity,
+                arrival_wavelengths: u.Quantity,
+                resid_map: ndarray = None
+                ):
+        """
+        :param arrival_times: timestamps of photons in astropy units
+        :param arrival_wavelengths: wavelengths of photons in astropy units
+        :param resid_map: IDs for each pixel (resonator)
+        :return: recarray of observed photons, total number observed
+        """
         from mkidcore.binfile.mkidbin import PhotonNumpyType
         print("\nBeginning detector observation sequence.")
         pixel_count = np.array([x.size for x in arrival_times])
@@ -89,7 +124,7 @@ class MKIDDetector:
             a_times = a_times[arrival_order]
             energies = 1 / arrival_wavelengths[pixel].to(u.um)[arrival_order]
 
-            if self.generate_R0:
+            if self.R0_type == 'generate':
                 pass
             else:
                 # merge photon energies within 1us
