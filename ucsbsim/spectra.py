@@ -16,6 +16,9 @@ _atm = None
 
 
 def _get_atm():
+    """
+    :return: atmospheric transmission as function of wavelength
+    """
     global _atm
     if _atm is not None:
         return _atm
@@ -34,13 +37,20 @@ def _get_atm():
 
 
 def AtmosphericTransmission():
+    """
+    :return: atmospheric transmission as SpectralElement object
+    """
     w, t = _get_atm()
     spec = Spectrum1D(spectral_axis=w, flux=t)
     print("\nObtained atmospheric transmission bandpass.")
     return SpectralElement.from_spectrum1d(spec)
 
 
-def TelescopeTransmission(reflectivity=.75):
+def TelescopeTransmission(reflectivity: float = .75):
+    """
+    :param reflectivity: of the telescope as 1-fraction, (1 means no reflection)
+    :return: transmission due to telescope reflectivity, smaller at higher wavelengths, as SpectralElement object
+    """
     w = np.linspace(300, 1500, 10000) * u.nm
     t = np.linspace(1, .95, 10000) * reflectivity * u.dimensionless_unscaled
     spec = Spectrum1D(spectral_axis=w, flux=t)
@@ -49,6 +59,11 @@ def TelescopeTransmission(reflectivity=.75):
 
 
 def FilterTransmission(min, max):
+    """
+    :param min: shorter wavelength edge
+    :param max: longer wavelength edge
+    :return: transmission of 1 between min and max as SpectralElement object
+    """
     wid = max - min
     center = (max + min) / 2
     print(f"Obtained {min} to {max} filter bandpass.")
@@ -56,6 +71,13 @@ def FilterTransmission(min, max):
 
 
 def PhoenixModel(teff, feh, logg, desired_magnitude=None):
+    """
+    :param teff: effective temperature of star
+    :param feh: distance as z value
+    :param logg: log of surface gravity
+    :param desired_magnitude: magnitude with which to normalize model spectrum, optional
+    :return: Phoenix model of star with given properties as SourceSpectrum object
+    """
     from expecto import get_spectrum
     sp = SourceSpectrum.from_spectrum1d(get_spectrum(T_eff=teff, log_g=logg, Z=feh, cache=True))
     if desired_magnitude is not None:
@@ -64,7 +86,12 @@ def PhoenixModel(teff, feh, logg, desired_magnitude=None):
 
 
 def clip_spectrum(x, minw, maxw):
-    """Clip out and return a chunk of the specutils.SourceSpectrum"""
+    """
+    :param x: SourceSpectrum object containing desired spectrum
+    :param minw: shorter wavelength edge
+    :param maxw: longer wavelength edge
+    :return: clipped out SourceSpectrum instead of setting fluxden to 0, different from FilterTransmission
+    """
     mask = (x.waveset >= minw) & (x.waveset <= maxw)
     w = x.waveset[mask]
     print(f"Clipped spectrum from {minw} to {maxw}.")
