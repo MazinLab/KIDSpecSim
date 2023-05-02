@@ -9,16 +9,16 @@ class MKIDDetector:
             n: int = 2048,
             pixel_size: u.Quantity = 20 * u.micron,
             R0: float = 15,
-            wave_R0: u.Quantity = 800 * u.nm,
+            l0: u.Quantity = 800 * u.nm,
             R0_type: str = 'from_file'
-    ) -> MKIDDetector:
+    ):
         """
         Simulation of an MKID detector array.
 
         :param n: number of pixels in linear array
         :param pixel_size: physical size of each pixel in astropy units
         :param R0: spectral resolution of the longest wavelength in spectrometer range
-        :param wave_R0: longest wavelength in spectrometer range in astropy units
+        :param l0: longest wavelength in spectrometer range in astropy units
         :param R0_type: where to obtain array of R0s for each pixel, can be:
             'from_file' - load a file containing random R0s named 'generated_R0s.csv'
             'fixed' - keep all R0s for all pixels fixed to the supplied R0
@@ -28,7 +28,7 @@ class MKIDDetector:
         self.n_pixels = n
         self.pixel_size = pixel_size
         self.length = self.n_pixels * pixel_size
-        self.waveR0 = wave_R0
+        self.waveR0 = l0
         self.design_R0 = R0
         self.pixel_indices = np.arange(self.n_pixels, dtype=int)
         self.R0_type = R0_type
@@ -39,8 +39,8 @@ class MKIDDetector:
         :param pixel: the pixel index or indices
         :return: spectral resolution for given pixel
         """
-        if pixel not in pixel_indices:
-            raise ValueError(f"Pixel {pixel} not in instantiated detector, max of {self.n_pixels}.")
+        if pixel not in self.pixel_indices:
+            raise ValueError(f"Pixel {pixel+1} not in instantiated detector, max of {self.n_pixels}.")
         if self.R0_type == 'from_file':
             with open('generated_R0s.csv') as f:
                 self.R0s = np.loadtxt(f, delimiter=",")
@@ -58,7 +58,7 @@ class MKIDDetector:
         """
         return self.R0(pixel) * self.waveR0
 
-    def mkid_resolution_width(self, wave: Any, pixel: int):
+    def mkid_resolution_width(self, wave, pixel: int):
         """
         :param wave: wavelength(s) as float, int, or u.Quantity
         :param pixel: the pixel index or indices
@@ -79,7 +79,7 @@ class MKIDDetector:
     def observe(self,
                 arrival_times: u.Quantity,
                 arrival_wavelengths: u.Quantity,
-                resid_map: ndarray = None
+                resid_map=None
                 ):
         """
         :param arrival_times: timestamps of photons in astropy units
@@ -124,9 +124,7 @@ class MKIDDetector:
             a_times = a_times[arrival_order]
             energies = 1 / arrival_wavelengths[pixel].to(u.um)[arrival_order]
 
-            if self.R0_type == 'generate':
-                pass
-            else:
+            if self.R0_type != 'generate':
                 # merge photon energies within 1us
                 to_merge = (np.diff(a_times) < merge_time_window_s).nonzero()[0]
                 if to_merge.size:
