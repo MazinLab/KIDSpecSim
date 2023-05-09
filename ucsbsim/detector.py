@@ -1,6 +1,7 @@
 import numpy as np
 import astropy.units as u
 from filterphot import mask_deadtime
+from engine import draw_photons
 
 
 class MKIDDetector:
@@ -33,6 +34,7 @@ class MKIDDetector:
         self.pixel_indices = np.arange(self.n_pixels, dtype=int)
         self.R0_type = R0_type
         self.R0s = None
+        self.resid_map = None
 
     def R0(self, pixel: int):
         """
@@ -77,16 +79,17 @@ class MKIDDetector:
         return wave ** 2 / rc
 
     def observe(self,
-                arrival_times: u.Quantity,
-                arrival_wavelengths: u.Quantity,
-                resid_map=None
+                convol_wave,
+                convol_result,
+                **kwargs,
                 ):
         """
-        :param arrival_times: timestamps of photons in astropy units
-        :param arrival_wavelengths: wavelengths of photons in astropy units
-        :param resid_map: IDs for each pixel (resonator)
+        :param convol_wave: wavelength array that matches convol_result
+        :param convol_result: convolution array
         :return: recarray of observed photons, total number observed
         """
+        arrival_times, arrival_wavelengths = draw_photons(convol_wave, convol_result, **kwargs)
+
         from mkidcore.binfile.mkidbin import PhotonNumpyType
         print("\nBeginning detector observation sequence.")
         pixel_count = np.array([x.size for x in arrival_times])
@@ -99,8 +102,8 @@ class MKIDDetector:
         SATURATION_WAVELENGTH_NM = 350 * u.nm
         DEADTIME = 10 * u.us
 
-        if resid_map is None:
-            resid_map = np.arange(pixel_count.size, dtype=int) * 10 + 100  # something arbitrary
+        if self.resid_map is None:
+            self.resid_map = np.arange(pixel_count.size, dtype=int) * 10 + 100  # something arbitrary
 
         photons = np.recarray(total_photons, dtype=PhotonNumpyType)
         photons[:] = 0
@@ -160,7 +163,7 @@ class MKIDDetector:
             sl = slice(observed, observed + a_times.size)
             photons.wavelength[sl] = measured_wavelengths
             photons.time[sl] = a_times * 1e6  # in microseconds
-            photons.resID[sl] = resid_map[pixel]
+            photons.resID[sl] = self.resid_map[pixel]
             observed += a_times.size
         print(f'Completed detector observation sequence. {total_merged} photons had their energies merged, '
               f'{np.sum(total_missed)} photons were missed due to deadtime, and {observed} photons were observed.')
