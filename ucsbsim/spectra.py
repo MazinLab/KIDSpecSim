@@ -6,7 +6,7 @@ from astropy.io import fits
 from astropy import units as u
 from specutils import Spectrum1D
 from synphot import SpectralElement, SourceSpectrum
-from synphot.models import Box1D
+from synphot.models import Box1D, BlackBodyNorm1D
 
 _atm = None
 
@@ -46,7 +46,7 @@ def AtmosphericTransmission():
     return SpectralElement.from_spectrum1d(spec)
 
 
-def TelescopeTransmission(reflectivity: float = .75):
+def TelescopeTransmission(reflectivity: float = .9):
     """
     :param reflectivity: of the telescope as 1-fraction, (1 means no reflection)
     :return: transmission due to telescope reflectivity, smaller at higher wavelengths, as SpectralElement object
@@ -58,7 +58,7 @@ def TelescopeTransmission(reflectivity: float = .75):
     return SpectralElement.from_spectrum1d(spec)
 
 
-def FilterTransmission(min, max):
+def FilterTransmission(min=400*u.nm, max=800*u.nm):
     """
     :param min: shorter wavelength edge
     :param max: longer wavelength edge
@@ -70,9 +70,32 @@ def FilterTransmission(min, max):
     return SpectralElement(Box1D, amplitude=1, x_0=center, width=wid)
 
 
-def PhoenixModel(teff, feh, logg, desired_magnitude=None):
+def apply_bandpass(spectrum, cal=False, **kwargs):
     """
-    :param teff: effective temperature of star
+    :param spectrum: spectrum to apply bandpasses to
+    :param cal: if spectrum is for calibration, no bandpasses will be applied
+    :param kwargs: teff, minwave, maxwave, feh, logg, etc.
+    :return: original spectrum multiplied with bandpasses
+    """
+    if cal:
+        w = np.linspace(300, 1000, 1400000) * u.nm
+        t = np.ones(1400000) * u.dimensionless_unscaled
+        ones = Spectrum1D(spectral_axis=w, flux=t)
+        spectrum[0] *= SpectralElement.from_spectrum1d(ones)
+        return clip_spectrum(spectrum[0], **kwargs)
+    else:
+        bandpasses = [AtmosphericTransmission(), TelescopeTransmission(),
+                      FilterTransmission(**kwargs)]
+        for i, s in enumerate(spectrum):
+            for b in bandpasses:
+                s *= b
+            spectrum[i] = s
+        return clip_spectrum(spectrum[0], **kwargs)
+
+
+def PhoenixModel(teff: float, feh=0, logg=4.8, desired_magnitude=None):
+    """
+    :param float teff: effective temperature of star
     :param feh: distance as z value
     :param logg: log of surface gravity
     :param desired_magnitude: magnitude with which to normalize model spectrum, optional
@@ -83,6 +106,41 @@ def PhoenixModel(teff, feh, logg, desired_magnitude=None):
     if desired_magnitude is not None:
         sp.normalize(desired_magnitude, band=S.ObsBandpass('johnson,v'))
     return sp
+
+
+def BlackbodyModel(teff: float):
+    """
+    :param float teff: effective temperature of model star
+    :return: blackbody model of star as SourceSpectrum object
+    """
+    return SourceSpectrum(BlackBodyNorm1D, temperature=teff)
+
+
+def DeltaModel(minwave=400*u.nm, maxwave=800*u.nm):
+    """
+    :param minwave: minimum wavelength of detector
+    :param maxwave: maximum wavelength of detector
+    :return: 'delta'-like model at the central wavelength
+    """
+    x_0 = (maxwave + minwave) / 2
+    width = 10 * u.nm
+    return SourceSpectrum(Box1D, amplitude=1e-15, x_0=x_0, width=width)
+
+
+def get_spectrum(spectrum_type: str, **kwargs):
+    """
+    :param str spectrum_type: 'blackbody', 'phoenix', or 'delta' only
+    :param kwargs: teff, feh, logg, minwave, maxwave, etc.
+    :return: SourceSpectrum object of chosen spectrum
+    """
+    if spectrum_type == 'blackbody':
+        return BlackbodyModel(**kwargs)
+    elif spectrum_type == 'phoenix':
+        return PhoenixModel(**kwargs)
+    elif spectrum_type == 'delta':
+        return DeltaModel(**kwargs)
+    else:
+        raise ValueError("Only 'blackbody', 'phoenix', or 'delta' are supported for spectrum_type.")
 
 
 def clip_spectrum(x, minw, maxw):
