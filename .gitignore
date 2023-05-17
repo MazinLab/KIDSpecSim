@@ -40,3 +40,4 @@ ucsbsim/synphot/synphot4/grp/redcat/trds/grid/k93models/readfile.py
 ucsbsim/synphot/synphot6/grp/redcat/trds/calspec/names2
 UNKNOWN.egg-info/PKG-INFO
 ucsbsim/synphot/synphot4/grp/redcat/trds/grid/k93models/kp02/AA_README
+*.pdf
