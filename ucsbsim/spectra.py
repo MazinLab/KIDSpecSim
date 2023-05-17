@@ -2,6 +2,7 @@ import synphot
 import specutils
 import numpy as np
 from astropy.io import fits
+import logging
 
 from astropy import units as u
 from specutils import Spectrum1D
@@ -42,7 +43,7 @@ def AtmosphericTransmission():
     """
     w, t = _get_atm()
     spec = Spectrum1D(spectral_axis=w, flux=t)
-    print("\nObtained atmospheric transmission bandpass.")
+    logging.info("Obtained atmospheric transmission bandpass.")
     return SpectralElement.from_spectrum1d(spec)
 
 
@@ -54,7 +55,7 @@ def TelescopeTransmission(reflectivity: float = .9):
     w = np.linspace(300, 1500, 10000) * u.nm
     t = np.linspace(1, .95, 10000) * reflectivity * u.dimensionless_unscaled
     spec = Spectrum1D(spectral_axis=w, flux=t)
-    print(f"Obtained telescope bandpass with reflectivity {reflectivity}.")
+    logging.info(f"Obtained telescope bandpass with reflectivity {reflectivity}.")
     return SpectralElement.from_spectrum1d(spec)
 
 
@@ -66,7 +67,7 @@ def FilterTransmission(min=400*u.nm, max=800*u.nm):
     """
     wid = max - min
     center = (max + min) / 2
-    print(f"Obtained {min} to {max} filter bandpass.")
+    logging.info(f"Obtained {min} to {max} filter bandpass.")
     return SpectralElement(Box1D, amplitude=1, x_0=center, width=wid)
 
 
@@ -77,6 +78,7 @@ def apply_bandpass(spectrum, cal=False, **kwargs):
     :param kwargs: teff, minwave, maxwave, feh, logg, etc.
     :return: original spectrum multiplied with bandpasses
     """
+    spectrum = [spectrum]
     if cal:
         w = np.linspace(300, 1000, 1400000) * u.nm
         t = np.ones(1400000) * u.dimensionless_unscaled
@@ -84,8 +86,7 @@ def apply_bandpass(spectrum, cal=False, **kwargs):
         spectrum[0] *= SpectralElement.from_spectrum1d(ones)
         return clip_spectrum(spectrum[0], **kwargs)
     else:
-        bandpasses = [AtmosphericTransmission(), TelescopeTransmission(),
-                      FilterTransmission(**kwargs)]
+        bandpasses = [AtmosphericTransmission(), TelescopeTransmission(), FilterTransmission(**kwargs)]
         for i, s in enumerate(spectrum):
             for b in bandpasses:
                 s *= b
@@ -105,6 +106,7 @@ def PhoenixModel(teff: float, feh=0, logg=4.8, desired_magnitude=None):
     sp = SourceSpectrum.from_spectrum1d(get_spectrum(T_eff=teff, log_g=logg, Z=feh, cache=True))
     if desired_magnitude is not None:
         sp.normalize(desired_magnitude, band=S.ObsBandpass('johnson,v'))
+    logging.info(f'Obtained Phoenix model spectrum of {teff} K star.')
     return sp
 
 
@@ -113,24 +115,26 @@ def BlackbodyModel(teff: float):
     :param float teff: effective temperature of model star
     :return: blackbody model of star as SourceSpectrum object
     """
+    logging.info(f'Obtained blackbody model spectrum of {teff} K star.')
     return SourceSpectrum(BlackBodyNorm1D, temperature=teff)
 
 
-def DeltaModel(minwave=400*u.nm, maxwave=800*u.nm):
+def DeltaModel(min=400*u.nm, max=800*u.nm):
     """
-    :param minwave: minimum wavelength of detector
-    :param maxwave: maximum wavelength of detector
+    :param min: minimum wavelength of detector
+    :param max: maximum wavelength of detector
     :return: 'delta'-like model at the central wavelength
     """
-    x_0 = (maxwave + minwave) / 2
+    x_0 = (max + min) / 2
     width = 10 * u.nm
+    logging.info(f'Obtained delta-function-like spectrum at {x_0}.')
     return SourceSpectrum(Box1D, amplitude=1e-15, x_0=x_0, width=width)
 
 
 def get_spectrum(spectrum_type: str, **kwargs):
     """
     :param str spectrum_type: 'blackbody', 'phoenix', or 'delta' only
-    :param kwargs: teff, feh, logg, minwave, maxwave, etc.
+    :param kwargs: teff, feh, logg, minwave, and maxwave as needed.
     :return: SourceSpectrum object of chosen spectrum
     """
     if spectrum_type == 'blackbody':
@@ -143,14 +147,14 @@ def get_spectrum(spectrum_type: str, **kwargs):
         raise ValueError("Only 'blackbody', 'phoenix', or 'delta' are supported for spectrum_type.")
 
 
-def clip_spectrum(x, minw, maxw):
+def clip_spectrum(x, min, max):
     """
     :param x: SourceSpectrum object containing desired spectrum
-    :param minw: shorter wavelength edge
-    :param maxw: longer wavelength edge
+    :param min: shorter wavelength edge
+    :param max: longer wavelength edge
     :return: clipped out SourceSpectrum instead of setting fluxden to 0, different from FilterTransmission
     """
-    mask = (x.waveset >= minw) & (x.waveset <= maxw)
+    mask = (x.waveset >= min) & (x.waveset <= max)
     w = x.waveset[mask]
-    print(f"Clipped spectrum from {minw} to {maxw}.")
+    logging.info(f"Clipped spectrum from {min} to {max}.")
     return SourceSpectrum.from_spectrum1d(Spectrum1D(spectral_axis=w, flux=x(w)))
