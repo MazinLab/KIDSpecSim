@@ -1,6 +1,7 @@
 from detector import MKIDDetector
 import numpy as np
 import astropy.units as u
+import logging
 
 
 class GratingSetup:
@@ -40,14 +41,11 @@ class GratingSetup:
         else:
             self.delta = None  # need to add case of not littrow
             self.beta_central_pixel = None
-        print(f"\nConfigured the grating.\n\tBlaze angle: {self.delta:.3e}"
-              f"\n\tGroove length: {self.groove_length:.3}")
 
     def blaze(self, beta: float, m: int):
         """
         Blaze throughput function follows Casini & Nelson 2014 J Opt Soc Am A eq 18 with notation modified to
         match Schroder.
-
         :param beta: reflectance angle
         :param m: order
         :return: grating throughput
@@ -59,7 +57,7 @@ class GratingSetup:
             rho = np.cos(self.delta)  # 2 different rho depending on whether alpha or delta is larger
         else:
             rho = np.cos(self.alpha) / np.cos(self.alpha - self.delta)
-        print(f"\nCalculated relative transmission (blaze efficiencies).")
+        logging.info(f"\nCalculated relative transmission (grating efficiency).")
         return k * np.sinc((m * rho * q4).value) ** 2  # omit np.pi as np.sinc includes it
 
     def beta(self, wave, m: int):
@@ -121,6 +119,8 @@ class SpectrographSetup:
         """
         Simulation of a spectrograph.
 
+        :param grating: configured grating
+        :param detector: configured detector
         :param pixels_per_res_elem: number of pixels per resolution element of spectrometer
         """
         self.m0 = grating.m0
@@ -135,6 +135,7 @@ class SpectrographSetup:
         else:
             self.beta_central_pixel = None  # figure out nonLittrow cases
         self.orders = np.arange(self.m0, self.m_max + 1, dtype=int)
+        self.nord = len(self.orders)
         self.nominal_pixels_per_res_elem = pixels_per_res_elem
         self.minimum_wave = self.central_wave(self.m_max) - self.fsr(self.m0) / 2
 
@@ -142,8 +143,17 @@ class SpectrographSetup:
         # slit image at some fiducial wavelength and that the resolution element has some known width there
         # (and that the slit image is a gaussian)
         self.nondimensional_lsf_width = 1 / self.design_res
-        print(f"\nConfigured the spectrograph.\n\tNo. of pixels per resolution element: "
-              f"{self.nominal_pixels_per_res_elem}")
+        logging.info(f'\nThe spectrograph has been setup with the following properties:'
+                     f'\n\tl0: {self.l0}'
+                     f'\n\tR0: {self.detector.design_R0}'
+                     f'\n\tOrders: {self.orders}'
+                     f'\n\tFocal length: {self.focal_length}'
+                     f'\n\tIncident angle: {self.grating.alpha:.3f}'
+                     f'\n\tGroove length: {self.grating.groove_length:.2f}'
+                     f'\n\tLittrow config.: {self.grating.littrow}'
+                     f'\n\t# of pixels: {self.detector.n_pixels}'
+                     f'\n\tPixel size: {self.detector.pixel_size}'
+                     f'\n\tPixels per res. element: {self.nominal_pixels_per_res_elem}')
 
     def pixel_for_beta(self, beta: float):
         """
@@ -160,6 +170,18 @@ class SpectrographSetup:
         """
         center_offset = self.detector.pixel_size * (pixel - self.detector.n_pixels / 2)
         return self.beta_central_pixel + np.arctan(center_offset / self.focal_length)
+
+    def max_beta_m0(self):
+        """
+        :return: largest reflectance angle (which is at the initial order)
+        """
+        return self.grating.beta(self.l0, self.m0)
+
+    def min_beta_mmax(self):
+        """
+        :return: smallest reflectance angle (which is at the final order)
+        """
+        return self.grating.beta(self.minimum_wave, self.m_max)
 
     def blaze(self, wave):
         """
@@ -185,7 +207,7 @@ class SpectrographSetup:
     def central_wave(self, order: int):
         """
         :param order: order
-        :return: central wavelength for that order
+        :return: central wavelength for the entire order
         """
         return self.grating.l0_center * self.m0 / order
 
@@ -212,19 +234,94 @@ class SpectrographSetup:
         """
         return self.grating.wave(self.beta_for_pixel(pixel), m)
 
-    def pixel_center_wavelengths(self):
+    def pixel_center_wavelengths(self, edge=None):
         """
-        :return:  array of pixel center wavelengths for spectrometer
+        :param edge: left or right indicates the edges of the pixel instead of exactly at center
+        :return:  array of pixel center (or left/right edge) wavelengths for spectrometer
 
         Note that wavelengths will be computed outside each order's FSR.
         NB this is approximately equal to the simple approximation:
         (np.linspace(-.5, .5, num=detector.n_pixels) * self.fsr(m0) + self.central_wave(m0)) * (m0/self.orders)[:,None]
         """
-        return self.pixel_to_wavelength(self.detector.pixel_indices + .5, self.orders[:, None])
+        if edge == 'left':
+            return self.pixel_to_wavelength(self.detector.pixel_indices, self.orders[:, None])
+        elif edge == 'right':
+            return self.pixel_to_wavelength(self.detector.pixel_indices + 1, self.orders[:, None])
+        else:
+            return self.pixel_to_wavelength(self.detector.pixel_indices + .5, self.orders[:, None])
+
+    def dl_pix_max_wave(self):
+        """
+        :return: maximum change in wavelength in any pixel
+        """
+        return self.pixel_scale / self.grating.angular_dispersion(self.m0, self.max_beta_m0())
+
+    def dl_pix_min_wave(self):
+        """
+        :return: minimum change in wavelength in any pixel
+        """
+        return self.pixel_scale / self.grating.angular_dispersion(self.m_max, self.min_beta_mmax())
+
+    def dl_mkid_max(self):
+        """
+        :return: largest MKID resolution width
+        """
+        return (self.l0 ** 2 / self.detector.mkid_constant(self.detector.pixel_indices)).max()
+
+    def sampling(self, oversampling):
+        """
+        :param oversampling: factor by which to oversample smallest wavelength extent
+        :return: size of sampling in wavelength units
+        """
+        return self.dl_pix_min_wave() / oversampling
+
+    def dl_pixel(self):
+        """
+        :return: change in wavelength for every pixel
+        """
+        return self.pixel_scale / self.angular_dispersion()
+
+    def dl_mkid_pixel(self):
+        """
+        :return: MKID resolution width for every pixel
+        """
+        return self.detector.mkid_resolution_width(self.pixel_center_wavelengths(), self.detector.pixel_indices)
+
+    def pixel_rescale(self, oversampling):
+        """
+        :param oversampling: factor by which to oversample smallest wavelength extent
+        :return: The sample size in wavelength units for every pixel. Every MKID resolution width divided by the
+                 total # of samples that are in the largest width, which is the largest width divided by the
+                 smallest sample size.
+        """
+        return self.dl_mkid_pixel() * self.sampling(oversampling) / self.dl_mkid_max()
+
+    def pixel_samples_frac(self, oversampling):
+        """
+        :return: number of samples for every pixel, retrieved by dividing change in wavelength for a pixel
+                 by the sample size for that pixel.
+        """
+        return (self.dl_pixel() / self.pixel_rescale(oversampling)).si.value
+
+    def pixel_max_npoints(self, oversampling):
+        """
+        :return: the maximum number of points in any given pixel, as an integer value, ensuring there is atleast one
+                 sample at pixel center
+        """
+        pixel_max_npoints = np.ceil(self.pixel_samples_frac(oversampling).max()).astype(int)
+        if not pixel_max_npoints % 2:  # ensure there is a point at the pixel center
+            pixel_max_npoints += 1
+        return pixel_max_npoints
+
+    def sigma_mkid_pixel(self):
+        """
+        :return: the standard deviation for each pixel resolution
+        """
+        return self.dl_mkid_pixel() / 2.355
 
     def angular_dispersion(self):
         """
-        :return: array of angular dispersions of each pixel for each order
+        :return: angular dispersions of each pixel for each order
         """
         beta = self.beta_for_pixel(self.detector.pixel_indices + .5)
         return self.grating.angular_dispersion(self.orders[:, None], beta)
