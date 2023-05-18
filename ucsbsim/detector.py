@@ -1,5 +1,7 @@
 import numpy as np
 import astropy.units as u
+import logging
+
 from filterphot import mask_deadtime
 from engine import draw_photons
 
@@ -42,7 +44,7 @@ class MKIDDetector:
         :return: spectral resolution for given pixel
         """
         if pixel not in self.pixel_indices:
-            raise ValueError(f"Pixel {pixel+1} not in instantiated detector, max of {self.n_pixels}.")
+            raise ValueError(f"Pixel {pixel + 1} not in instantiated detector, max of {self.n_pixels}.")
         if self.R0_type == 'from_file':
             with open('generated_R0s.csv') as f:
                 self.R0s = np.loadtxt(f, delimiter=",")
@@ -91,16 +93,19 @@ class MKIDDetector:
         arrival_times, arrival_wavelengths = draw_photons(convol_wave, convol_result, **kwargs)
 
         from mkidcore.binfile.mkidbin import PhotonNumpyType
-        print("\nBeginning detector observation sequence.")
         pixel_count = np.array([x.size for x in arrival_times])
         total_photons = pixel_count.sum()
-
-        print(f'\tWARNING: Simulated dataset may take up to {total_photons * 16 / 1024 ** 3:.2} GB of RAM.')
 
         merge_time_window_s = 1e-6 * u.s
         MIN_TRIGGER_ENERGY = 1 / (1.5 * u.um)
         SATURATION_WAVELENGTH_NM = 350 * u.nm
         DEADTIME = 10 * u.us
+
+        logging.info("\nBeginning MKID detector observation sequence with:"
+                     f"\n\tMinimum trigger energy: {MIN_TRIGGER_ENERGY:.3e}"
+                     f"\n\tPhoton merge time: {merge_time_window_s:.0e}"
+                     f"\n\tSaturation wavelength: {SATURATION_WAVELENGTH_NM}"
+                     f"\n\tDeadtime: {DEADTIME}")
 
         if self.resid_map is None:
             self.resid_map = np.arange(pixel_count.size, dtype=int) * 10 + 100  # something arbitrary
@@ -112,11 +117,8 @@ class MKIDDetector:
         total_merged = 0
         total_missed = []
 
-        print(f"\tComputing detected arrival times and wavelengths for individual photons."
-              f"\n\tMinimum trigger energy: {MIN_TRIGGER_ENERGY:.3e}"
-              f"\n\tPhoton merge time: {merge_time_window_s:.0e}"
-              f"\n\tSaturation wavelength: {SATURATION_WAVELENGTH_NM}"
-              f"\n\tDeadtime: {DEADTIME}")
+        logging.info(f"Getting arrival times and wavelengths for {total_photons} photons.")
+
         for pixel, n in enumerate(pixel_count):
             if not n:
                 continue
@@ -165,6 +167,9 @@ class MKIDDetector:
             photons.time[sl] = a_times * 1e6  # in microseconds
             photons.resID[sl] = self.resid_map[pixel]
             observed += a_times.size
-        print(f'Completed detector observation sequence. {total_merged} photons had their energies merged, '
-              f'{np.sum(total_missed)} photons were missed due to deadtime, and {observed} photons were observed.')
+
+        logging.info(f'Completed detector observation sequence.'
+                     f'{total_merged} photons had their energies merged, '
+                     f'{np.sum(total_missed)} photons were missed due to deadtime,'
+                     f'and {observed} photons were observed.')
         return photons, observed
