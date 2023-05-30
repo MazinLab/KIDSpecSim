@@ -3,15 +3,17 @@ import scipy.interpolate as interp
 import scipy
 import scipy.signal as sig
 import scipy.ndimage as ndi
+import numpy as np
 import matplotlib.pyplot as plt
 import time
 
 import astropy.units as u
-from spectra import PhoenixModel, AtmosphericTransmission, FilterTransmission, TelescopeTransmission
-from spectrograph import GratingSetup, SpectrographSetup
-from detector import MKIDDetector
-from engine import Engine
-from spectra import clip_spectrum
+from ucsbsim.spectra import PhoenixModel, AtmosphericTransmission, FilterTransmission, TelescopeTransmission
+from ucsbsim.spectrograph import GratingSetup, SpectrographSetup
+from ucsbsim.detector import MKIDDetector
+from ucsbsim.engine import Engine
+from ucsbsim.spectra import clip_spectrum
+
 
 tic = time.time()
 

@@ -1,6 +1,6 @@
 import numpy as np
 import astropy.units as u
-from filterphot import mask_deadtime
+from ucsbsim.filterphot import mask_deadtime
 
 
 class MKIDDetector:
@@ -17,7 +17,7 @@ class MKIDDetector:
     def R0(self, pixel):
         if self._R0s is None:
             if self.randomize_r0 is not None:
-            self._R0s = np.random.uniform(.85, 1.15, size=self.n_pixels) * self.design_R0
+                self._R0s = np.random.uniform(.85, 1.15, size=self.n_pixels) * self.design_R0
             else:
                 self._R0s = np.ones(self.n_pixels) * self.design_R0
         return self._R0s[pixel.astype(int)]

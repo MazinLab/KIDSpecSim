@@ -3,6 +3,20 @@ from setuptools import setup
 from Cython.Build import cythonize
 
 setup(
+    name="ucsbsim",
+    version="0.1",
+    author="MazinLab, J. Bailey, C. Kim",
     ext_modules=cythonize("ucsbsim/filterphot.pyx"),
-    include_dirs=[np.get_include()]
+    include_dirs=[np.get_include()],
+    author_email="mazinlab@ucsb.edu",
+    description="An UVOIR MKID Echelle Simulator",
+    long_description_content_type="text/markdown",
+    # url="https://github.com/MazinLab/MKIDGen3",
+    packages=['ucsbsim'], #setuptools.find_packages(),
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: POSIX",
+        "Development Status :: 1 - Planning",
+        "Intended Audience :: Science/Research"],
 )
