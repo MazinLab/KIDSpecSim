@@ -4,7 +4,7 @@ from filterphot import mask_deadtime
 
 
 class MKIDDetector:
-    def __init__(self, n, pixel_size, R0, wave_R0):
+    def __init__(self, n, pixel_size, R0, wave_R0, randomize_r0=(.85, 1.15)):
         self.n_pixels = n
         self.pixel_size = pixel_size
         self.length = self.n_pixels * pixel_size
@@ -12,14 +12,18 @@ class MKIDDetector:
         self.design_R0 = R0
         self.pixel_indices = np.arange(self.n_pixels, dtype=int)
         self._R0s = None
+        self.randomize_r0 = randomize_r0
 
     def R0(self, pixel):
         if self._R0s is None:
+            if self.randomize_r0 is not None:
             self._R0s = np.random.uniform(.85, 1.15, size=self.n_pixels) * self.design_R0
+            else:
+                self._R0s = np.ones(self.n_pixels) * self.design_R0
         return self._R0s[pixel.astype(int)]
 
     def mkid_constant(self, pixel):
-        """ R0*l0 divide by wave to get effective R and """
+        """ R0*l0 divide by wave to get effective R"""
         return self.R0(pixel) * self.waveR0
 
     def mkid_resolution_width(self, wave, pixel):
