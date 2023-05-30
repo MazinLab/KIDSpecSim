@@ -55,7 +55,7 @@ class Engine:
         return sig.gaussian(mkid_kernel_npoints,
                             (width / sampling).si.value)  # width/sampling is the dimensionless width
 
-    def determin_apodization(self, pixel_samples_frac, pixel_max_npoints):
+    def determine_apodization(self, pixel_samples_frac, pixel_max_npoints):
         """
         Samples is a bit of a misnomer in that this is the number of normalized mkid kernel width elements that would cover
         the pixel. So 20.48 elements would be 21 sample points with one at the center and 10 to either side. the 10th would be
