@@ -43,7 +43,6 @@ def AtmosphericTransmission():
     """
     w, t = _get_atm()
     spec = Spectrum1D(spectral_axis=w, flux=t)
-    logging.info("Obtained atmospheric transmission bandpass.")
     return SpectralElement.from_spectrum1d(spec)
 
 
@@ -55,7 +54,6 @@ def TelescopeTransmission(reflectivity: float = .9):
     w = np.linspace(300, 1500, 10000) * u.nm
     t = np.linspace(1, .95, 10000) * reflectivity * u.dimensionless_unscaled
     spec = Spectrum1D(spectral_axis=w, flux=t)
-    logging.info(f"Obtained telescope bandpass with reflectivity {reflectivity}.")
     return SpectralElement.from_spectrum1d(spec)
 
 
@@ -67,15 +65,15 @@ def FilterTransmission(min=400*u.nm, max=800*u.nm):
     """
     wid = max - min
     center = (max + min) / 2
-    logging.info(f"Obtained {min} to {max} filter bandpass.")
     return SpectralElement(Box1D, amplitude=1, x_0=center, width=wid)
 
 
-def apply_bandpass(spectrum, cal=False, **kwargs):
+def apply_bandpass(spectrum, cal=False, min=400*u.nm, max=800*u.nm):
     """
     :param spectrum: spectrum to apply bandpasses to
     :param cal: if spectrum is for calibration, no bandpasses will be applied
-    :param kwargs: teff, minwave, maxwave, feh, logg, etc.
+    :param min: min wavelength for filter and clipping
+    :param max: max wavelength for filter and clipping
     :return: original spectrum multiplied with bandpasses
     """
     spectrum = [spectrum]
@@ -84,14 +82,17 @@ def apply_bandpass(spectrum, cal=False, **kwargs):
         t = np.ones(1400000) * u.dimensionless_unscaled
         ones = Spectrum1D(spectral_axis=w, flux=t)
         spectrum[0] *= SpectralElement.from_spectrum1d(ones)
-        return clip_spectrum(spectrum[0], **kwargs)
+        logging.info('Calibration spectrum was not multiplied with bandpasses.')
+        return clip_spectrum(spectrum[0], min, max)
     else:
-        bandpasses = [AtmosphericTransmission(), TelescopeTransmission(), FilterTransmission(**kwargs)]
+        bandpasses = [AtmosphericTransmission(), TelescopeTransmission(), FilterTransmission(min, max)]
         for i, s in enumerate(spectrum):
             for b in bandpasses:
                 s *= b
             spectrum[i] = s
-        return clip_spectrum(spectrum[0], **kwargs)
+        logging.info('Multipled spectrum with atmospheric transmission, telescope transmission,'
+                     f'and {min} to {max} filter bandpass.')
+        return clip_spectrum(spectrum[0], min, max)
 
 
 def PhoenixModel(teff: float, feh=0, logg=4.8, desired_magnitude=None):
@@ -106,7 +107,6 @@ def PhoenixModel(teff: float, feh=0, logg=4.8, desired_magnitude=None):
     sp = SourceSpectrum.from_spectrum1d(get_spectrum(T_eff=teff, log_g=logg, Z=feh, cache=True))
     if desired_magnitude is not None:
         sp.normalize(desired_magnitude, band=S.ObsBandpass('johnson,v'))
-    logging.info(f'Obtained Phoenix model spectrum of {teff} K star.')
     return sp
 
 
@@ -115,7 +115,6 @@ def BlackbodyModel(teff: float):
     :param float teff: effective temperature of model star
     :return: blackbody model of star as SourceSpectrum object
     """
-    logging.info(f'Obtained blackbody model spectrum of {teff} K star.')
     return SourceSpectrum(BlackBodyNorm1D, temperature=teff)
 
 
@@ -127,22 +126,26 @@ def DeltaModel(min=400*u.nm, max=800*u.nm):
     """
     x_0 = (max + min) / 2
     width = 10 * u.nm
-    logging.info(f'Obtained delta-function-like spectrum at {x_0}.')
     return SourceSpectrum(Box1D, amplitude=1e-15, x_0=x_0, width=width)
 
 
-def get_spectrum(spectrum_type: str, **kwargs):
+def get_spectrum(spectrum_type: str, teff=None, min=None, max=None):
     """
     :param str spectrum_type: 'blackbody', 'phoenix', or 'delta' only
-    :param kwargs: teff, feh, logg, minwave, and maxwave as needed.
+    :param teff: effective temperature for blackbody or phoenix model spectrum
+    :param min: min wavelength for delta spectrum
+    :param max: max wavelength for delta spectrum
     :return: SourceSpectrum object of chosen spectrum
     """
     if spectrum_type == 'blackbody':
-        return BlackbodyModel(**kwargs)
+        logging.info(f'\nObtained blackbody model spectrum of {teff} K star.')
+        return BlackbodyModel(teff)
     elif spectrum_type == 'phoenix':
-        return PhoenixModel(**kwargs)
+        logging.info(f'\nObtained Phoenix model spectrum of {teff} K star.')
+        return PhoenixModel(teff)
     elif spectrum_type == 'delta':
-        return DeltaModel(**kwargs)
+        logging.info(f'\nObtained delta-function-like spectrum at wavelength center.')
+        return DeltaModel(min, max)
     else:
         raise ValueError("Only 'blackbody', 'phoenix', or 'delta' are supported for spectrum_type.")
 
