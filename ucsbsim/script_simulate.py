@@ -10,7 +10,7 @@ import logging
 from spectra import get_spectrum, apply_bandpass
 from spectrograph import GratingSetup, SpectrographSetup
 from detector import MKIDDetector
-from engine import Engine, quick_plot
+from engine import Engine, quick_plot, check_dir
 
 """
 Simulation of the MKID spectrometer. The steps are:
@@ -49,12 +49,22 @@ if __name__ == '__main__':
     # R0 = 8, etc.
 
     # ========================================================================
-    # Simulation properties:
+    # Simulation settings:
     # ========================================================================
-    calibration = False
+    calibration = True
     full_convol = True
-    type_of_spectra, temp = 'phoenix', 4300  # in K
-    pixel_lim = 1000
+    type_of_spectra, temp = 'blackbody', 4300  # in K
+    pixel_lim = 50000  # 1k takes ~mins, 50k takes ~20 min
+    exptime = 500 * u.s
+
+    # ========================================================================
+    # Directory checking:
+    # ========================================================================
+    check_dir('output_files/')
+    if calibration:
+        check_dir('output_files/calibration/')
+    else:
+        check_dir(f'output_files/{type_of_spectra}/')
 
     # ========================================================================
     # Simulation begins:
@@ -66,7 +76,8 @@ if __name__ == '__main__':
                  f"\nThe date and time are: {now.strftime('%Y-%m-%d %H:%M:%S')}.")
 
     # setting up engine and spectrograph, obtaining various needed properties:
-    eng = Engine(SpectrographSetup(GratingSetup(), MKIDDetector()))
+    R0_type = 'generate' if calibration else 'from_file'
+    eng = Engine(SpectrographSetup(GratingSetup(), MKIDDetector(R0_type=R0_type)))
     nord = eng.spectrograph.nord
     npix = eng.spectrograph.detector.n_pixels
     resid_map = np.arange(npix, dtype=int) * 10 + 100  # TODO replace once known
@@ -81,17 +92,21 @@ if __name__ == '__main__':
     masked_broad = [eng.optically_broaden(masked_waves[i], masked_blaze[i], axis=0) for i in range(nord)]
 
     # conducting the convolution with MKID resolution widths:
-    convol_wave, convol = eng.convolve_mkid_response(bandpass_spectrum.waveset, broadened_spectrum, OSAMP,
-                                                     N_SIGMA_MKID, full=full_convol)
+    convol_wave, convol_result = eng.convolve_mkid_response(bandpass_spectrum.waveset, broadened_spectrum, OSAMP,
+                                                            N_SIGMA_MKID, full=full_convol)
 
     # putting convolved spectrum through MKID observation sequence:
-    photons, observed = eng.spectrograph.detector.observe(convol_wave, convol, limit_to=pixel_lim)
+    photons, observed = eng.spectrograph.detector.observe(
+        convol_wave, convol_result, limit_to=pixel_lim, exptime=exptime)
 
     # saving final photon list to h5 file:
     # TODO this will need work as the pipeline will probably default to MEC HDF headers
     from mkidpipeline.steps.buildhdf import buildfromarray
 
-    h5_file = f'output_files/{type_of_spectra}/table_R0{eng.spectrograph.detector.design_R0}.h5'
+    if calibration:
+        h5_file = f'output_files/calibration/table_R0{eng.spectrograph.detector.design_R0}.h5'
+    else:
+        h5_file = f'output_files/{type_of_spectra}/table_R0{eng.spectrograph.detector.design_R0}.h5'
     buildfromarray(photons[:observed], user_h5file=h5_file)
     # at this point we are simulating the pipeline and have gone past the "wavecal" part. Next is >to spectrum.
     logging.info(f'\nSaved photon table of {type_of_spectra} spectrum to {h5_file}')
@@ -105,7 +120,7 @@ if __name__ == '__main__':
     # ========================================================================
     import warnings
 
-    warnings.filterwarnings("ignore")
+    warnings.filterwarnings("ignore")  # ignore tight_layout warnings
     fig, axes = plt.subplots(3, 1, sharex=True, figsize=(8.5, 11), dpi=300)
     axes = axes.ravel()
     plt.suptitle(f"Intermediate plots for MKID spectrometer simulation ({pixel_lim} Photon Limit)",
@@ -123,6 +138,7 @@ if __name__ == '__main__':
     axes[0].set_xlim([MINWAVE.value - 25, eng.spectrograph.l0.value + 25])
 
     # plotting comparison between lambda-to-pixel spectrum and integrated convolution spectrum, must be same:
+
     # integrating the flux density spectrum to go to pixel space
     mkid_kernel = eng.build_mkid_kernel(N_SIGMA_MKID, eng.spectrograph.sampling(OSAMP))
     pix_leftedge = eng.spectrograph.pixel_center_wavelengths(edge='left').to(u.nm).value
@@ -132,7 +148,7 @@ if __name__ == '__main__':
     # dividing convolution by kernel normalization and integrating
     x = eng.mkid_kernel_waves(len(mkid_kernel), n_sigma=N_SIGMA_MKID, oversampling=OSAMP)
     norms = np.sum(mkid_kernel) * (x[:, :, 1] - x[:, :, 0]) / THREESIG  # since 3 sigma is not exactly 1
-    convol_for_plot = (convol / (norms[None, ...] * u.nm)).to(u.photlam)
+    convol_for_plot = (convol_result / (norms[None, ...] * u.nm)).to(u.photlam)
     dx = (convol_wave[1, :, :] - convol_wave[0, :, :]).to(u.nm)
     convol_summed = (np.sum(convol_for_plot.value, axis=0) * u.photlam * dx)
 
@@ -159,11 +175,7 @@ if __name__ == '__main__':
     twin = axes[2].twinx()
     quick_plot(twin, lambda_pixel, convol_summed, ylabel=r"Flux (phot $cm^{-2} s^{-1})$", color='red',
                labels=['Conv.+Int.'] + ['_nolegend_' for o in eng.spectrograph.orders[:-1]],
-               title="Convolved+Integrated vs. Observed Photons", xlabel="Wavelength (nm)", twin='red')
-    if type_of_spectra == 'phoenix':
-        twin.set_ylim(top=4.7e16)
-    elif type_of_spectra == 'blackbody':
-        twin.set_ylim(top=0.000235)
+               title="Convolved+Integrated vs. Observed Photons", xlabel="Wavelength (nm)", twin='red', alpha=0.5)
     fig.tight_layout()
     plt.subplots_adjust(top=0.92, right=0.6, left=0.1)
     plot_file = f'output_files/{type_of_spectra}/intplots_R0{eng.spectrograph.detector.design_R0}.pdf'
