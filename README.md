@@ -36,6 +36,8 @@ Open `script_simulate.py` and ensure you have the following simulation propertie
 
 `pixel_lim = 50000`
 
+`exptime = 500 * u.s`
+
 Save and run file. This creates a blackbody calibration spectrum. A plot will show so you can
 verify that the simulation is functioning properly.
 
@@ -49,13 +51,13 @@ Now, change the simulation settings to reflect:
 
 `pixel_lim = 10000`
 
+`exptime = 60 * u.s`
+
 Save and run file. This creates a Phoenix model observation spectrum.
 
 Open `script_msf.py` and ensure you have the following MSF extraction settings:
 
 `type_of_spectra = 'blackbody'`
-
-`pixel_lim = 50000`
 
 `plot_fits = False`
 
@@ -63,4 +65,16 @@ Save and run file. This generates the MSF products for use in spectrum extractio
 A few comprehensive plots will show so you can verify the goodness of fit.
 
 Open `script_extract.py` and ensure you have the following extraction settings:
-#### * work in progress from this point on *
+
+`type_of_spectra = 'phoenix'`
+
+Save and run file. This generates the extracted spectrum with error band.
+
+### Changing settings according to preference:
+
+Different types of spectra can be simulated, but it is important to note that the 
+`'type_of_spectra'` must match when generating and extracting the calibration spectrum. 
+And of course, there must be a photon table file of some spectra in order for that to be extracted. 
+The key is basically to ensure all files are created/present before running next steps. 
+Files have naming schemes and directories that should be followed strictly.
+Currently, this package only supports Phoenix, blackbody, and 'delta' model spectra.
