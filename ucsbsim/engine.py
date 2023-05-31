@@ -6,6 +6,7 @@ import scipy.ndimage as ndi
 import astropy.units as u
 import matplotlib.pyplot as plt
 import logging
+import os
 
 import sortarray
 from lmfit import Parameters, minimize, fit_report
@@ -16,16 +17,16 @@ u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # photon flux per wavelength
 
 def quick_plot(ax, x, y, labels=None, title=None, xlabel=None, ylabel=None, ylim=None, twin=None, first=False, **kwargs):
     """
-    Condenses matplotlib plotting into one line.
+    Condenses matplotlib plotting into one line (generally).
     :param ax: axes for plotting
     :param x: x axis data
-    :param y: y axis data
+    :param y: y axis data, dimensions must match x
     :param labels: labels for each set of data
     :param title: title of subplot
     :param xlabel: x axis label
     :param ylabel: y axis label
     :param ylim: y axis upper limit (convenient for twin)
-    :param twin: x axis twin color, if any
+    :param twin: y axis twin color, if any
     :param first: True if first line for plot, will make grid
     :param kwargs: color, linestyle, markerstyle, etc.
     :return: the desired plot (not shown, use plt.show() after)
@@ -49,7 +50,14 @@ def quick_plot(ax, x, y, labels=None, title=None, xlabel=None, ylabel=None, ylim
         ax.tick_params(axis="y", labelcolor=twin)
         ax.yaxis.label.set_color(twin)
         ax.spines['right'].set_color(twin)
-        ax.legend(loc='lower right', labelcolor='linecolor')
+        ax.legend(loc='lower right', labelcolor=twin)
+
+
+def check_dir(path):
+    try:
+        os.makedirs(path)
+    except FileExistsError:
+        pass
 
 
 def _determine_apodization(x, pixel_samples_frac, pixel_max_npoints):
@@ -154,7 +162,7 @@ def draw_photons(convol_wave,
         logging.info(f'Limited to a maximum of {limit_to} photons per pixel.')
     else:
         N = np.random.poisson(total_photons.value.astype(int))
-        logging.info(f'Max # of photons per pixel: {total_photons.value.max():.2f}.')
+        logging.info(f'Max # of photons in any pixel: {total_photons.value.max():.2f}.')
 
     cdf /= total_photons
 
@@ -203,7 +211,7 @@ def lmfit_gaussians(params, x, y, n_gauss):
     :return: residual between sum of all Gaussian functions on the order axis and actual data
     """
     mu, sig, A = param_to_array(params, n_gauss, post_opt=False)
-    return np.sum(gauss(x[:, None], mu, sig, A), axis=0) - y
+    return np.sum(gauss(x, mu[:, None], sig[:, None], A[:, None]), axis=1) - y
 
 
 def _quad_formula(a, b, c):
@@ -267,10 +275,10 @@ class Engine:
         :param spectra: flux
         :return: convolved-blazed spectrum
         """
-        blazed_spectrum, masked_waves, masked_blaze = self.blaze(wave, spectra)
+        blazed_spectrum, _, _ = self.blaze(wave, spectra)
         pix_leftedge = self.spectrograph.pixel_center_wavelengths(edge='left').to(u.nm).value
         logging.info('Converted blazed spectrum to pixel space.')
-        return [self.lambda_to_pixel_space(masked_waves[i], masked_blaze[i], pix_leftedge[i])
+        return [self.lambda_to_pixel_space(wave, blazed_spectrum[i], pix_leftedge[i])
                 for i in range(self.spectrograph.nord)]
 
     def optically_broaden(self, wave, flux: u.Quantity, axis: int = 1):
@@ -548,19 +556,11 @@ class Engine:
                       for j in range(self.spectrograph.detector.n_pixels - 1)]
         last = [flux_int.integral(leftedge[-1], leftedge[-1] + (leftedge[-1] - leftedge[-2]))]
         return integrated + last
-        # if pixel == self.spectrograph.detector.n_pixels - 1:
-        #    pixel -= 1
-        # if pix_leftedge[order,pixel] > minwave.value:
-        #    idx_i = np.where(np.abs((array_wave.to(u.nm).value - pix_leftedge[order,pixel]) < 1e-3))[0][0]
-        # else:
-        ###if pix_leftedge[order, pixel+1] > minwave.value:
-        #    idx_f = np.where(np.abs((array_wave.to(u.nm).value - pix_leftedge[order, pixel + 1]) < 1e-3))[0][0]
-        #    return np.sum(array[idx_i:idx_f].to(u.photlam)) * (array_wave[2] - array_wave[1])
-        # else:
-        #   return 0*u.photlam*u.nm
 
     def open_table(self, resid_map, table):
         """
+        :param resid_map: resonator ID to separate photons
+        :param table: the photon table to be sorted
         :return: wavelengths for each photon divided into resIDs (pixels)
         """
         file = pt.Photontable(table)
@@ -571,10 +571,16 @@ class Engine:
         return photons_pixel
 
     def _get_params(self, pixel, max_phot, n_gauss):
+        """
+        :param pixel: pixel
+        :param max_phot: maximum # of photons in any pixel
+        :param n_gauss: number of Gaussians being fit
+        :return: Parameter class object containing parameters with bounds and guesses
+        """
         params = Parameters()
-        s = 1 if n_gauss == 4 else 0
-        mus = self.spectrograph.pixel_center_wavelengths()[s:, pixel].to(u.nm).value
-        sigs = self.spectrograph.sigma_mkid_pixel()[s:, pixel].to(u.nm).value
+        #s = 1 if n_gauss == self.spectrograph.nord-1 else 0
+        mus = self.spectrograph.pixel_center_wavelengths()[:n_gauss, pixel].to(u.nm).value[::-1]
+        sigs = self.spectrograph.sigma_mkid_pixel()[:n_gauss, pixel].to(u.nm).value[::-1]
         As = [max_phot for i in range(n_gauss)]
         for i in range(n_gauss):
             params.add(f'mu_{i}', value=mus[i], min=mus[i] - sigs[i], max=mus[i] + sigs[i], vary=True)
@@ -583,6 +589,13 @@ class Engine:
         return params
 
     def fit_gaussians(self, pixel: int, photons, n_gauss: int, plot=False):
+        """
+        :param pixel: pixel
+        :param photons: list of photon wavelengths
+        :param n_gauss: number of Gaussian functions to fit
+        :param plot: True if viewing the fit for the pixel
+        :return: optimized and guess parameters for mu, sigma, and amplitude
+        """
         # TODO update binning to be more robust
         #bins = _n_bins(len(photons))
         counts, edges = np.histogram(photons, bins=int(5*len(photons)**(1/3)))  # binning photons for shape fitting
@@ -592,14 +605,16 @@ class Engine:
         opt_params = minimize(lmfit_gaussians, params, args=(centers, counts, n_gauss), method='least_squares')
 
         if plot:
+            s = 1 if n_gauss == self.spectrograph.nord-1 else 0
             fig, ax = plt.subplots(1, 1)
-            ax.grid()
-            quick_plot(ax, centers, counts, labels=['Data'])
-            quick_plot(ax, [np.linspace(
-                centers[0], centers[-1], 10000)] * 5, gauss(np.linspace(centers[0], centers[-1], 10000), mu, sig, A),
-                       labels=[f'Order {i}' for i in self.spectrograph.orders], title=f'Fit for Pixel {pixel}',
+            quick_plot(ax, [centers], [counts], labels=['Data'], first=True, color='k')
+            ax.fill_between(centers, 0, counts, color='k')
+            x = [np.linspace(centers[0], centers[-1], 10000) for i in range(n_gauss)]
+            mu, sig, A = param_to_array(opt_params, n_gauss, post_opt=True)
+            quick_plot(ax, x, gauss(x[0], mu[:, None], sig[:, None], A[:, None]).T,
+                       labels=[f'Order {i}' for i in self.spectrograph.orders[::-1][s:]],
+                       title=f'Least-Squares Fit for Pixel {pixel+1}',
                        xlabel='Wavelength (nm)', ylabel='Photon Count')
-            ax.legend()
             plt.show()
 
         return opt_params, params
