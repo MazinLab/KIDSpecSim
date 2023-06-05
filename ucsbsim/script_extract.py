@@ -17,7 +17,13 @@ from synphot import SourceSpectrum
 
 """
 Extraction of an observation spectrum using the MSF products. The steps are:
--
+-Open the calibration products: order bin edges and covariance matrices.
+-Open the observation photon table and bin for orders.
+-Calculate the errors on each point by multiplying the covariance matrices through the spectrum.
+-Divide out the blaze function from the resulting spectrum and +/- errors and save to FITS.
+-Show final spectrum as plot.
+
+Potentially make spectrograph properties a file that is automatically imported from previous simulations?
 """
 
 if __name__ == '__main__':
@@ -30,7 +36,8 @@ if __name__ == '__main__':
     # ========================================================================
     # Assign spectrograph properties below if different from defaults. Check the module spectrograph for syntax.
     # ========================================================================
-    # R0 = 8, etc.
+    # R0 = 8
+    # etc.
 
     # ========================================================================
     # Spectrum extraction settings:
