@@ -4,7 +4,7 @@ import scipy.interpolate as interp
 from scipy import optimize
 import scipy
 import astropy.units as u
-from astropy.table import Table, QTable
+from astropy.table import QTable
 import time
 from datetime import datetime as dt
 import logging
@@ -38,9 +38,14 @@ if __name__ == '__main__':
     tic = time.time()  # recording start time for script
 
     # ========================================================================
-    # Constants whose need may change in the future:
+    # Constants which may or may not be needed in the future:
     # ========================================================================
-    # R0 = 8, etc.
+
+    # ========================================================================
+    # Assign spectrograph properties below if different from defaults. Check the module spectrograph for syntax.
+    # ========================================================================
+    # R0 = 8
+    # etc.
 
     # ========================================================================
     # MSF extraction settings:
@@ -52,7 +57,7 @@ if __name__ == '__main__':
     # MSF extraction begins:
     # ========================================================================
     now = dt.now()
-    logging.basicConfig(filename=f'logging/msf_{now.strftime("%Y%m%d_%H%M%S")}.log',
+    logging.basicConfig(filename=f'output_files/{type_of_spectra}/logging/msf_{now.strftime("%Y%m%d_%H%M%S")}.log',
                         format='%(levelname)s:%(message)s', level=logging.INFO)
     logging.info(f"The process of recovering the MKID Spread Function from the {type_of_spectra} "
                  f"calibration spectrum is recorded."
@@ -122,13 +127,13 @@ if __name__ == '__main__':
 
     photon_bins[photon_bins == 0] = np.where(photon_bins == 0)[0]  # ensure bins increase trivially if initial 0s
 
-    logging.info(f"Finished fitting all {npix+1} pixels. There are "
+    logging.info(f"Finished fitting all {npix} pixels. There are "
                  f"{np.sum(flagger == 1)}/{np.sum(flagger == 2)}/{np.sum(flagger == 3)} "
                  f"pixels flagged for means/sigmas/both being within 5% of boundaries.")
 
     # save bins and covariance to FITS file format:
     # assortment of spectrograph properties TODO figure out what else to add
-    meta = dict_of(R0, eng.spectrograph.detector.waveR0, npix, eng.spectrograph.orders, type_of_spectra)
+    meta = dict_of(R0, eng.spectrograph.detector.waveR0.value, npix, nord, type_of_spectra)
     bins = QTable(list(photon_bins * u.nm), names=[f'{i}' for i in range(nord+1)],
                   meta={'name': 'Bin Edges for Pixel', **meta})
     bins_file = f'output_files/calibration/msf_bins_R0{R0}.fits'
