@@ -6,58 +6,12 @@ import scipy.ndimage as ndi
 import astropy.units as u
 import matplotlib.pyplot as plt
 import logging
-import os
 
 import sortarray
-from lmfit import Parameters, minimize, fit_report
+from lmfit import Parameters, minimize
 from mkidpipeline import photontable as pt
 
 u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # photon flux per wavelength
-
-
-def quick_plot(ax, x, y, labels=None, title=None, xlabel=None, ylabel=None, ylim=None, twin=None, first=False, **kwargs):
-    """
-    Condenses matplotlib plotting into one line (generally).
-    :param ax: axes for plotting
-    :param x: x axis data
-    :param y: y axis data, dimensions must match x
-    :param labels: labels for each set of data
-    :param title: title of subplot
-    :param xlabel: x axis label
-    :param ylabel: y axis label
-    :param ylim: y axis upper limit (convenient for twin)
-    :param twin: y axis twin color, if any
-    :param first: True if first line for plot, will make grid
-    :param kwargs: color, linestyle, markerstyle, etc.
-    :return: the desired plot (not shown, use plt.show() after)
-    """
-    if first:
-        ax.grid()
-    if labels is None:
-        labels = ['_nolegend_' in range(len(x))]
-    for n, (w, f) in enumerate(zip(x, y)):
-        ax.plot(w, f, label=labels[n], **kwargs)
-    if title is not None:
-        ax.set_title(title)
-    if xlabel is not None:
-        ax.set_xlabel(xlabel)
-    if ylabel is not None:
-        ax.set_ylabel(ylabel)
-    if ylim is not None:
-        ax.set_ylim(top=ylim)
-    ax.legend()
-    if twin is not None:
-        ax.tick_params(axis="y", labelcolor=twin)
-        ax.yaxis.label.set_color(twin)
-        ax.spines['right'].set_color(twin)
-        ax.legend(loc='lower right', labelcolor=twin)
-
-
-def check_dir(path):
-    try:
-        os.makedirs(path)
-    except FileExistsError:
-        pass
 
 
 def _determine_apodization(x, pixel_samples_frac, pixel_max_npoints):
