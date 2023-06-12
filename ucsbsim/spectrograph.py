@@ -5,15 +5,7 @@ import logging
 
 
 class GratingSetup:
-    def __init__(self,
-                 l0: u.Quantity = 800 * u.nm,
-                 m0: int = 5,
-                 m_max: int = 9,
-                 pixel_size: u.Quantity = 20 * u.micron,
-                 npix: int = 2048,
-                 focal_length: u.Quantity = 350 * u.mm,
-                 littrow: bool = True
-                 ):
+    def __init__(self, l0, m0, m_max, pixel_size, npix, focal_length, littrow):
         """
         Simulation of an echelle/echellete grating for spectrometer.
 
@@ -111,11 +103,7 @@ class GratingSetup:
 
 
 class SpectrographSetup:
-    def __init__(self,
-                 grating: GratingSetup,
-                 detector: MKIDDetector,
-                 pixels_per_res_elem: float = 2.5,
-                 ):
+    def __init__(self, grating: GratingSetup, detector: MKIDDetector, pixels_per_res_elem):
         """
         Simulation of a spectrograph.
 
