@@ -7,36 +7,24 @@ from engine import draw_photons
 
 
 class MKIDDetector:
-    def __init__(
-            self,
-            n: int = 2048,
-            pixel_size: u.Quantity = 20 * u.micron,
-            R0: float = 15,
-            l0: u.Quantity = 800 * u.nm,
-            R0_type: str = 'from_file'
-    ):
+    def __init__(self, n_pix, pixel_size, design_R0, l0, R0s, resid_map):
         """
         Simulation of an MKID detector array.
-
-        :param n: number of pixels in linear array
+        :param n_pix: number of pixels in linear array
         :param pixel_size: physical size of each pixel in astropy units
         :param R0: spectral resolution of the longest wavelength in spectrometer range
         :param l0: longest wavelength in spectrometer range in astropy units
-        :param R0_type: where to obtain array of R0s for each pixel, can be:
-            'from_file' - load a file containing random R0s named 'generated_R0s.csv'
-            'fixed' - keep all R0s for all pixels fixed to the supplied R0
-            'generate' - generate a new list of randomized R0s about the given R0
+        :param R0s: array of R0s that deviate slightly from design as expected, None means no deviation
         :return: MKIDDetector class object
         """
-        self.n_pixels = n
+        self.n_pixels = n_pix
         self.pixel_size = pixel_size
         self.length = self.n_pixels * pixel_size
         self.waveR0 = l0
-        self.design_R0 = R0
+        self.design_R0 = design_R0
         self.pixel_indices = np.arange(self.n_pixels, dtype=int)
-        self.R0_type = R0_type
-        self.R0s = None
-        self.resid_map = None
+        self.R0s = R0s
+        self.resid_map = resid_map
 
     def R0(self, pixel: int):
         """
@@ -45,14 +33,13 @@ class MKIDDetector:
         """
         if pixel not in self.pixel_indices:
             raise ValueError(f"Pixel {pixel + 1} not in instantiated detector, max of {self.n_pixels}.")
-        if self.R0_type == 'from_file':
-            with open('generated_R0s.csv') as f:
-                self.R0s = np.loadtxt(f, delimiter=",")
-        elif self.R0_type == 'fixed':
+        if self.R0s is None:
             self.R0s = np.full(self.n_pixels, self.design_R0)
-        elif self.R0_type == 'generate':
-            self.R0s = np.random.uniform(.85, 1.15, size=self.n_pixels) * self.design_R0
-            np.savetxt('generated_R0s.csv', self.R0s, delimiter=',')
+        else:
+            if len(self.R0s) != self.n_pixels:
+                raise ValueError('The number of R0s does not match number of pixels.')
+            elif np.abs(np.average(self.R0s)-self.design_R0) > 1:
+                raise ValueError('The user-supplied array of R0s and design R0 do not match.')
         return self.R0s[pixel.astype(int)]
 
     def mkid_constant(self, pixel: int):
@@ -107,7 +94,7 @@ class MKIDDetector:
                      f"\n\tSaturation wavelength: {SATURATION_WAVELENGTH_NM}"
                      f"\n\tDeadtime: {DEADTIME}")
 
-        if self.resid_map is None:
+        if self.resid_map is None:  # TODO check if shape of resid matches npix
             self.resid_map = np.arange(pixel_count.size, dtype=int) * 10 + 100  # something arbitrary
 
         photons = np.recarray(total_photons, dtype=PhotonNumpyType)
@@ -116,8 +103,6 @@ class MKIDDetector:
         observed = 0
         total_merged = 0
         total_missed = []
-
-        logging.info(f"Getting arrival times and wavelengths for {total_photons} photons.")
 
         for pixel, n in enumerate(pixel_count):
             if not n:
@@ -129,18 +114,17 @@ class MKIDDetector:
             a_times = a_times[arrival_order]
             energies = 1 / arrival_wavelengths[pixel].to(u.um)[arrival_order]
 
-            if self.R0_type != 'generate':
-                # merge photon energies within 1us
-                to_merge = (np.diff(a_times) < merge_time_window_s).nonzero()[0]
-                if to_merge.size:
-                    cluster_starts = to_merge[np.concatenate(([0], (np.diff(to_merge) > 1).nonzero()[0] + 1))]
-                    cluser_last = to_merge[(np.diff(to_merge) > 1).nonzero()[0]] + 1
-                    cluser_last = np.append(cluser_last, to_merge[-1] + 1)  # inclusive
-                    for start, stop in zip(cluster_starts, cluser_last):
-                        merge = slice(start + 1, stop + 1)
-                        energies[start] += energies[merge].sum()
-                        energies[merge] = np.nan
-                        total_merged += energies[merge].size
+            # merge photon energies within 1us
+            to_merge = (np.diff(a_times) < merge_time_window_s).nonzero()[0]
+            if to_merge.size:
+                cluster_starts = to_merge[np.concatenate(([0], (np.diff(to_merge) > 1).nonzero()[0] + 1))]
+                cluser_last = to_merge[(np.diff(to_merge) > 1).nonzero()[0]] + 1
+                cluser_last = np.append(cluser_last, to_merge[-1] + 1)  # inclusive
+                for start, stop in zip(cluster_starts, cluser_last):
+                    merge = slice(start + 1, stop + 1)
+                    energies[start] += energies[merge].sum()
+                    energies[merge] = np.nan
+                    total_merged += energies[merge].size
 
             # TODO for LANL we determined the energies via the R AFTER coincidence
             #  binning. That isn't possible with his approach (as far as I can tell)
@@ -168,7 +152,7 @@ class MKIDDetector:
             photons.resID[sl] = self.resid_map[pixel]
             observed += a_times.size
 
-        logging.info(f'Completed detector observation sequence.'
+        logging.info(f'Completed detector observation sequence. '
                      f'{total_merged} photons had their energies merged, '
                      f'{np.sum(total_missed)} photons were missed due to deadtime,'
                      f'and {observed} photons were observed.')
