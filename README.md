@@ -26,36 +26,21 @@ In a command line terminal, run `conda activate pipeline`.
 
 `python ../setup.py build_ext --inplace`
 
-Open `script_simulate.py` and ensure you have the following simulation properties:
+Now that everything is ready, run the following calibration settings:
 
-`calibration = True`
+`python script_simulate.py 'path/to/calibration/output_file.h5' 'path/to/R0s_file.csv' 'blackbody' --littrow`
 
-`full_convol = True`
-
-`type_of_spectra, temp = 'blackbody', 4300`
-
-`pixel_lim = 50000`
-
-`exptime = 500 * u.s`
-
-Save and run file. This creates a blackbody calibration spectrum. A plot will show so you can
+This creates a blackbody calibration spectrum. A plot will show so you can
 verify that the simulation is functioning properly.
 
-Now, change the simulation settings to reflect:
+Now, run the following observation settings:
 
-`calibration = False`
+`python script_simulate.py 'path/to/observation/output_file.h5' 'path/to/R0s_file.csv' 'phoenix' --atmo_bandpass --filter_bandpass --tele_bandpass --littrow`
 
-`full_convol = True`
+This creates a Phoenix model observation spectrum.
 
-`type_of_spectra, temp = 'phoenix', 4300`
-
-`pixel_lim = 10000`
-
-`exptime = 60 * u.s`
-
-Save and run file. This creates a Phoenix model observation spectrum.
-
-Open `script_msf.py` and ensure you have the following MSF extraction settings:
+## DO NOT RUN FROM THIS POINT ON, NEEDS WORK, above is ok.
+Run the following MSF extraction settings:
 
 `type_of_spectra = 'blackbody'`
 
