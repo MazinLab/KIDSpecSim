@@ -68,31 +68,19 @@ def FilterTransmission(min=400*u.nm, max=800*u.nm):
     return SpectralElement(Box1D, amplitude=1, x_0=center, width=wid)
 
 
-def apply_bandpass(spectrum, cal=False, min=400*u.nm, max=800*u.nm):
+def apply_bandpass(spectrum, bandpass=None):
     """
     :param spectrum: spectrum to apply bandpasses to
-    :param cal: if spectrum is for calibration, no bandpasses will be applied
-    :param min: min wavelength for filter and clipping
-    :param max: max wavelength for filter and clipping
+    :param bandpass: the filter to be applied, as list
     :return: original spectrum multiplied with bandpasses
     """
     spectrum = [spectrum]
-    if cal:
-        w = np.linspace(300, 1000, 1400000) * u.nm
-        t = np.ones(1400000) * u.dimensionless_unscaled
-        ones = Spectrum1D(spectral_axis=w, flux=t)
-        spectrum[0] *= SpectralElement.from_spectrum1d(ones)
-        logging.info('Calibration spectrum was not multiplied with bandpasses.')
-        return clip_spectrum(spectrum[0], min, max)
-    else:
-        bandpasses = [AtmosphericTransmission(), TelescopeTransmission(), FilterTransmission(min, max)]
-        for i, s in enumerate(spectrum):
-            for b in bandpasses:
-                s *= b
-            spectrum[i] = s
-        logging.info('Multipled spectrum with atmospheric transmission, telescope transmission,'
-                     f'and {min} to {max} filter bandpass.')
-        return clip_spectrum(spectrum[0], min, max)
+    for i, s in enumerate(spectrum):
+        for b in bandpass:
+            s *= b
+        spectrum[i] = s
+    logging.info(f'Multipled spectrum with given bandpasses.')
+    return spectrum[0]
 
 
 def PhoenixModel(teff: float, feh=0, logg=4.8, desired_magnitude=None):
@@ -150,14 +138,13 @@ def get_spectrum(spectrum_type: str, teff=None, min=None, max=None):
         raise ValueError("Only 'blackbody', 'phoenix', or 'delta' are supported for spectrum_type.")
 
 
-def clip_spectrum(x, min, max):
+def clip_spectrum(x, clip_range):
     """
     :param x: SourceSpectrum object containing desired spectrum
-    :param min: shorter wavelength edge
-    :param max: longer wavelength edge
+    :param tuple clip_range: shorter/longer wavelength edge
     :return: clipped out SourceSpectrum instead of setting fluxden to 0, different from FilterTransmission
     """
-    mask = (x.waveset >= min) & (x.waveset <= max)
+    mask = (x.waveset >= clip_range[0]) & (x.waveset <= clip_range[-1])
     w = x.waveset[mask]
-    logging.info(f"Clipped spectrum from {min} to {max}.")
+    logging.info(f"Clipped spectrum to{clip_range}.")
     return SourceSpectrum.from_spectrum1d(Spectrum1D(spectral_axis=w, flux=x(w)))
