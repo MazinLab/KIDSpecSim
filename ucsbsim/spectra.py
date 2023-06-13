@@ -6,7 +6,7 @@ import logging
 
 from astropy import units as u
 from specutils import Spectrum1D
-from synphot import SpectralElement, SourceSpectrum
+from synphot import SpectralElement, SourceSpectrum, BaseUnitlessSpectrum
 from synphot.models import Box1D, BlackBodyNorm1D
 
 _atm = None
@@ -43,7 +43,7 @@ def AtmosphericTransmission():
     """
     w, t = _get_atm()
     spec = Spectrum1D(spectral_axis=w, flux=t)
-    return SpectralElement.from_spectrum1d(spec)
+    return BaseUnitlessSpectrum(SpectralElement.from_spectrum1d(spec))
 
 
 def TelescopeTransmission(reflectivity: float = .9):
@@ -54,7 +54,7 @@ def TelescopeTransmission(reflectivity: float = .9):
     w = np.linspace(300, 1500, 10000) * u.nm
     t = np.linspace(1, .95, 10000) * reflectivity * u.dimensionless_unscaled
     spec = Spectrum1D(spectral_axis=w, flux=t)
-    return SpectralElement.from_spectrum1d(spec)
+    return BaseUnitlessSpectrum(SpectralElement.from_spectrum1d(spec))
 
 
 def FilterTransmission(min=400*u.nm, max=800*u.nm):
@@ -65,22 +65,19 @@ def FilterTransmission(min=400*u.nm, max=800*u.nm):
     """
     wid = max - min
     center = (max + min) / 2
-    return SpectralElement(Box1D, amplitude=1, x_0=center, width=wid)
+    return BaseUnitlessSpectrum(SpectralElement(Box1D, amplitude=1, x_0=center, width=wid))
 
 
-def apply_bandpass(spectrum, bandpass=None):
+def apply_bandpass(spectrum, bandpass):
     """
     :param spectrum: spectrum to apply bandpasses to
-    :param bandpass: the filter to be applied, as list
+    :param bandpass: the filter(s) to be applied, as list
     :return: original spectrum multiplied with bandpasses
     """
-    spectrum = [spectrum]
-    for i, s in enumerate(spectrum):
-        for b in bandpass:
-            s *= b
-        spectrum[i] = s
+    for b in bandpass:
+        spectrum *= b
     logging.info(f'Multipled spectrum with given bandpasses.')
-    return spectrum[0]
+    return spectrum
 
 
 def PhoenixModel(teff: float, feh=0, logg=4.8, desired_magnitude=None):
