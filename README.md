@@ -4,7 +4,7 @@
 
 This package comprises three main scripts (and their supporting modules) that may act in series or separately:
 1) script_simulate.py reduces a model spectrum to a photon table similar to how the MKID spectrometer will.
-Inside the script, the spectrum type, photon limit per pixel, and other properties may be tailored.
+In the command line arguments, essentially all spectrograph properties may be tailored.
 The option to generate a calibration spectrum is much like an on-sky source minus the atmospheric and telescopic
 bandpasses.
 2) script_msf.py loads either a real or simulated calibration photon table (specific file syntax is used) and extracts
@@ -20,38 +20,44 @@ on the counts.
 Note: an MKIDPipeline enviroment is required to run these files without issue.
 
 After cloning the repository, the Cython files need to be compiled.
-In a command line terminal, run `conda activate pipeline`.
+In a command line terminal in the folder where KIDSpecSim lives, run the following lines: 
 
-`cd` into `KIDSpecSim/ucsbsim/` and run:
-
+`conda activate pipeline`
+`cd KIDSpecSim/ucsbsim/`
 `python ../setup.py build_ext --inplace`
 
-Now that everything is ready, run the following calibration settings:
+This sets up the Cython files needed to run some of the modules. 
 
-`python script_simulate.py 'path/to/calibration/output_file.h5' 'path/to/R0s_file.csv' 'blackbody' --littrow`
+#### Spectrum simulation steps:
+Now that everything is ready, run the following calibration settings with desired path and R0s file name:
 
-This creates a blackbody calibration spectrum. A plot will show so you can
+`python script_simulate.py 'path/to/outdir' 'path/to/R0s_file.csv' 'blackbody' --filter_bandpass --littrow`
+
+Note: If there is no R0s_file, one will be generated mid-script (it's not a problem to not have one!), 
+so ensure proper syntax is used if you have one.
+This creates a blackbody calibration spectrum. A plot will show and save to file so you can 
 verify that the simulation is functioning properly.
 
-Now, run the following observation settings:
+Now, run the following observation settings with desired path and R0s file name:
 
-`python script_simulate.py 'path/to/observation/output_file.h5' 'path/to/R0s_file.csv' 'phoenix' --atmo_bandpass --filter_bandpass --tele_bandpass --littrow`
+`python script_simulate.py 'path/to/outdir' 'path/to/R0s_file.csv' 'phoenix' --atmo_bandpass --filter_bandpass --tele_bandpass --littrow`
 
 This creates a Phoenix model observation spectrum.
 
-## DO NOT RUN FROM THIS POINT ON, NEEDS WORK, above is ok.
-Run the following MSF extraction settings:
+#### MKID Spread Function steps:
+Run the following MSF extraction settings, making sure to use the **calibration** file generated above:
 
-`type_of_spectra = 'blackbody'`
+`python script_msf.py 'path/to/outdir/calibration_file.h5' 'path/to/R0s_file.csv'`
 
-`plot_fits = False`
+This generates the MSF products for use in spectrum extraction.
+A few comprehensive plots will show and save so you can verify the goodness of fit.
 
-Save and run file. This generates the MSF products for use in spectrum extraction.
-A few comprehensive plots will show so you can verify the goodness of fit.
 
-Open `script_extract.py` and ensure you have the following extraction settings:
+## NOT FINISHED FROM THIS POINT ON, DO NOT RUN (above ok)
+#### Spectrum extraction steps:
+Run the following extraction settings:
 
-`type_of_spectra = 'phoenix'`
+`python script_extract.py`
 
 Save and run file. This generates the extracted spectrum with error band.
 
