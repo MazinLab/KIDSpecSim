@@ -113,14 +113,14 @@ def draw_photons(convol_wave,
         # crappy limit to 1000 photons per pixel for testing
         N = np.random.poisson(total_photons_ltd)
         # Now assume that you want N photons as a Poisson random number for each pixel
-        logging.info(f'Limited to a maximum of {limit_to} photons per pixel.')
+        logging.info(f'\tLimited to a maximum of {limit_to} photons per pixel.')
     else:
         N = np.random.poisson(total_photons.value.astype(int))
-        logging.info(f'Max # of photons in any pixel: {total_photons.value.max():.2f}.')
+        logging.info(f'\tMax # of photons in any pixel: {total_photons.value.max():.2f}.')
 
     cdf /= total_photons
 
-    logging.info("Beginning random draw for photon wavelengths (from CDF) and arrival times (from uniform random).")
+    logging.info("\tBeginning random draw for photon wavelengths (from CDF) and arrival times (from uniform random).")
     # Decide on wavelengths and times
     l_photons, t_photons = [], []
     for i, (x, n) in enumerate(zip(cdf.T, N)):
@@ -223,18 +223,6 @@ class Engine:
         logging.info('Multiplied spectrum with blaze efficiencies.')
         return blazed_spectrum, masked_waves, masked_blaze
 
-    def pixelspace_blaze(self, wave, spectra):
-        """
-        :param wave: wavelengths
-        :param spectra: flux
-        :return: convolved-blazed spectrum
-        """
-        blazed_spectrum, _, _ = self.blaze(wave, spectra)
-        pix_leftedge = self.spectrograph.pixel_center_wavelengths(edge='left').to(u.nm).value
-        logging.info('Converted blazed spectrum to pixel space.')
-        return [self.lambda_to_pixel_space(wave, blazed_spectrum[i], pix_leftedge[i])
-                for i in range(self.spectrograph.nord)]
-
     def optically_broaden(self, wave, flux: u.Quantity, axis: int = 1):
         """
         :param wave: wavelength array
@@ -265,6 +253,7 @@ class Engine:
         return ndi.gaussian_filter1d(flux, sample_width, axis=axis) * flux.unit
 
     def build_mkid_kernel(self, n_sigma: float, sampling):
+        # TODO get rid of 2.355 somehow
         """
         :param n_sigma: number of sigma to include in MKID kernel
         :param sampling: smallest sample size
@@ -279,6 +268,7 @@ class Engine:
         # takes standev not FWHM, width/sampling is the dimensionless standev
 
     def mkid_kernel_waves(self, n_points, n_sigma=3, oversampling=10):
+        # TODO get rid of 2.355 somehow
         """
         :param n_points: number of points in kernel
         :param n_sigma: number of sigma to either side of mean
@@ -293,110 +283,6 @@ class Engine:
         return np.array([[np.linspace(-n_sigma * (pixel_rescale[i, j] * dl_mkid_max / sampling).value / 2.355,
                                       n_sigma * (pixel_rescale[i, j] * dl_mkid_max / sampling).value / 2.355,
                                       n_points) for j in range(npix)] for i in range(nord)])
-
-    def determine_mkid_convolution_sampling(self, oversampling: float = 10):
-        """
-        TODO obsolete, remove once all debugged.
-        :param oversampling: factor by which to oversample the smallest change in wavelength in any pixel
-        :return: tuple of various detector properties
-
-        Each MKID has its own spectral resolution, which we like to approximate as a Gaussian with width depending
-        on wavelength. The spectrograph is sending only certain wavelengths in each order to each pixel.
-        This incident spectrum can then be convolved with a Gaussian of varying width and the resulting distribution
-        sampled to find "seen" wavelengths. If the variation in R_MKID over a single pixel is small then this can be
-        approximated as a convolution with a per-order Gaussian and the results summed.
-
-        kernel width is function of pixel, order
-        data is a function of pixel, order
-
-        With say an R_MKID_800nm=15 we would have about a 55nm FWHM and targeting a spectral resolution of 3400
-        w/2.5 pix dpix ~ 0.05 nm.
-        Well sampling (say 10 samples per pixel) would imply then a 3sigma kernel of about 33000 elements there would
-        be so the kernel array would be [norder, npixel, 3300*osamp] or about 1.25GB for a float and 10x osamp.
-        This would need to be convolved with the data which would be [norder, npixel, osamp] (negligible)
-
-        However here we can almost certainly play with the sampling to do this more efficiently. By adopting a
-        nonuniform sampling (e.g. by allowing dl to be different for each pixel) we are effectively scaling the width
-        of the applied Gaussian, which could then be a single oversampled Gaussian out to some nsigma in normalized
-        coordinates.
-
-        In the spectrograph the sampling at a given pixel flows from the spectrograph design
-        dl_pixel = Dbeta_subtended*lambda(pixel)/2/tan(beta(pixel))=Dbeta_subtended*sigma_grating*cos(beta(pixel))/m
-        which by design will be ~ FSR/npix for the last order at the center beta will vary about 6 degrees over the
-        order and which will translate to a <±10% effect for likely grating angles so call the pixel sampling that of
-        the order average which can be found to be ~ l_center_limiting_order/Npix/order about 0.0355 nm to 0.078 nm
-        (for a 400-800 m=5-9 spectrograph).
-        The dl_MKID will be l^2/R0/l0. So we require (2*n_sigma_mkid*l_max^2/R0_min/l0) / min(dl_pixel) * osamp
-        points across the kernel in the worst case.
-        For pixels we want at least osamp samples across the pixel's so that would mean the sampling will need to be
-        at least min(dl_pixel)/osamp and at most 10*max(dl_pixel)/min(dl_pixel) samples across a pixel
-
-        For the extrema:
-        2*sigma*dl_MKID_800 = 400  # this is the smallest gaussian kernel domain
-        2*sigma*dl_MKID_400 = 67  # R0_max not min, this is the smallest gaussian kernel domain
-        dl_pix_800 = 0.0781   # the maximum change in wavelength across a pixel
-        dl_pix_400 = 0.0373   # l0_center/npix*(1-c_beta*m0/m_max)/m_max  #the minimum change in wavelength across a
-        pixel, note the lower angular width at higher order
-        """
-        spectrograph = self.spectrograph
-        detector = self.spectrograph.detector
-        max_beta_m0 = spectrograph.grating.beta(spectrograph.l0, spectrograph.m0)  # max reflection angle [rad]
-        min_beta_mmax = spectrograph.grating.beta(spectrograph.minimum_wave, spectrograph.m_max)
-        # min reflection angle [rad]
-
-        # The maximum and minimum change in wavelength across a pixel
-        #  NB You can get a crude approximation with the following where c_beta is the fractional change in beta across the order
-        #     e.g. for 6 degrees with a central angle of 45 about .1 in the minimum order
-        #     dl_pix_min_wave = spectrograph.central_wave(m0)/npix*(1-c_beta*m0/m_max)/m_max
-        #     dl_pix_max_wave = spectrograph.central_wave(m0)/npix*(1+c_beta)/m0
-        dl_pix_max_wave = spectrograph.pixel_scale / spectrograph.grating.angular_dispersion(spectrograph.m0,
-                                                                                             max_beta_m0)
-        # angles per pix/(dbeta/dlambda) [rad/(rad/nm)] = [nm]
-        dl_pix_min_wave = spectrograph.pixel_scale / spectrograph.grating.angular_dispersion(spectrograph.m_max,
-                                                                                             min_beta_mmax)  # ^
-
-        # Need to compute the worst case kernel width which will be towards the long wavelength end in the lowest order
-        # wave_ord0=np.linspace(-.5,.5, num=osamp*detector.n_pixels)*spectrograph.fsr(m0)+spectrograph.central_wave(m0)
-        # dl_mkid_max = (wave_ord0**2/detector.mkid_constant(spectrograph.wavelength_to_pixel(wave_ord0))).max()
-        dl_mkid_max = (spectrograph.l0 ** 2 / detector.mkid_constant(detector.pixel_indices)).max()
-        # largest MKID resolution width is ~ l0/R0 * 1.15 ~ 63 nm, where l0 is 800 nm and R0 is 15.
-        sampling = dl_pix_min_wave / oversampling
-        # sampling rate is based on min change in wavelength across pixel divided by osamp rate [~ 0.004nm]
-
-        # pixel wavelength centers (nord, npixel)
-        # linear array for lowest order, then broadcast andscale via grating equation i.e. m/m'
-
-        # lambda_pixel = (np.linspace(-.5, .5, num=detector.n_pixels) * spectrograph.fsr(m0) +
-        #                 spectrograph.central_wave(m0)) * (m0/spectrograph.orders)[:,None]
-        # lambda_pixel_pad1 = ((np.linspace(-.5,.5, num=detector.n_pixels+1)-1/detector.n_pixels/2) *
-        #                       spectrograph.fsr(m0) + spectrograph.central_wave(m0)) * (m0/spectrograph.orders)[:,None]
-        # dl_pixel = np.diff(lambda_pixel_pad1, axis=1)  #dl spectrograph subtended by pixel
-
-        lambda_pixel = spectrograph.pixel_center_wavelengths()  # wavelengths given halfway through each pixel [nm]
-        dl_pixel = spectrograph.pixel_scale / spectrograph.angular_dispersion()  # change in wave for each pixel [nm]
-        dl_mkid_pixel = detector.mkid_resolution_width(lambda_pixel, detector.pixel_indices)
-        # MKID resolution width for each wavelength
-
-        # Each pixel width is some fraction of the kernel's sigma, to handle the stretching properly we need to make
-        # sure the correct number of samples are used for the pixel flux. dl_mkid_max/sampling points is mkid sigma
-        # so a pixel of dl_pixel width with a mkid sigma of dl_mkid_pixel has dl_mkid_max/sampling points in
-        # dl_mkid_pixel so `dl_pixel` nanometers corresponds to dl_pixel/dl_mkid_pixel * dl_mkid_max/sampling points
-        # so the sampling of that pixel is dl_mkid_pixel*sampling/dl_mkid_max
-        # pixel_samples = dl_pixel/dl_mkid_pixel * dl_mkid_max/sampling
-        pixel_rescale = dl_mkid_pixel * sampling / dl_mkid_max
-        # rescaled sampling size in wavelength [nm] for each pixel/order
-
-        pixel_samples_frac = (dl_pixel / pixel_rescale).si.value
-        # new number of samples for each pixel (min ~18, max ~66)
-        pixel_max_npoints = np.ceil(pixel_samples_frac.max()).astype(int)
-        # max number of samples for any pixel (will use for all)
-        if not pixel_max_npoints % 2:  # ensure there is a point at the pixel center
-            pixel_max_npoints += 1
-
-        print(f"\tDetermined MKID convolution sampling rate, from {int(pixel_samples_frac.min())} up to "
-              f"{pixel_max_npoints.max()} points per pixel.")
-        return (pixel_samples_frac, pixel_max_npoints, pixel_rescale, dl_pixel, lambda_pixel,
-                dl_mkid_max, sampling)
 
     def convolve_mkid_response(self,
                                wave,
@@ -468,35 +354,6 @@ class Engine:
 
         return result_wave, result
 
-    def multiply_mkid_response(self, wave, spectral_fluxden, oversampling: float = 10, n_sigma_mkid: float = 3):
-        """
-        TODO obsolete, remove once all debugged.
-        :param wave: wavelength array
-        :param spectral_fluxden: flux density array
-        :param oversampling: factor by which to oversample the smallest extent pixel
-        :param n_sigma_mkid: number of sigma to use in kernel
-        :return: instead of convolving the MKID response just multiply it by the average flux density in the pixel
-        """
-        spectral_fluxden = spectral_fluxden.to(u.ph / u.cm ** 2 / u.s / u.nm)
-        flux = np.zeros(self.spectrograph.dl_pixel().shape)
-        for i, bs in enumerate(spectral_fluxden):
-            specinterp = interp.interp1d(wave.to('nm'), bs, fill_value=0, bounds_error=False, copy=False)
-            flux[i, :] = specinterp(self.spectrograph.pixel_center_wavelengths()[i, :].to('nm'))
-
-        mkid_kernel = self.build_mkid_kernel(n_sigma_mkid, self.spectrograph.sampling(oversampling))  # returns:
-        # a normalized-to-one-at-peak Gaussian is divided into tiny sections as wide as the sampling (dl_pix_min/10)
-
-        result = flux * spectral_fluxden.unit.decompose() * mkid_kernel[:, None, None]
-
-        # Compute the wavelengths for the output, converting back to the original sampling, cleverness is done
-        result_wave = (np.arange(result.shape[0]) - result.shape[0] // 2)[:, None, None] * \
-                      self.spectrograph.pixel_rescale[None, ...] + self.spectrograph.pixel_center_wavelengths()
-
-        result *= self.spectrograph.pixel_rescale[None, ...]
-        print("Conducted simplified 'convolution' with MKID response, "
-              "multiplied spectrum with average pixel flux density.")
-        return result_wave, result, mkid_kernel
-
     def lambda_to_pixel_space(self, array_wave, array, leftedge):
         """
         Conducts a direct integration of the fluxden on the wavelength scale to convert to pixel space.
@@ -510,19 +367,6 @@ class Engine:
                       for j in range(self.spectrograph.detector.n_pixels - 1)]
         last = [flux_int.integral(leftedge[-1], leftedge[-1] + (leftedge[-1] - leftedge[-2]))]
         return integrated + last
-
-    def open_table(self, resid_map, table):
-        """
-        :param resid_map: resonator ID to separate photons
-        :param table: the photon table to be sorted
-        :return: wavelengths for each photon divided into resIDs (pixels)
-        """
-        file = pt.Photontable(table)
-        waves = file.query(column='wavelength')
-        resID = file.query(column='resID')
-        idx = [np.where(resID == resid_map[j]) for j in range(self.spectrograph.detector.n_pixels)]
-        photons_pixel = [waves[idx[j]].tolist() for j in range(self.spectrograph.detector.n_pixels)]
-        return photons_pixel
 
     def _get_params(self, pixel, max_phot, n_gauss):
         """
@@ -550,10 +394,9 @@ class Engine:
         :param plot: True if viewing the fit for the pixel
         :return: optimized and guess parameters for mu, sigma, and amplitude
         """
-        # TODO update binning to be more robust
         #bins = _n_bins(len(photons))
         counts, edges = np.histogram(photons, bins=int(5*len(photons)**(1/3)))  # binning photons for shape fitting
-        counts = np.array([float(x) for x in counts])
+        counts = np.array([float(x) for x in counts])  # TODO update binning to be more robust
         centers = edges[:-1] + np.diff(edges) / 2
         params = self._get_params(pixel, np.max(photons), n_gauss)
         opt_params = minimize(lmfit_gaussians, params, args=(centers, counts, n_gauss), method='least_squares')
