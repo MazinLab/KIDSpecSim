@@ -4,21 +4,24 @@ import scipy.interpolate as interp
 from scipy import optimize
 import scipy
 import astropy.units as u
-from astropy.table import QTable
 import time
+import argparse
 from datetime import datetime as dt
 import logging
-from sorcery import dict_of
+import os
 
-from lmfit import Parameters, minimize, fit_report
+from lmfit import Parameters, minimize
 from mkidpipeline import photontable as pt
 from synphot import SourceSpectrum, SpectralElement
 from synphot.models import BlackBodyNorm1D
 from specutils import Spectrum1D
-from engine import Engine, quick_plot
 import engine
+from msf import MKIDSpreadFunction
 from spectrograph import GratingSetup, SpectrographSetup
 from detector import MKIDDetector
+from mkidpipeline.photontable import Photontable
+from plotting import quick_plot
+import tables
 
 """
 Extraction of the MKID Spread Function from calibration spectrum. The steps are:
@@ -37,71 +40,123 @@ Extraction of the MKID Spread Function from calibration spectrum. The steps are:
 if __name__ == '__main__':
     tic = time.time()  # recording start time for script
 
-    # ========================================================================
-    # Constants which may or may not be needed in the future:
-    # ========================================================================
+    # ==================================================================================================================
+    # CONSTANTS
+    # ==================================================================================================================
+    CAL_TABLE = 'output_files/calibration/table_R0{R0}.h5'
 
-    # ========================================================================
-    # Assign spectrograph properties below if different from defaults. Check the module spectrograph for syntax.
-    # ========================================================================
-    # R0 = 8
-    # etc.
+    # ==================================================================================================================
+    # PARSE ARGUMENTS
+    # ==================================================================================================================
+    arg_desc = '''
+               Extract the MSF Spread Function from the calibration spectrum.
+               --------------------------------------------------------------
+               This program loads the calibration photon table and conducts non-linear least squares fits to determine
+               bin edges and the covariance matrix.
+               '''
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=arg_desc)
 
-    # ========================================================================
-    # MSF extraction settings:
-    # ========================================================================
-    type_of_spectra = 'blackbody'
-    plot_fits = False  # warning: will show 2048 plots if True
+    # required MSF args:
+    parser.add_argument('output_dir',
+                        metavar='OUTPUT_DIRECTORY',
+                        help='Directory for the output files (str).')
+    parser.add_argument('cal_table',
+                        metavar='CALIBRATION_PHOTON_TABLE',
+                        help='Directory/name of the calibration photon table.')
 
-    # ========================================================================
-    # MSF extraction begins:
-    # ========================================================================
+    # optional MSF args:
+    parser.add_argument('--plot_results',
+                        action='store_true',
+                        default=False,
+                        help='If passed, indicates that plots showing goodness-of-fit should be shown.')
+
+    # set arguments as variables
+    args = parser.parse_args()
+
+    # ==================================================================================================================
+    # START LOGGING
+    # ==================================================================================================================
     now = dt.now()
-    logging.basicConfig(filename=f'output_files/{type_of_spectra}/logging/msf_{now.strftime("%Y%m%d_%H%M%S")}.log',
+    logging.basicConfig(filename=f'{args.output_dir}/msf_{now.strftime("%Y%m%d_%H%M%S")}.log',
                         format='%(levelname)s:%(message)s', level=logging.INFO)
-    logging.info(f"The process of recovering the MKID Spread Function from the {type_of_spectra} "
-                 f"calibration spectrum is recorded."
+    logging.info("The process of recovering the MKID Spread Function calibration spectrum is recorded."
                  f"\nThe date and time are: {now.strftime('%Y-%m-%d %H:%M:%S')}.")
 
-    # setting up engine and spectrograph, obtaining various needed properties:
-    eng = Engine(SpectrographSetup(GratingSetup(), MKIDDetector()))
-    R0 = eng.spectrograph.detector.design_R0
-    nord = len(eng.spectrograph.orders)
-    npix = eng.spectrograph.detector.n_pixels
-    resid_map = np.arange(npix, dtype=int) * 10 + 100  # TODO replace once known
-    lambda_pixel = eng.spectrograph.pixel_center_wavelengths().to(u.nm)[::-1]
-    sigma_pixel = eng.spectrograph.sigma_mkid_pixel().to(u.nm)[::-1]
-    wave = np.linspace(eng.spectrograph.minimum_wave.value - 100, eng.spectrograph.detector.waveR0.value + 100,
-                       10000) * u.nm
+    # ==================================================================================================================
+    # OPEN PHOTON TABLE AND PULL NECESSARY DATA
+    # ==================================================================================================================
+    pt = Photontable(args.cal_table)
+    sim_parameters = pt.query_header('sim_parameters')
+    R0s_file = sim_parameters['R0s_file']  # TODO make args into some kind of meta data class
+    design_R0 = sim_parameters['design_R0']
+    focal_length = sim_parameters['focal_length']
+    full_convol = sim_parameters['full_convol']
+    l0 = sim_parameters['l0']
+    littrow = sim_parameters['littrow']
+    m0 = sim_parameters['m0']
+    m_max = sim_parameters['m_max']
+    minwave = sim_parameters['minwave']
+    maxwave = sim_parameters['maxwave']
+    npix = sim_parameters['npix']
+    pixel_lim = sim_parameters['pixel_lim']
+    pixel_size = sim_parameters['pixel_size']
+    pixels_per_res_elem = sim_parameters['pixels_per_res_elem']
+    temp = sim_parameters['temp']
+    type_of_spectra = sim_parameters['type_of_spectra']
 
+    resid_map = np.arange(npix, dtype=int) * 10 + 100  # TODO replace once known
+    waves = pt.query(column='wavelength')
+    resID = pt.query(column='resID')
+    idx = [np.where(resID == resid_map[j]) for j in range(npix)]
+    photons_pixel = [waves[idx[j]].tolist() for j in range(npix)]
+
+    logging.info(f'Obtained calibration photon table from {args.cal_table}.')
+
+    # ==================================================================================================================
+    # INSTANTIATE SPECTROGRAPH & DETECTOR
+    # ==================================================================================================================
+    if not os.path.exists(R0s_file):
+        IOError('File does not exist, check path and file name.')
+    else:
+        R0s = np.loadtxt(R0s_file, delimiter=',')
+        logging.info(f'\nThe individual R0s were imported from {R0s_file}.')
+
+    detector = MKIDDetector(npix, pixel_size, design_R0, l0, R0s, resid_map)
+    grating = GratingSetup(l0, m0, m_max, pixel_size, npix, focal_length, littrow)
+    spectro = SpectrographSetup(grating, detector, pixels_per_res_elem)
+    eng = engine.Engine(spectro)
+    nord = spectro.nord
+    lambda_pixel = spectro.pixel_center_wavelengths().to(u.nm)[::-1]  # flip order, extracts in ascending wavelengths
+    wave = np.linspace(minwave.to(u.nm).value - 100, maxwave.to(u.nm).value + 100, 10000) * u.nm
+
+    # ==================================================================================================================
+    # MSF EXTRACTION STARTS
+    # ==================================================================================================================
     # retrieving the blazed calibration spectrum shape and converting to pixel-space:
     if type_of_spectra == 'blackbody':
-        bb = SourceSpectrum(BlackBodyNorm1D, temperature=4300)  # flux for star of 1 R_sun at distance of 1 kpc
-        blaze_shape = eng.pixelspace_blaze(wave, bb)[::-1]
-        blaze_shape /= np.max(blaze_shape)  # normalize max to 1
-        blaze_shape[blaze_shape == 0] = 1  # prevent divide by 0 or very small # issue
+        spectra = SourceSpectrum(BlackBodyNorm1D, temperature=temp)  # flux for star of 1 R_sun at distance of 1 kpc
     elif type_of_spectra == 'something else':
-        pass  # do something
+        pass  # only blackbody supported now
+    blazed_spectrum, _, _ = eng.blaze(wave, spectra)
+    pix_leftedge = spectro.pixel_center_wavelengths(edge='left').to(u.nm).value
+    blaze_shape = [eng.lambda_to_pixel_space(wave, blazed_spectrum[i], pix_leftedge[i]) for i in range(nord)][::-1]
+    blaze_shape /= np.max(blaze_shape)  # normalize max to 1
+    blaze_shape[blaze_shape == 0] = 1  # prevent divide by 0 or very small num. issue
 
-    # initializing empty arrays for for-loop: TODO would like to streamline this
+    # initializing empty arrays for for-loop:
     covariance = np.zeros([nord, nord, npix])
     photon_bins = np.zeros([nord + 1, npix])
-    photon_bins[-1, :] = eng.spectrograph.detector.waveR0.value + 300
+    photon_bins[-1, :] = maxwave.to(u.nm).value + 300
     spec = np.empty([nord, npix])
     reduced_chisq, flagger = np.empty(npix), np.zeros(npix)
 
-    # open and sort calibration spectrum photon table:
-    cal_table = f'output_files/calibration/table_R0{R0}.h5'
-    photons_pixel = eng.open_table(resid_map, cal_table)
-    logging.info(f'Obtained calibration photon table from {cal_table}.')
-
     # determine number of Gaussian functions per pixel:
-    n_gauss = np.sum((np.asarray(lambda_pixel.value) >= 400).astype(int), axis=0)
+    n_gauss = np.sum((np.asarray(lambda_pixel.to(u.nm).value) >= minwave.to(u.nm).value).astype(int), axis=0)
 
     # do least-squares fit:
-    for j in eng.spectrograph.detector.pixel_indices:
-        s = 1 if n_gauss[j] == eng.spectrograph.nord-1 else 0  # determines starting index
-        opt_params, old_params = eng.fit_gaussians(j, photons_pixel[j], n_gauss[j], plot=plot_fits)
+    for j in detector.pixel_indices:
+        s = 1 if n_gauss[j] == nord-1 else 0  # determines starting index
+        opt_params, old_params = eng.fit_gaussians(j, photons_pixel[j], n_gauss[j])
         reduced_chisq[j] = opt_params.redchi
         mu, sig, A = engine.param_to_array(opt_params, n_gauss[j], post_opt=True)
         old_mu, old_sig, _ = engine.param_to_array(old_params, n_gauss[j], post_opt=False)
@@ -131,31 +186,22 @@ if __name__ == '__main__':
                  f"{np.sum(flagger == 1)}/{np.sum(flagger == 2)}/{np.sum(flagger == 3)} "
                  f"pixels flagged for means/sigmas/both being within 5% of boundaries.")
 
-    # save bins and covariance to FITS file format:
-    # assortment of spectrograph properties TODO figure out what else to add
-    meta = dict_of(R0, eng.spectrograph.detector.waveR0.value, npix, nord, type_of_spectra)
-    bins = QTable(list(photon_bins * u.nm), names=[f'{i}' for i in range(nord+1)],
-                  meta={'name': 'Bin Edges for Pixel', **meta})
-    bins_file = f'output_files/calibration/msf_bins_R0{R0}.fits'
-    bins.write(bins_file, format='fits', overwrite=True)
-
-    # TODO not sure how to best save a 3D array to FITS
-    cov_files = [f'output_files/calibration/msf_cov{i}_R0{R0}.fits' for i in range(nord)]
-    for i in range(nord):
-        cov = QTable(list(covariance[:, i, :]), names=[f'{j}' for j in eng.spectrograph.orders],
-                     meta={'name': f'Covariance (for other orders) in Order {i}', **meta})
-        cov.write(cov_files[i], format='fits', overwrite=True)
-
-    logging.info(f'\nSaved order bin edges to {bins_file} and covariance matrices to {cov_files}.')
+    # assign bin edges and covariance matrix to MSF class and save:
+    msf = MKIDSpreadFunction(bin_edges=photon_bins, cov_matrix=covariance,orders=spectro.orders,
+                             metadata=sim_parameters)
+    msf_file = f'{args.output_dir}/msf_R0{design_R0}_{pixel_lim}.npz'
+    msf.save(msf_file)
+    logging.info(f'\nSaved MSF bin edges and covariance matrix to {msf_file}.')
     logging.info(f'\nTotal script runtime: {((time.time() - tic) / 60):.2f} min.')
-    # ========================================================================
-    # MSF extraction ends
-    # ========================================================================
+    # ==================================================================================================================
+    # MSF EXTRACTION ENDS
+    # ==================================================================================================================
 
 
-    # ========================================================================
-    # Plots for debugging and reasoning through:
-    # ========================================================================
+    # ==================================================================================================================
+    # DEBUGGING PLOTS
+    # ==================================================================================================================
+    #msf.plot()  # TODO
 
     # plot reduced chi-sq (should not contain significant outliers):
     fig1, ax1 = plt.subplots(1, 1)
@@ -164,6 +210,6 @@ if __name__ == '__main__':
 
     # plot unblazed, unshaped calibration spectrum (should be mostly flat line):
     fig2, ax2 = plt.subplots(1, 1)
-    quick_plot(ax2, lambda_pixel, spec/blaze_shape, labels=[f'O{i}' for i in eng.spectrograph.orders[::-1]],
+    quick_plot(ax2, lambda_pixel, spec/blaze_shape, labels=[f'O{i}' for i in spectro.orders[::-1]],
                first=True, title='Continuum-normalized calibration', xlabel='Wavelength (nm)', ylabel='Photon Count')
     plt.show()
