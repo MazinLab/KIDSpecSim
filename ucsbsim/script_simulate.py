@@ -247,7 +247,11 @@ if __name__ == '__main__':
     photons, observed = detector.observe(convol_wave, convol_result, limit_to=pixel_lim, exptime=exptime, area=area)
 
     # saving final photon list to h5 file:
+    h5_file = f'{args.output_dir}/R0{args.design_R0}_{args.pixel_lim}.h5'
     buildfromarray(photons[:observed], user_h5file=h5_file)
+    pt = Photontable(h5_file, mode='write')
+    pt.update_header('sim_parameters', vars(args))
+    pt.disablewrite()  # allows other scripts to open the table
     # at this point we are simulating the pipeline and have gone past the "wavecal" part. Next is >to spectrum.
     logging.info(f'\nSaved photon table of {type_of_spectra} spectrum to {h5_file}')
     logging.info(f'\nTotal simulation time: {((time.time() - tic) / 60):.2f} min.')
