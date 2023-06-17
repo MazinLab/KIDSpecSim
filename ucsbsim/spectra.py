@@ -68,19 +68,26 @@ def FilterTransmission(min=400*u.nm, max=800*u.nm):
     return SpectralElement(Box1D, amplitude=1, x_0=center, width=wid)
 
 
-def apply_bandpass(spectrum, bandpass=None):
+def apply_bandpass(spectra, bandpass):
     """
-    :param spectrum: spectrum to apply bandpasses to
-    :param bandpass: the filter to be applied, as list
+    :param spectra: spectra to apply bandpasses to, as list or object
+    :param bandpass: the filter to be applied, as list or object
     :return: original spectrum multiplied with bandpasses
     """
-    spectrum = [spectrum]
-    for i, s in enumerate(spectrum):
+    if not isinstance(spectra, list):
+        spectra = [spectra]
+        not_list = True
+    if not isinstance(bandpass, list):
+        bandpass = [bandpass]
+    for i, s in enumerate(spectra):
         for b in bandpass:
             s *= b
-        spectrum[i] = s
-    logging.info(f'Multipled spectrum with given bandpasses.')
-    return spectrum[0]
+        spectra[i] = s
+    logging.info(f'Multipled spectrum with given bandpass.')
+    if not_list:
+        return spectra[0]
+    else:
+        return spectra
 
 
 def PhoenixModel(teff: float, feh=0, logg=4.8, desired_magnitude=None):
@@ -136,7 +143,6 @@ def get_spectrum(spectrum_type: str, teff=None, min=None, max=None):
         return DeltaModel(min, max)
     else:
         raise ValueError("Only 'blackbody', 'phoenix', or 'delta' are supported for spectrum_type.")
-
 
 def clip_spectrum(x, clip_range):
     """
