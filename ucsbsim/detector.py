@@ -7,7 +7,7 @@ from engine import draw_photons
 
 
 class MKIDDetector:
-    def __init__(self, n_pix, pixel_size, design_R0, l0, R0s, resid_map):
+    def __init__(self, n_pix, pixel_size, design_R0, l0, R0s, resid_map=None):
         """
         Simulation of an MKID detector array.
         :param n_pix: number of pixels in linear array
@@ -34,7 +34,7 @@ class MKIDDetector:
         if pixel not in self.pixel_indices:
             raise ValueError(f"Pixel {pixel + 1} not in instantiated detector, max of {self.n_pixels}.")
         if self.R0s is None:
-            self.R0s = np.full(self.n_pixels, self.design_R0)
+            self.R0s = np.ones(self.n_pixels) * self.design_R0
         else:
             if len(self.R0s) != self.n_pixels:
                 raise ValueError('The number of R0s does not match number of pixels.')
@@ -67,11 +67,7 @@ class MKIDDetector:
             pass
         return wave ** 2 / rc
 
-    def observe(self,
-                convol_wave,
-                convol_result,
-                **kwargs,
-                ):
+    def observe(self, convol_wave, convol_result, **kwargs):
         """
         :param convol_wave: wavelength array that matches convol_result
         :param convol_result: convolution array
@@ -103,7 +99,7 @@ class MKIDDetector:
         observed = 0
         total_merged = 0
         total_missed = []
-
+        # Compute photon arrival times and wavelengths for each photon
         for pixel, n in enumerate(pixel_count):
             if not n:
                 continue
