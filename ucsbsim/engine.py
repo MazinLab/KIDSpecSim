@@ -12,7 +12,7 @@ from lmfit import Parameters, minimize
 from mkidpipeline import photontable as pt
 
 u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # photon flux per wavelength
-
+SIG2WID = 2*np.sqrt(np.log(2))
 
 def _determine_apodization(x, pixel_samples_frac, pixel_max_npoints):
     """
@@ -113,10 +113,10 @@ def draw_photons(convol_wave,
         # crappy limit to 1000 photons per pixel for testing
         N = np.random.poisson(total_photons_ltd)
         # Now assume that you want N photons as a Poisson random number for each pixel
-        logging.info(f'\tLimited to a maximum of {limit_to} photons per pixel.')
+        logging.info(f'\tLimited to a maximum of {N.max()} photons per pixel.')
     else:
         N = np.random.poisson(total_photons.value.astype(int))
-        logging.info(f'\tMax # of photons in any pixel: {total_photons.value.max():.2f}.')
+        logging.info(f'\tMax # of photons in any pixel: {N.max()}.')
 
     cdf /= total_photons
 
@@ -253,22 +253,20 @@ class Engine:
         return ndi.gaussian_filter1d(flux, sample_width, axis=axis) * flux.unit
 
     def build_mkid_kernel(self, n_sigma: float, sampling):
-        # TODO get rid of 2.355 somehow
         """
         :param n_sigma: number of sigma to include in MKID kernel
         :param sampling: smallest sample size
         :return: a kernel corresponding to an MKID resolution element of width covering n_sigma on either side.
         mkid_kernel_npoints specifies how many points are used, though the kernel will round up to the next odd number.
         """
-        max_mkid_kernel_width = 2 * n_sigma * self.spectrograph.dl_mkid_max() / 2.355  # FWHM to standev
+        max_mkid_kernel_width = 2 * n_sigma * self.spectrograph.dl_mkid_max() / SIG2WID  # FWHM to standev
         mkid_kernel_npoints = np.ceil((max_mkid_kernel_width / sampling).si.value).astype(int)  # points in Gaussian
         if not mkid_kernel_npoints % 2:  # ensuring it is odd so 1 point is at kernel center
             mkid_kernel_npoints += 1
-        return sig.gaussian(mkid_kernel_npoints, (self.spectrograph.dl_mkid_max() / sampling).si.value / 2.355)
+        return sig.gaussian(mkid_kernel_npoints, (self.spectrograph.dl_mkid_max() / sampling).si.value / SIG2WID)
         # takes standev not FWHM, width/sampling is the dimensionless standev
 
     def mkid_kernel_waves(self, n_points, n_sigma=3, oversampling=10):
-        # TODO get rid of 2.355 somehow
         """
         :param n_points: number of points in kernel
         :param n_sigma: number of sigma to either side of mean
@@ -280,8 +278,8 @@ class Engine:
         sampling = self.spectrograph.sampling(oversampling).to(u.nm)
         npix = self.spectrograph.detector.n_pixels
         nord = self.spectrograph.nord
-        return np.array([[np.linspace(-n_sigma * (pixel_rescale[i, j] * dl_mkid_max / sampling).value / 2.355,
-                                      n_sigma * (pixel_rescale[i, j] * dl_mkid_max / sampling).value / 2.355,
+        return np.array([[np.linspace(-n_sigma * (pixel_rescale[i, j] * dl_mkid_max / sampling).value / SIG2WID,
+                                      n_sigma * (pixel_rescale[i, j] * dl_mkid_max / sampling).value / SIG2WID,
                                       n_points) for j in range(npix)] for i in range(nord)])
 
     def convolve_mkid_response(self,
@@ -289,21 +287,23 @@ class Engine:
                                spectral_fluxden,
                                oversampling: float = 10,
                                n_sigma_mkid: float = 3,
-                               full=True
+                               simp: bool = False
                                ):
         """
         :param wave: wavelength array
         :param spectral_fluxden: flux density array
         :param oversampling: factor by which to sample smallest wavelength extent
         :param n_sigma_mkid: number of sigma to use in kernel
-        :param full: True for full convolution, False for simplified
+        :param simp: True for simplified convolution, False for full
         :return: convolution products of the spectrum with the MKID response
         """
-        lambda_pixel = self.spectrograph.pixel_center_wavelengths()
+        lambda_pixel = self.spectrograph.pixel_wavelengths()
         dl_pixel = self.spectrograph.dl_pixel()
         pixel_rescale = self.spectrograph.pixel_rescale(oversampling)
 
-        if full:
+        if simp:
+            data = np.zeros(dl_pixel.shape)
+        else:
             pixel_max_npoints = self.spectrograph.pixel_max_npoints(oversampling)
             pixel_samples_frac = self.spectrograph.pixel_samples_frac(oversampling)
             x = np.linspace(-pixel_max_npoints // 2, pixel_max_npoints // 2, num=pixel_max_npoints)
@@ -313,19 +313,17 @@ class Engine:
             interp_apod = _determine_apodization(x, pixel_samples_frac, pixel_max_npoints)  # [dimensionless]
             # apodization determines the amount of partial flux to use from a bin that is partially outside given pixel
             data = np.zeros(interp_apod.shape)
-        else:
-            data = np.zeros(dl_pixel.shape)
 
         # Compute the convolution data
         for i, bs in enumerate(spectral_fluxden):  # interpolation to fill in gaps of spectrum
             specinterp = interp.interp1d(wave.to('nm').value, bs, fill_value=0, bounds_error=False)
-            if full:
+            if simp:
+                data[i, :] = specinterp(lambda_pixel[i, :].to('nm'))
+            else:
                 data[:, i, :] = specinterp(interp_wave[:, i, :].to('nm').value)
                 # [n samplings, 5 orders, 2048 pixels] [photlam]
-            else:
-                data[i, :] = specinterp(lambda_pixel[i, :].to('nm'))
 
-        if full:
+        if not simp:
             # Apodize to handle fractional bin flux apportionment
             data *= interp_apod  # flux which is not part of a given pixel is removed
 
@@ -333,15 +331,15 @@ class Engine:
         mkid_kernel = self.build_mkid_kernel(n_sigma_mkid, self.spectrograph.sampling(oversampling))  # returns:
         # a normalized-to-one-at-peak Gaussian is divided into tiny sections as wide as the sampling (dl_pix_min/10)
 
-        if full:
+        if simp:
+            result = data * spectral_fluxden.unit * mkid_kernel[:, None, None]
+            logging.info('Multiplied function with MKID response.')
+        else:
             sl = slice(pixel_max_npoints // 2, -(pixel_max_npoints // 2))
             result = sig.oaconvolve(data, mkid_kernel[:, None, None], mode='full', axes=0)[sl] * u.photlam
             # takes the 67 sampling axis and turns it into ~95000 points each for each order/pixel [~95000, 5, 2048]
             # oaconvolve can't deal with units so you have to give it them
             logging.info('Fully-convolved spectrum with MKID response.')
-        else:
-            result = data * spectral_fluxden.unit * mkid_kernel[:, None, None]
-            logging.info('Multiplied function with MKID response.')
 
         # TODO I'm not sure this is right, might be simply sampling
         result *= pixel_rescale[None, ...]
@@ -377,7 +375,7 @@ class Engine:
         """
         params = Parameters()
         #s = 1 if n_gauss == self.spectrograph.nord-1 else 0
-        mus = self.spectrograph.pixel_center_wavelengths()[:n_gauss, pixel].to(u.nm).value[::-1]
+        mus = self.spectrograph.pixel_wavelengths()[:n_gauss, pixel].to(u.nm).value[::-1]
         sigs = self.spectrograph.sigma_mkid_pixel()[:n_gauss, pixel].to(u.nm).value[::-1]
         As = [max_phot for i in range(n_gauss)]
         for i in range(n_gauss):
