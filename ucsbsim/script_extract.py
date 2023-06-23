@@ -4,16 +4,19 @@ import time
 from datetime import datetime as dt
 import logging
 import astropy.units as u
-from astropy.table import QTable
+import argparse
 from astropy.io import fits
-from sorcery import dict_of
+from astropy.table import Table
+import os
 
-from mkidpipeline import photontable as pt
 from spectrograph import GratingSetup, SpectrographSetup
 from detector import MKIDDetector
-from engine import Engine, quick_plot
+from engine import Engine
+from plotting import quick_plot
 from synphot.models import Box1D
 from synphot import SourceSpectrum
+from msf import MKIDSpreadFunction
+from mkidpipeline.photontable import Photontable
 
 """
 Extraction of an observation spectrum using the MSF products. The steps are:
@@ -28,67 +31,102 @@ Potentially make spectrograph properties a file that is automatically imported f
 
 if __name__ == '__main__':
     tic = time.time()  # recording start time for script
+    u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # photon flux per wavelength
 
-    # ========================================================================
-    # Constants which may or may not be needed in the future:
-    # ========================================================================
+    # ==================================================================================================================
+    # CONSTANTS
+    # ==================================================================================================================
 
-    # ========================================================================
-    # Assign spectrograph properties below if different from defaults. Check the module spectrograph for syntax.
-    # ========================================================================
-    # R0 = 8
-    # etc.
 
-    # ========================================================================
-    # Spectrum extraction settings:
-    # ========================================================================
-    type_of_spectra = 'phoenix'
+    # ==================================================================================================================
+    # PARSE ARGUMENTS
+    # ==================================================================================================================
+    arg_desc = '''
+    Extract the observation spectrum using the MKID Spread Function.
+    --------------------------------------------------------------
+    This program loads the observation photon table and use the MSF bins and covariance matrix to 
+    extract the spectrum.
+    '''
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=arg_desc)
 
-    # ========================================================================
-    # Spectrum extraction begins:
-    # ========================================================================
+    # required MSF args:
+    parser.add_argument('output_dir',
+                        metavar='OUTPUT_DIRECTORY',
+                        help='Directory for the output files (str).')
+    parser.add_argument('msf_file',
+                        metavar='MKID_SPREAD_FUNCTION_FILE',
+                        help='Directory/name of the MKID Spread Function file (str).')
+    parser.add_argument('obstable',
+                        metavar='OBSERVATION_PHOTON_TABLE',
+                        help='Directory/name of the observation spectrum photon table (str).')
+
+    # get arguments
+    args = parser.parse_args()
+
+    # ==================================================================================================================
+    # START LOGGING TO FILE
+    # ==================================================================================================================
     now = dt.now()
-    logging.basicConfig(filename=f'output_files/{type_of_spectra}/logging/extract_{now.strftime("%Y%m%d_%H%M%S")}.log',
+    logging.basicConfig(filename=f'{args.output_dir}/extract_{now.strftime("%Y%m%d_%H%M%S")}.log',
                         format='%(levelname)s:%(message)s', level=logging.DEBUG)
-    logging.info(f"The extraction of a {type_of_spectra} spectrum is recorded."
+    logging.info(f"The extraction of an observed spectrum is recorded."
                  f"\nThe date and time are: {now.strftime('%Y-%m-%d %H:%M:%S')}.")
 
-    # setting up engine and spectrograph, obtaining various needed properties:
-    eng = Engine(SpectrographSetup(GratingSetup(), MKIDDetector()))
-    R0 = eng.spectrograph.detector.design_R0
-    nord = eng.spectrograph.nord
-    npix = eng.spectrograph.detector.n_pixels
-    resid_map = np.arange(npix, dtype=int) * 10 + 100  # TODO replace once known
-    lambda_pixel = eng.spectrograph.pixel_center_wavelengths().to(u.nm)[::-1]
+    # ==================================================================================================================
+    # OPEN MSF FILE AND OBSERVATION PHOTON TABLE
+    # ==================================================================================================================
+    msf = MKIDSpreadFunction(filename=args.msf_file)
+    sim_msf = msf.sim_settings.item()
 
+    logging.info(f'Obtained MKID Spread Function from {args.msf_file}.')
+
+    pt = Photontable(args.obstable)
+    sim = pt.query_header('sim_settings')
+
+    # do a check to ensure all simulation settings are equal
+    if sim_msf.npix != sim.npix or sim_msf.l0 != sim.l0 or sim_msf.minwave != sim.minwave:
+        raise ValueError('Simulation settings between the calibration and observation are not the same, '
+                         'this extraction cannot be performed.')
+
+    resid_map = np.arange(sim.npix, dtype=int) * 10 + 100  # TODO replace once known
+    waves = pt.query(column='wavelength')
+    resID = pt.query(column='resID')
+    idx = [np.where(resID == resid_map[j]) for j in range(sim.npix)]
+    photons_pixel = [waves[idx[j]].tolist() for j in range(sim.npix)]
+
+    logging.info(f'Obtained observation photon table from {args.obstable}.')
+
+    # ==================================================================================================================
+    # INSTANTIATE SPECTROGRAPH & DETECTOR
+    # ==================================================================================================================
+    if not os.path.exists(sim.R0s_file):
+        IOError('File does not exist, check path and file name.')
+    else:
+        R0s = np.loadtxt(sim.R0s_file, delimiter=',')
+        logging.info(f'\nThe individual R0s were imported from {sim.R0s_file}.')
+
+    detector = MKIDDetector(sim.npix, sim.pixelsize, sim.designR0, sim.l0, R0s, resid_map)
+    grating = GratingSetup(sim.l0, sim.m0, sim.m_max, sim.pixelsize, sim.npix, sim.focallength, sim.nolittrow)
+    spectro = SpectrographSetup(grating, detector, sim.pixels_per_res_elem)
+    eng = Engine(spectro)
+    nord = spectro.nord
+    lambda_pixel = spectro.pixel_wavelengths().to(u.nm)[::-1]  # flip order, extracts in ascending wavelengths
+
+    # ==================================================================================================================
+    # OBSERVATION SPECTRUM EXTRACTION STARTS
+    # ==================================================================================================================
     # obtain the pixel-space blaze function:
-    u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # photon flux per wavelength
-    wave = np.linspace(eng.spectrograph.minimum_wave.value - 100, eng.spectrograph.detector.waveR0.value + 100,
-                       10000) * u.nm
-    blaze = eng.pixelspace_blaze(wave, SourceSpectrum(Box1D, amplitude=1*u.photlam, x_0=(wave[-1]+wave[0])/2,
-                                                       width=(wave[-1]-wave[0])))[::-1]
-    blaze /= np.max(blaze)
+    wave = np.linspace(sim.minwave.value - 100, sim.maxwave.value + 100, 10000) * u.nm
+    blaze_no_int, _, _ = eng.blaze(wave, SourceSpectrum(Box1D, amplitude=1*u.photlam, x_0=(wave[-1]+wave[0])/2,
+                                                        width=(wave[-1]-wave[0])))
+    pix_leftedge = spectro.pixel_wavelengths(edge='left').to(u.nm).value
+    blaze_shape = [eng.lambda_to_pixel_space(wave, blaze_no_int[i], pix_leftedge[i]) for i in range(nord)][::-1]
+    blaze_shape /= np.max(blaze_shape)  # normalize max to 1
+    blaze_shape[blaze_shape == 0] = 1  # prevent divide by 0 or very small num. issue
 
-    # open relevant wavelength, calibration bins and covariance matrices
-    bin_name = f'output_files/calibration/msf_bins_R0{R0}.fits'
-    bins = fits.getdata(bin_name)
-    logging.info(f'The bin edges for extraction were obtained from {bin_name}.')
-    cov = np.zeros([nord, nord, npix])
-    logging.info(f'The covariance matrices were obtained from:')
-    for i in range(nord):
-        name = f'output_files/calibration/msf_cov{i}_R0{R0}.fits'
-        for j in range(nord):
-            cov[j, i, :] = fits.getdata(name)[f'{eng.spectrograph.orders[j]}']
-        logging.info(f'{name}')
-
-    # opening the h5 file containing the photon table
-    table = f'output_files/{type_of_spectra}/table_R0{R0}.h5'
-    photons_pixel = eng.open_table(resid_map, table)
-    logging.info(f'The photon table was obtained from {table}.')
-
-    spec = np.zeros([nord, npix])
-    for j in range(npix):
-        spec[:, j], _ = np.histogram(photons_pixel[j], bins=bins[j])  # binning photons by MSF bins edges
+    spec = np.zeros([nord, sim.npix])
+    for j in range(sim.npix):
+        spec[:, j], _ = np.histogram(photons_pixel[j], bins=msf.bin_edges[:, j])  # binning photons by MSF bins edges
 
     # to plot covariance as errors, must sum the counts "added" from other orders as well as "stolen" by other orders
     # v giving order, > receiving order [g_idx, r_idx, pixel]
@@ -100,46 +138,37 @@ if __name__ == '__main__':
     # 5 [  #   #   #   #   1  ]
     #      ^ multiply counts*cov in other orders to add to Order 9
 
-    err_p = np.array([[
-        int(np.sum(cov[:, i, j] * spec[:, j])) - cov[i, i, j] * spec[i, j] for j in range(npix)] for i in range(nord)])
-    err_n = np.array([[
-        int(np.sum(cov[i, :, j] * spec[:, j]) - cov[i, i, j] * spec[i, j]) for j in range(npix)] for i in range(nord)])
+    err_p = np.array([[int(np.sum(msf.cov_matrix[:, i, j] * spec[:, j])) -
+                       msf.cov_matrix[i, i, j] * spec[i, j] for j in range(sim.npix)] for i in range(nord)])
+    err_n = np.array([[int(np.sum(msf.cov_matrix[i, :, j] * spec[:, j]) -
+                           msf.cov_matrix[i, i, j] * spec[i, j]) for j in range(sim.npix)] for i in range(nord)])
 
-    meta = dict_of(R0, eng.spectrograph.detector.waveR0.value, npix, nord, type_of_spectra)
-
-    # saving extracted and unblazed spectrum to file
-    fits = QTable(list(spec/blaze), names=[f'{i}' for i in eng.spectrograph.orders[::-1]],
-                       meta={'name': 'Extracted Spectrum', **meta})
-    fits_file = f'output_files/{type_of_spectra}/spectrum_R0{R0}.fits'
-    fits.write(fits_file, format='fits', overwrite=True)
-    logging.info(f'The extracted spectrum has been saved to {fits_file}.')
-
-    # saving errors to fits file
-    errors_p = QTable(list(err_p/blaze), names=[f'{i}' for i in eng.spectrograph.orders[::-1]],
-                       meta={'name': 'Positive Errors on Spectrum', **meta})
-    errp_file = f'output_files/{type_of_spectra}/errp_R0{R0}.fits'
-    errors_p.write(errp_file, format='fits', overwrite=True)
-    errors_n = QTable(list(err_n / blaze), names=[f'{i}' for i in eng.spectrograph.orders[::-1]],
-                      meta={'name': 'Negative Errors on Spectrum', **meta})
-    errn_file = f'output_files/{type_of_spectra}/errn_R0{R0}.fits'
-    errors_n.write(errn_file, format='fits', overwrite=True)
-    logging.info(f'The error bands on the spectrum have been saved to {errn_file} and {errp_file}.')
+    # saving extracted and unblazed spectrum to file TODO save to 1 file w/ errors
+    fits_file = f'{args.output_dir}/{sim.type_spectra}_extracted_R0{sim.designR0}.fits'
+    hdu_list = fits.HDUList([fits.PrimaryHDU(),
+                             fits.BinTableHDU(Table(spec/blaze_shape), name='Spectrum'),
+                             fits.BinTableHDU(Table(err_n/blaze_shape), name='- Errors'),
+                             fits.BinTableHDU(Table(err_p/blaze_shape), name='+ Errors')])
+    hdu_list.writeto(fits_file, output_verify='ignore', overwrite=True)
+    logging.info(f'The extracted spectrum with its errors has been saved to {fits_file}.')
     logging.info(f'\nTotal script runtime: {((time.time() - tic) / 60):.2f} min.')
-    # ========================================================================
-    # Spectrum extraction ends
-    # ========================================================================
+    # ==================================================================================================================
+    # OBSERVATION SPECTRUM EXTRACTION ENDS
+    # ==================================================================================================================
 
 
-    # ========================================================================
-    # Plotting final spectrum with error band:
-    # ========================================================================
+    # ==================================================================================================================
+    # DEBUGGING PLOTS
+    # ==================================================================================================================
+    spectrum = fits.open(fits_file)
 
     plt.grid()
     for i in range(nord):
-        plt.fill_between(lambda_pixel[i].value, (spec[i] - err_n[i]) / blaze[i], (spec[i] + err_p[i]) / blaze[i],
+        plt.fill_between(lambda_pixel[i].value, np.array(spectrum[1].data[i]) - np.array(spectrum[2].data[i]),
+                         np.array(spectrum[1].data[i]) - np.array(spectrum[3].data[i]),
                          alpha=0.5, edgecolor='orange', facecolor='orange', linewidth=0.5)
-        plt.plot(lambda_pixel[i], spec[i] / blaze[i])
-    plt.title(f"Unblazed & extracted {type_of_spectra} spectrum")
+        plt.plot(lambda_pixel[i], spectrum[1].data[i])
+    plt.title(f"Unblazed & extracted {sim.type_spectra} spectrum")
     plt.ylabel('Total Photons')
     plt.xlabel('Wavelength (nm)')
     plt.tight_layout()
