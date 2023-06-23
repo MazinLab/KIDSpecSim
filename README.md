@@ -23,7 +23,9 @@ After cloning the repository, the Cython files need to be compiled.
 In a command line terminal in the folder where KIDSpecSim lives, run the following lines: 
 
 `conda activate pipeline`
+
 `cd KIDSpecSim/ucsbsim/`
+
 `python ../setup.py build_ext --inplace`
 
 This sets up the Cython files needed to run some of the modules. 
@@ -31,41 +33,38 @@ This sets up the Cython files needed to run some of the modules.
 #### Spectrum simulation steps:
 Now that everything is ready, run the following calibration settings with desired path and R0s file name:
 
-`python script_simulate.py 'path/to/outdir' 'path/to/R0s_file.csv' 'blackbody' --filter_bandpass --littrow`
+`python script_simulate.py 'path/to/cal_outdir' 'path/to/R0s_file.csv' 'blackbody' -fb`
 
-Note: If there is no R0s_file, one will be generated mid-script (it's not a problem to not have one!), 
+Note: If there is no R0s_file, one will be generated mid-script (it's not a problem to not have one), 
 so ensure proper syntax is used if you have one.
 This creates a blackbody calibration spectrum. A plot will show and save to file so you can 
 verify that the simulation is functioning properly.
 
 Now, run the following observation settings with desired path and R0s file name:
 
-`python script_simulate.py 'path/to/outdir' 'path/to/R0s_file.csv' 'phoenix' --atmo_bandpass --filter_bandpass --tele_bandpass --littrow`
+`python script_simulate.py 'path/to/obs_outdir' 'path/to/R0s_file.csv' 'phoenix' -ab -fb -tb`
 
 This creates a Phoenix model observation spectrum.
 
 #### MKID Spread Function steps:
 Run the following MSF extraction settings, making sure to use the **calibration** file generated above:
 
-`python script_msf.py 'path/to/outdir/calibration_file.h5' 'path/to/R0s_file.csv'`
+`python script_msf.py 'path/to/msf_outdir' 'path/to/cal_outdir/calibration_photontable.h5'`
 
 This generates the MSF products for use in spectrum extraction.
 A few comprehensive plots will show and save so you can verify the goodness of fit.
 
-
-## NOT FINISHED FROM THIS POINT ON, DO NOT RUN (above ok)
 #### Spectrum extraction steps:
 Run the following extraction settings:
 
-`python script_extract.py`
+`python script_extract.py 'path/to/some_outdir' 'path/to/msf_outdir/msf_file.npz' 'path/to/obs_outdir/observation_photontable.h5'`
 
 Save and run file. This generates the extracted spectrum with error band.
 
 ### Changing settings according to preference:
 
-Different types of spectra can be simulated, but it is important to note that the 
-`'type_of_spectra'` must match when generating and extracting the calibration spectrum. 
-And of course, there must be a photon table file of some spectra in order for that to be extracted. 
-The key is basically to ensure all files are created/present before running next steps. 
-Files have naming schemes and directories that should be followed strictly.
-Currently, this package only supports Phoenix, blackbody, and 'delta' model spectra.
+Different types of spectra can be simulated, but functional support for anything other than a blackbody or phoenix spectrum is missing.
+Spectrograph properties may be easily changed by supplying arguments in the command line. 
+Type `python script_simulate.py --help` in the same directory for descriptions.
+The key is to ensure all files are created/present before running next steps. 
+Some generated files have naming schemes and directories that should be followed strictly.
