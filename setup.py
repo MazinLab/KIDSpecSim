@@ -1,21 +1,22 @@
+import numpy as np
 from setuptools import setup
 from Cython.Build import cythonize
-import numpy as np
 
 setup(
-    name='ucsbsim',
-    version='0.1',
-    author='MazinLab',
-    author_email='mazinlab@ucsb.edu',
-    description='The MKID Spectrometer Simulation',
-    readme='README.md',
-    packages=find_packages(),
-    keywords=['mkid', 'spectrometer', 'simulation', 'spectra', 'order sorting'],
+    name="ucsbsim",
+    version="0.1",
+    author="MazinLab, J. Bailey, C. Kim",
+    ext_modules=cythonize("ucsbsim/filterphot.pyx", "ucsbsim/filterphot.pyx"),
+    include_dirs=[np.get_include()],
+    author_email="mazinlab@ucsb.edu",
+    description="A UVOIR MKID Echelle Simulator",
+    long_description_content_type="text/markdown",
+    # url="https://github.com/MazinLab/MKIDGen3",
+    packages=['ucsbsim'],  # setuptools.find_packages(),
     classifiers=[
-        "Private :: Do Not Upload",
-        "Intended Audience :: Science/Research",
-        "Programming Language :: Python :: 3"
-    ],
-    ext_modules=cythonize("sortarray.pyx", "filterphot.pyx"),
-    include_dirs=[np.get_include()]
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: POSIX",
+        "Development Status :: 1 - Planning",
+        "Intended Audience :: Science/Research"],
 )
