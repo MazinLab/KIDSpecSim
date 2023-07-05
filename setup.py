@@ -1,18 +1,18 @@
 import numpy as np
-from setuptools import setup
+from setuptools import setup, find_packages
 from Cython.Build import cythonize
 
 setup(
     name="ucsbsim",
     version="0.1",
     author="MazinLab, J. Bailey, C. Kim",
-    ext_modules=cythonize("ucsbsim/filterphot.pyx", "ucsbsim/filterphot.pyx"),
+    ext_modules=cythonize(["ucsbsim/filterphot.pyx", "ucsbsim/sortarray.pyx"]),
     include_dirs=[np.get_include()],
     author_email="mazinlab@ucsb.edu",
     description="A UVOIR MKID Echelle Simulator",
     long_description_content_type="text/markdown",
     # url="https://github.com/MazinLab/MKIDGen3",
-    packages=['ucsbsim'],  # setuptools.find_packages(),
+    packages=find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
