@@ -6,8 +6,10 @@ import scipy.ndimage as ndi
 import astropy.units as u
 import matplotlib.pyplot as plt
 import logging
+from scipy.constants import c
 
-import sortarray
+from . import sortarray
+from plotting import quick_plot
 from lmfit import Parameters, minimize
 from mkidpipeline import photontable as pt
 
@@ -205,6 +207,32 @@ def param_to_array(params, n_gauss, post_opt=True):
     return mu, sig, A
 
 
+def wave_to_phase(waves, freq_minw, freq_maxw):
+    """
+    :param waves: wavelengths as Quantity or value in nm
+    :param freq_minw: frequency of the minimum detector wavelength in /s
+    :param freq_maxw: frequency of the maximum detector wavelength is /s
+    :return: phase of photons between -1 and 1
+    """
+    # range is -1 to 1, smaller wavelengths wrap beginning at -1 and larger wavelengths wrap beginning at 1
+    # line from (freq_minw, -0.8) to (freq_maxw, -0.2)
+    # if -1.1, negative: -1.1+2*max_phase, positive: if 1.1, 1.1+2*min_phase, repeating until between -1 to 1
+    # linear equation: y = (y2-y1)/(x2-x1)*(x-x1) + y1 = 0.6/(freq_maxw-freq_minw)*(x-freq_minw) - 0.8
+    if not isinstance(waves, u.Quantity):
+        wavelengths = waves*u.nm
+    else:
+        wavelengths = waves
+    freqs = (c * u.m / u.s / wavelengths).decompose()
+    phase = (0.6 / (freq_maxw - freq_minw) * (freqs - freq_minw)).decompose().value - 0.8
+    if phase.size:
+        for n, j in enumerate(phase):
+            while phase[n] < -1:
+                phase[n] += 2
+            while phase[n] > 1:
+                phase[n] -= 2
+    return phase
+
+
 class Engine:
     def __init__(self, spectrograph):
         self.spectrograph = spectrograph
@@ -360,35 +388,46 @@ class Engine:
         :param leftedge: pixel left edge wavelengths
         :return: direct integration to put flux density of spectrum into pixel space
         """
-        flux_int = interp.InterpolatedUnivariateSpline(array_wave.to(u.nm).value, array.to(u.photlam).value, k=1, ext=1)
+        if isinstance(array, u.Quantity):
+            array = array.value
+        else:
+            array = array.to(u.photlam).value
+        flux_int = interp.InterpolatedUnivariateSpline(array_wave.to(u.nm).value, array, k=1, ext=1)
         integrated = [flux_int.integral(leftedge[j], leftedge[j + 1])
                       for j in range(self.spectrograph.detector.n_pixels - 1)]
         last = [flux_int.integral(leftedge[-1], leftedge[-1] + (leftedge[-1] - leftedge[-2]))]
         return integrated + last
 
-    def _get_params(self, pixel, max_phot, n_gauss):
+    def _get_params(self, pixel, max_phot, n_gauss, guess=None):
         """
         :param pixel: pixel
         :param max_phot: maximum # of photons in any pixel
         :param n_gauss: number of Gaussians being fit
+        :param guess: as list, guess values of mu, sig, and A
         :return: Parameter class object containing parameters with bounds and guesses
         """
         params = Parameters()
         #s = 1 if n_gauss == self.spectrograph.nord-1 else 0
-        mus = self.spectrograph.pixel_wavelengths()[:n_gauss, pixel].to(u.nm).value[::-1]
-        sigs = self.spectrograph.sigma_mkid_pixel()[:n_gauss, pixel].to(u.nm).value[::-1]
+        if guess is None:
+            mus = self.spectrograph.pixel_wavelengths()[:n_gauss, pixel].to(u.nm).value[::-1]
+            sigs = self.spectrograph.sigma_mkid_pixel()[:n_gauss, pixel].to(u.nm).value[::-1]
+        else:
+            mus = guess[0]
+            sigs = guess[1]
         As = [max_phot for i in range(n_gauss)]
+
         for i in range(n_gauss):
-            params.add(f'mu_{i}', value=mus[i], min=mus[i] - sigs[i], max=mus[i] + sigs[i], vary=True)
-            params.add(f'sig_{i}', value=sigs[i], min=sigs[i] - sigs[i] / 2, max=sigs[i] + sigs[i] / 2, vary=True)
-            params.add(f'A_{i}', value=As[i], min=0, max=2 * max_phot, vary=True)
+            params.add(f'mu_{i}', value=mus[i], min=mus[i] - sigs[i], max=mus[i] + sigs[i])
+            params.add(f'sig_{i}', value=sigs[i], min=0, max=3*sigs[i])
+            params.add(f'A_{i}', value=As[i], min=0, max=1.5 * max_phot)
         return params
 
-    def fit_gaussians(self, pixel: int, photons, n_gauss: int, plot=False):
+    def fit_gaussians(self, pixel: int, photons, n_gauss: int, guess=None, plot=False):
         """
         :param pixel: pixel
         :param photons: list of photon wavelengths
         :param n_gauss: number of Gaussian functions to fit
+        :param guess: as list, guess values for mu, sigma, and amplitude
         :param plot: True if viewing the fit for the pixel
         :return: optimized and guess parameters for mu, sigma, and amplitude
         """
@@ -396,7 +435,7 @@ class Engine:
         counts, edges = np.histogram(photons, bins=int(5*len(photons)**(1/3)))  # binning photons for shape fitting
         counts = np.array([float(x) for x in counts])  # TODO update binning to be more robust
         centers = edges[:-1] + np.diff(edges) / 2
-        params = self._get_params(pixel, np.max(photons), n_gauss)
+        params = self._get_params(pixel, np.max(counts), n_gauss, guess=guess)
         opt_params = minimize(lmfit_gaussians, params, args=(centers, counts, n_gauss), method='least_squares')
 
         if plot:
@@ -404,12 +443,12 @@ class Engine:
             fig, ax = plt.subplots(1, 1)
             quick_plot(ax, [centers], [counts], labels=['Data'], first=True, color='k')
             ax.fill_between(centers, 0, counts, color='k')
-            x = [np.linspace(centers[0], centers[-1], 10000) for i in range(n_gauss)]
+            x = [np.linspace(-1,1, 10000) for i in range(n_gauss)]
             mu, sig, A = param_to_array(opt_params, n_gauss, post_opt=True)
             quick_plot(ax, x, gauss(x[0], mu[:, None], sig[:, None], A[:, None]).T,
                        labels=[f'Order {i}' for i in self.spectrograph.orders[::-1][s:]],
                        title=f'Least-Squares Fit for Pixel {pixel+1}',
-                       xlabel='Wavelength (nm)', ylabel='Photon Count')
+                       xlabel='Phase', ylabel='Photon Count')
             plt.show()
 
         return opt_params, params
