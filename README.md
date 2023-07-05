@@ -24,19 +24,21 @@ In a command line terminal in the folder where KIDSpecSim lives, run the followi
 
 `conda activate pipeline`
 
-`cd KIDSpecSim/ucsbsim/`
+`cd KIDSpecSim/`
 
-`python ../setup.py build_ext --inplace`
+`pip install -e .`
 
-This sets up the Cython files needed to run some of the modules. 
+`cd ucsbsim`
+
+This sets up the Cython files needed to use some of the modules. 
 
 #### Spectrum simulation steps:
 Now that everything is ready, run the following calibration settings with desired path and R0s file name:
 
 `python script_simulate.py 'path/to/cal_outdir' 'path/to/R0s_file.csv' 'blackbody' -fb`
 
-Note: If there is no R0s_file, one will be generated mid-script (it's not a problem to not have one), 
-so ensure proper syntax is used if you have one.
+Note: If there is no R0s_file, one will be created mid-script with the given file name 
+(it's not a problem to not have one), so ensure proper syntax is used if you have one.
 This creates a blackbody calibration spectrum. A plot will show and save to file so you can 
 verify that the simulation is functioning properly.
 
