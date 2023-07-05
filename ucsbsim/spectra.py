@@ -3,14 +3,18 @@ import specutils
 import numpy as np
 from astropy.io import fits
 import logging
+import pandas as pd
 
 from astropy import units as u
 from specutils import Spectrum1D
 from synphot import SpectralElement, SourceSpectrum
+from synphot.spectrum import BaseSpectrum
 from synphot.models import Box1D, BlackBodyNorm1D
+from .engine import gauss
 
 _atm = None
 
+u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # new unit name, photon flux per wavelength
 
 # todo make use of Specutils/and pysynphot.
 # https://synphot.readthedocs.io/en/latest/synphot/spectrum.html#specutils
@@ -23,7 +27,7 @@ def _get_atm():
     global _atm
     if _atm is not None:
         return _atm
-    x = np.genfromtxt('transdata_0.5_1_mic')
+    x = np.genfromtxt('transdata_0.5_1_mic')  # TODO doesn't go below 500nm
     y = np.genfromtxt('transdata_1_5_mic')
     x = x[x[:, 1] > 0]
     x[:, 0] = 1e4 / x[:, 0]
@@ -113,23 +117,31 @@ def BlackbodyModel(teff: float):
     return SourceSpectrum(BlackBodyNorm1D, temperature=teff)
 
 
-def DeltaModel(min=400*u.nm, max=800*u.nm):
+def EmissionModel(filename, C, target_R=50000):
     """
-    :param min: minimum wavelength of detector
-    :param max: maximum wavelength of detector
-    :return: 'delta'-like model at the central wavelength
+    :param filename: file name of the emission line list, with wavelength in nm
+    :param C: constant to multiply uncertainty for emission lines
+    :param target_R: spectral resolution to diffraction limit line spectrum
+    :return: full emission spectrum, intensity converted to photlam
     """
-    x_0 = (max + min) / 2
-    width = 10 * u.nm
-    return SourceSpectrum(Box1D, amplitude=1e-15, x_0=x_0, width=width)
+    neon = pd.read_csv(filename, delimiter=',')
+    flux = np.array(neon['intens'])
+    wave = np.array(neon['obs_wl_air(nm)'])
+    uncert = np.array(neon['unc_obs_wl'])
+    target_dl = (wave[0]+wave[-1])/2 / target_R
+    sigma_factor = target_dl/min(uncert)  # 3 sigma approx to 1st Airy ring
+    wave_grid = np.arange(wave[0], wave[-1], target_dl)
+    line_gauss = gauss(wave_grid[None, :], wave[:, None], uncert[:, None] * sigma_factor/3, flux[:, None])
+    spectrum = np.sum(line_gauss, axis=1)
+    return SourceSpectrum.from_spectrum1d(Spectrum1D(flux=spectrum*u.photlam, spectral_axis=wave_grid*u.nm))
 
 
-def get_spectrum(spectrum_type: str, teff=None, min=None, max=None):
+def get_spectrum(spectrum_type: str, teff=None, emission_file=None, C=100):
     """
-    :param str spectrum_type: 'blackbody', 'phoenix', or 'delta' only
+    :param str spectrum_type: 'blackbody', 'phoenix', or 'neon' only
     :param teff: effective temperature for blackbody or phoenix model spectrum
-    :param min: min wavelength for delta spectrum
-    :param max: max wavelength for delta spectrum
+    :param emission_file: file name for the desired emission spectrum
+    :param C: constant to multiply uncertainty for emission lines
     :return: SourceSpectrum object of chosen spectrum
     """
     if spectrum_type == 'blackbody':
@@ -138,11 +150,11 @@ def get_spectrum(spectrum_type: str, teff=None, min=None, max=None):
     elif spectrum_type == 'phoenix':
         logging.info(f'\nObtained Phoenix model spectrum of {teff} K star.')
         return PhoenixModel(teff)
-    elif spectrum_type == 'delta':
-        logging.info(f'\nObtained delta-function-like spectrum at wavelength center.')
-        return DeltaModel(min, max)
+    elif spectrum_type == 'neon':
+        logging.info(f'\nObtained Neon emission spectrum.')
+        return EmissionModel(emission_file, C)
     else:
-        raise ValueError("Only 'blackbody', 'phoenix', or 'delta' are supported for spectrum_type.")
+        raise ValueError("Only 'blackbody', 'phoenix', or 'neon' are supported for spectrum_type.")
 
 def clip_spectrum(x, clip_range):
     """
