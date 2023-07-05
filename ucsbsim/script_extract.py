@@ -9,13 +9,13 @@ from astropy.io import fits
 from astropy.table import Table
 import os
 
-from spectrograph import GratingSetup, SpectrographSetup
-from detector import MKIDDetector
-from engine import Engine
-from plotting import quick_plot
+from ucsbsim.spectrograph import GratingSetup, SpectrographSetup
+from ucsbsim.detector import MKIDDetector
+from ucsbsim.engine import Engine
+from ucsbsim.plotting import quick_plot
 from synphot.models import Box1D
 from synphot import SourceSpectrum
-from msf import MKIDSpreadFunction
+from ucsbsim.msf import MKIDSpreadFunction
 from mkidpipeline.photontable import Photontable
 
 """
@@ -143,7 +143,7 @@ if __name__ == '__main__':
     err_n = np.array([[int(np.sum(msf.cov_matrix[i, :, j] * spec[:, j]) -
                            msf.cov_matrix[i, i, j] * spec[i, j]) for j in range(sim.npix)] for i in range(nord)])
 
-    # saving extracted and unblazed spectrum to file TODO save to 1 file w/ errors
+    # saving extracted and unblazed spectrum to file
     fits_file = f'{args.output_dir}/{sim.type_spectra}_extracted_R0{sim.designR0}.fits'
     hdu_list = fits.HDUList([fits.PrimaryHDU(),
                              fits.BinTableHDU(Table(spec/blaze_shape), name='Spectrum'),

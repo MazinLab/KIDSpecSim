@@ -2,8 +2,8 @@ import numpy as np
 import astropy.units as u
 import logging
 
-from filterphot import mask_deadtime
-from engine import draw_photons
+from .filterphot import mask_deadtime
+from .engine import draw_photons
 
 
 class MKIDDetector:

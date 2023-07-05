@@ -1,4 +1,4 @@
-from detector import MKIDDetector
+from ucsbsim.detector import MKIDDetector
 import numpy as np
 import astropy.units as u
 import logging
