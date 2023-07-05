@@ -45,22 +45,22 @@ class SpecSimSettings:
         :param str type_spectra: The type of spectrum to be simulated.
         """
         self.R0s_file = R0s_file
-        self.designR0 = designR0
+        self.designR0 = float(designR0)
         self.simpconvol = simpconvol
         self.nolittrow = nolittrow
-        self.l0 = l0_nm*u.nm if not isinstance(l0_nm, u.Quantity) else l0_nm
-        self.m0 = m0
-        self.m_max = m_max
-        self.minwave = minwave_nm*u.nm if not isinstance(minwave_nm, u.Quantity) else minwave_nm
-        self.maxwave = maxwave_nm*u.nm if not isinstance(maxwave_nm, u.Quantity) else maxwave_nm
-        self.npix = npix
-        self.pixellim = pixellim
-        self.exptime = exptime_s*u.s if not isinstance(exptime_s, u.Quantity) else exptime_s
-        self.telearea = telearea_cm2*u.cm**2 if not isinstance(telearea_cm2, u.Quantity) else telearea_cm2
-        self.pixelsize = pixelsize_um*u.micron if not isinstance(pixelsize_um, u.Quantity) else pixelsize_um
-        self.focallength = focallength_mm*u.mm if not isinstance(focallength_mm, u.Quantity) else focallength_mm
-        self.pixels_per_res_elem = pixels_per_res_elem
-        self.temp = temp_K
+        self.l0 = float(l0_nm)*u.nm if not isinstance(l0_nm, u.Quantity) else l0_nm
+        self.m0 = int(m0)
+        self.m_max = int(m_max)
+        self.minwave = float(minwave_nm)*u.nm if not isinstance(minwave_nm, u.Quantity) else minwave_nm
+        self.maxwave = float(maxwave_nm)*u.nm if not isinstance(maxwave_nm, u.Quantity) else maxwave_nm
+        self.npix = int(npix)
+        self.pixellim = int(pixellim)
+        self.exptime = float(exptime_s)*u.s if not isinstance(exptime_s, u.Quantity) else exptime_s
+        self.telearea = float(telearea_cm2)*u.cm**2 if not isinstance(telearea_cm2, u.Quantity) else telearea_cm2
+        self.pixelsize = float(pixelsize_um)*u.micron if not isinstance(pixelsize_um, u.Quantity) else pixelsize_um
+        self.focallength = float(focallength_mm)*u.mm if not isinstance(focallength_mm, u.Quantity) else focallength_mm
+        self.pixels_per_res_elem = float(pixels_per_res_elem)
+        self.temp = float(temp_K)
         self.type_spectra = type_spectra
 
     def __eq__(self, other):
