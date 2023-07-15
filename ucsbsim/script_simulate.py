@@ -13,14 +13,14 @@ import argparse
 from specutils import Spectrum1D
 from synphot import SpectralElement
 
-from spectra import get_spectrum, apply_bandpass, AtmosphericTransmission, FilterTransmission, TelescopeTransmission,\
-    clip_spectrum
-from spectrograph import GratingSetup, SpectrographSetup
-from detector import MKIDDetector
-from engine import Engine
-from plotting import quick_plot
 from mkidpipeline.photontable import Photontable
-from simsettings import SpecSimSettings
+from ucsbsim.spectra import get_spectrum, apply_bandpass, AtmosphericTransmission, FilterTransmission, \
+    TelescopeTransmission, clip_spectrum
+from ucsbsim.spectrograph import GratingSetup, SpectrographSetup
+from ucsbsim.detector import MKIDDetector
+import ucsbsim.engine as engine
+from ucsbsim.plotting import quick_plot
+from ucsbsim.simsettings import SpecSimSettings
 
 # TODO this will need work as the pipeline will probably default to MEC HDF headers
 from mkidpipeline.steps.buildhdf import buildfromarray
@@ -73,6 +73,10 @@ if __name__ == '__main__':
     parser.add_argument('R0s_file',
                         metavar='R0S_FILE_NAME',
                         help="Directory/filename of the R0s file, will be created if it doesn't exist. (str)")
+    parser.add_argument('phaseoffset_file',
+                        metavar='PHASE_OFFSET_FILE_NAME',
+                        help="Directory/filename of the pixel phase offset file,"
+                             " will be created if it doesn't exist. (str)")
     parser.add_argument('type_spectra',
                         metavar='TYPE_SPECTRA',
                         help='The type of spectrum to be simulated: can be "blackbody", "phoenix", or "delta". (str)')
@@ -80,12 +84,16 @@ if __name__ == '__main__':
     # optional simulation args:
     parser.add_argument('-pl', '--pixellim',
                         metavar='PIXEL_LIMIT',
-                        default=5000,
-                        help='Limit to the # of photons per pixel. (int)')
+                        default=100,
+                        help='Limit to the # of photons per pixel per second, i.e. flux. (int)')
+    parser.add_argument('-ef', '--emission_file',
+                        metavar='EMISSION_FILE_NAME',
+                        default=None,
+                        help='Directory/file name of the NIST emission line spectrum.')
     parser.add_argument('-et', '--exptime',
                         metavar='EXPOSURE_TIME_S',
-                        default=500,
-                        help='The exposure time of the observation in seconds. (float)')
+                        default=50,
+                        help='The total exposure time of the observation in seconds. (float)')
     parser.add_argument('-ta', '--telearea',
                         metavar='TELESCOPE_AREA_CM2',
                         default=np.pi * 4 ** 2,
@@ -134,7 +142,7 @@ if __name__ == '__main__':
                         help='The length of the MKID pixel in the dispersion direction in um. (float)')
     parser.add_argument('-R0', '--designR0',
                         metavar='DESIGN_R0',
-                        default=15,
+                        default=15,  # TODO needs to be 7.5, so its 15 at 400nm
                         help='The spectral resolution at the longest wavelength of any order in use. (float)')
     parser.add_argument('-l0', '--l0',
                         metavar='LAMBDA_0_NM',
@@ -167,15 +175,23 @@ if __name__ == '__main__':
 
     # get arguments & simulation settings
     args = parser.parse_args()
-    sim = SpecSimSettings(args.R0s_file, args.designR0, args.simpconvol, args.nolittrow, args.l0, args.m0, args.m_max,
-                          args.minwave, args.maxwave, args.npix, args.pixellim, args.exptime, args.telearea,
-                          args.pixelsize, args.focallength, args.pixels_per_res_elem, args.temp, args.type_spectra)
+    sim = SpecSimSettings(args.R0s_file, args.phaseoffset_file, args.designR0, args.simpconvol, args.nolittrow, args.l0,
+                          args.m0, args.m_max, args.minwave, args.maxwave, args.npix, args.pixellim, args.exptime,
+                          args.telearea, args.pixelsize, args.focallength, args.pixels_per_res_elem, args.temp,
+                          args.type_spectra)
+
+    # ==================================================================================================================
+    # CHECK AND/OR CREATE DIRECTORIES
+    # ==================================================================================================================
+    os.makedirs(f'{args.output_dir}/logging', exist_ok=True)
+    os.makedirs(os.path.dirname(sim.R0s_file), exist_ok=True)
+    os.makedirs(os.path.dirname(sim.phaseoffset_file), exist_ok=True)
 
     # ==================================================================================================================
     # START LOGGING TO FILE
     # ==================================================================================================================
     now = dt.now()
-    logging.basicConfig(filename=f'{args.output_dir}/simulate_{now.strftime("%Y%m%d_%H%M%S")}.log',
+    logging.basicConfig(filename=f'{args.output_dir}/logging/sim_{now.strftime("%Y%m%d_%H%M%S")}.log',
                         format='%(levelname)s:%(message)s', level=logging.DEBUG)
     logging.info(f"The simulation of a {sim.type_spectra} spectrum's journey through the spectrometer is recorded."
                  f"\nThe date and time are: {now.strftime('%Y-%m-%d %H:%M:%S')}.")
@@ -190,7 +206,17 @@ if __name__ == '__main__':
         logging.info(e)
         R0s = np.random.uniform(.85, 1.15, size=sim.npix) * sim.designR0
         np.savetxt(sim.R0s_file, R0s, delimiter=',')
-        logging.info(f'\nThe individual R0s were generated randomly from the design R0 and saved to {sim.R0s_file}.')
+        logging.info(f'The individual R0s were generated randomly from the design R0 and saved to {sim.R0s_file}.')
+
+    try:
+        phase_centers = np.loadtxt(sim.phaseoffset_file, delimiter=',')
+        logging.info(f'\nThe pixel center phase offsets were imported from {sim.phaseoffset_file}.')
+    except IOError as e:
+        logging.info(e)
+        phase_centers = np.random.uniform(.8, 1.2, size=sim.npix)
+        np.savetxt(sim.phaseoffset_file, phase_centers, delimiter=',')
+        logging.info(f'The individual pixel phase center offsets were generated randomly and '
+                     f'saved to {sim.phaseoffset_file}.')
 
     bandpasses = []
     if args.atmobandpass:
@@ -207,10 +233,10 @@ if __name__ == '__main__':
 
     resid_map = np.arange(sim.npix, dtype=int) * 10 + 100  # TODO replace once known
 
-    detector = MKIDDetector(sim.npix, sim.pixelsize, sim.designR0, sim.l0, R0s, resid_map)
+    detector = MKIDDetector(sim.npix, sim.pixelsize, sim.designR0, sim.l0, R0s, phase_centers, resid_map)
     grating = GratingSetup(sim.l0, sim.m0, sim.m_max, sim.pixelsize, sim.npix, sim.focallength, sim.nolittrow)
     spectro = SpectrographSetup(grating, detector, sim.pixels_per_res_elem)
-    eng = Engine(spectro)
+    eng = engine.Engine(spectro)
 
     # ==================================================================================================================
     # SIMULATION STARTS:
@@ -220,7 +246,7 @@ if __name__ == '__main__':
     lambda_pixel = spectro.pixel_wavelengths().to(u.nm)
 
     # obtaining spectra and passing through several transformations:
-    spectrum = get_spectrum(sim.type_spectra, teff=sim.temp, min=sim.minwave, max=sim.maxwave)
+    spectrum = get_spectrum(sim.type_spectra, teff=sim.temp, emission_file=args.emission_file)
     bandpass_spectrum = apply_bandpass(spectrum, bandpass=bandpasses)
     clipped_spectrum = clip_spectrum(bandpass_spectrum, clip_range=(sim.minwave, sim.maxwave))
     blazed_spectrum, masked_waves, masked_blaze = eng.blaze(clipped_spectrum.waveset, clipped_spectrum)
@@ -232,14 +258,15 @@ if __name__ == '__main__':
                                                             N_SIGMA_MKID, simp=sim.simpconvol)
 
     # putting convolved spectrum through MKID observation sequence:
-    photons, observed = detector.observe(convol_wave, convol_result, limit_to=sim.pixellim, exptime=sim.exptime,
-                                         area=sim.telearea)
+    photons, observed = detector.observe(convol_wave, convol_result, minwave=sim.minwave, maxwave=sim.maxwave,
+                                         limit_to=sim.pixellim, exptime=sim.exptime, area=sim.telearea)
 
-    # saving final photon list to h5 file:
+    # saving final photon list to h5 file, store linear phase conversion in header:
     h5_file = f'{args.output_dir}/R0{sim.designR0}_{sim.pixellim}.h5'
     buildfromarray(photons[:observed], user_h5file=h5_file)
     pt = Photontable(h5_file, mode='write')
     pt.update_header('sim_settings', sim)
+    pt.update_header('phase_expression', '0.6 * (freq_allwave - freq_minw) / (freq_maxw - freq_minw) - 0.8')
     pt.disablewrite()  # allows other scripts to open the table
 
     # at this point we are simulating the pipeline and have gone past the "wavecal" part. Next is >to spectrum.
@@ -249,17 +276,38 @@ if __name__ == '__main__':
     # SIMULATION ENDS
     # ==================================================================================================================
 
-
     # ==================================================================================================================
     # DEBUGGING PLOTS:
     # ==================================================================================================================
     warnings.filterwarnings("ignore")  # ignore tight_layout warnings
 
-    """Calculations for plotting"""
+
+    # phase/pixel space plot to verify that phases are within proper values and orders are more-or-less visible
+    from matplotlib.colors import LogNorm
+    idx = [np.where(photons[:observed].resID == resid_map[j]) for j in range(sim.npix)]
+    photons_pixel = [photons[:observed].wavelength[idx[j]].tolist() for j in range(sim.npix)]
+    bin_edges = np.linspace(-1, 0, 100)
+    centers = bin_edges[:-1] + np.diff(bin_edges) / 2
+    hist_array = np.empty([sim.npix, len(bin_edges)-1])
+    for j in detector.pixel_indices:
+        if photons_pixel[j]:
+            counts, edges = np.histogram(photons_pixel[j], bins=bin_edges)
+            hist_array[j, :] = np.array([float(x) for x in counts])
+    plt.imshow(hist_array[:, ::-1].T, extent=[1, sim.npix, -1, 0], aspect='auto', norm=LogNorm())
+    cbar = plt.colorbar()
+    cbar.ax.set_ylabel('Photon Count')
+    plt.title("Phase & Pixel Binning of Observed Photons")
+    plt.xlabel("Pixel Index")
+    plt.ylabel(r"Phase of Photon ($\times \pi /2$)")
+    plt.tight_layout()
+    plt.show()
+
+
+    """Calculations for intermediate plotting"""
     # integrating the flux density spectrum to go to pixel space
     mkid_kernel = eng.build_mkid_kernel(N_SIGMA_MKID, spectro.sampling(OSAMP))
     pix_leftedge = spectro.pixel_wavelengths(edge='left').to(u.nm).value
-    direct_flux_calc = [eng.lambda_to_pixel_space(masked_waves[i], masked_broad[i],
+    direct_flux_calc = [eng.lambda_to_pixel_space(clipped_spectrum.waveset, broadened_spectrum[i],
                                                   pix_leftedge[i]) for i in range(nord)]
 
     # dividing convolution by kernel normalization and integrating
@@ -267,7 +315,7 @@ if __name__ == '__main__':
     norms = np.sum(mkid_kernel) * (x[:, :, 1] - x[:, :, 0]) / SIGMA_FRAC  # since 3 sigma is not exactly 1
     convol_for_plot = (convol_result / (norms[None, ...] * u.nm)).to(u.photlam)
     dx = (convol_wave[1, :, :] - convol_wave[0, :, :]).to(u.nm)
-    convol_summed = (np.sum(convol_for_plot.value, axis=0) * u.photlam * dx)
+    convol_summed = np.sum(convol_for_plot.value, axis=0) * u.photlam * dx
 
     # use FSR to bin
     fsr = spectro.fsr(spectro.orders).to(u.nm)
@@ -281,40 +329,52 @@ if __name__ == '__main__':
         photons_binned[:, j], _ = np.histogram(ph, bins=hist_bins[:, j], density=False)
 
     """Plotting stuff only below"""
-    fig, axes = plt.subplots(3, 1, sharex=True, figsize=(8.5, 11), dpi=300)
+    fig, axes = plt.subplots(3, 1, figsize=(15, 11))
     axes = axes.ravel()
-    plt.suptitle(f"Intermediate plots for MKID spectrometer simulation ({sim.pixellim} Photon Limit)",
+    plt.suptitle(f"Intermediate plots for MKIDSpec {sim.type_spectra} simulation ({sim.pixellim} Photon Limit)",
                  fontweight='bold')
-
     # plotting input, bandpassed, blazed, and broadened spectrum:
-    quick_plot(axes[0], [spectrum.waveset.to(u.nm), bandpass_spectrum.waveset.to(u.nm)],
-               [spectrum(spectrum.waveset), bandpass_spectrum(bandpass_spectrum.waveset)],
-               labels=['Original', 'Filtered'], first=True)
-    quick_plot(axes[0], masked_waves, masked_blaze, labels=[f'Blazed O{o}' for o in spectro.orders])
-    quick_plot(axes[0], masked_waves, masked_broad, color='k',
-               labels=['Broadened'] + ['_nolegend_' for o in spectro.orders[:-1]],
-               title="Original through Optically-Broadened",
-               ylabel=r"Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
+    quick_plot(axes[0], [bandpass_spectrum.waveset.to(u.nm)], [bandpass_spectrum(bandpass_spectrum.waveset)],
+               labels=['Instrument-incident, R~50,000'], color='r', first=True)
+    # quick_plot(axes[0], masked_waves, masked_blaze, labels=[f'Blazed O{o}' for o in spectro.orders])
+    quick_plot(axes[0], masked_waves, masked_broad, color='g',
+               labels=['Blazed+Broadened, R~3500'] + ['_nolegend_' for o in spectro.orders[:-1]],
+               title="Comparison of Input (Instrument-incident) and Blazed/Optically-broadened Spectra",
+               xlabel='Wavelength (nm)', ylabel=r"Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
     axes[0].set_xlim([sim.minwave.value - 25, sim.l0.value + 25])
 
-    # plotting comparison between lambda-to-pixel spectrum and integrated convolution spectrum, must be same:
-    quick_plot(axes[1], lambda_pixel, convol_summed, color='red',
-               labels=["Conv+Int"] + ['_nolegend_' for o in range(nord - 1)], first=True)
-    quick_plot(axes[1], lambda_pixel, direct_flux_calc, color='k',
-               labels=[r"$\lambda$2Pix Int."] + ['_nolegend_' for o in range(nord - 1)],
-               title=r"Convolved+Integrated & $\lambda$-to-Pixel Integrated",
-               ylabel=r"Flux (phot $cm^{-2} s^{-1})$")
+    # plot zoom in of above:
+    quick_plot(axes[1], [bandpass_spectrum.waveset.to(u.nm)], [bandpass_spectrum(bandpass_spectrum.waveset)],
+               labels=['Instrument-incident'], color='r', first=True)
+    # quick_plot(axes[0], masked_waves, masked_blaze, labels=[f'Blazed O{o}' for o in spectro.orders])
+    quick_plot(axes[1], [masked_waves[2]], [masked_broad[2]], color='g',
+               labels=['Blazed+Broadened'] + ['_nolegend_' for o in spectro.orders[:-1]],
+               title="Zooming in to first plot to show details of blazing/optical-broadening", xlabel='Wavelength (nm)',
+               ylabel=r"Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
 
-    # plotting comparison between final counts and convolved-integrated spectrum:
-    quick_plot(axes[2], lambda_pixel, photons_binned[::-1], ylabel="Photon Count", color='k',
-               labels=['Observed+FSR-Binned'] + ['_nolegend_' for o in spectro.orders[:-1]], first=True)
+    # plotting comparison between flux-integrated spectrum and integrated/convolution spectrum, must be same,
+    # also plotting final counts FSR-binned to show general shape
     twin = axes[2].twinx()
-    quick_plot(twin, lambda_pixel, convol_summed, ylabel=r"Flux (phot $cm^{-2} s^{-1})$", color='red',
-               labels=['Conv.+Int.'] + ['_nolegend_' for o in spectro.orders[:-1]],
-               title="Convolved+Integrated vs. Observed Photons", xlabel="Wavelength (nm)", twin='red', alpha=0.5)
+    quick_plot(twin, lambda_pixel, photons_binned[::-1], ylabel="Photon Count", twin='b', color='y', linewidth=1,
+               labels=['Observed'] + ['_nolegend_' for o in spectro.orders[:-1]], first=True)
+    quick_plot(axes[2], lambda_pixel, convol_summed, color='red', linewidth=5, alpha=0.5,
+               labels=["Post-Convol"] + ['_nolegend_' for o in range(nord - 1)])
+    quick_plot(axes[2], lambda_pixel, direct_flux_calc, color='b', ylabel=r"Flux (phot $cm^{-2} s^{-1})$",
+               labels=[r"Flux-int. input"] + ['_nolegend_' for o in range(nord - 1)], alpha=0.5, linewidth=5,
+               title=r"Comparison of Input (integrated to flux space), "
+                     r"Post-Convolution (integrated), and Observed Photon Count (FSR-binned) Spectra (all same shape)")
     fig.tight_layout()
-    plt.subplots_adjust(top=0.92, right=0.6, left=0.1)
     plot_file = f'{args.output_dir}/intplots_R0{sim.designR0}.pdf'
     fig.savefig(plot_file)
     logging.info(f'\nSaved intermediate plots to {plot_file}.')
     plt.show()
+
+"""
+    # plotting all photons in every pixel
+    plt.plot(detector.pixel_indices, np.sum(photons_binned, axis=0))
+    plt.title(f"Total number of photons in each pixel, {sim.type_spectra} spectrum")
+    plt.xlabel("Pixel Index")
+    plt.ylabel("Photon Count")
+    plt.tight_layout()
+    plt.show()
+"""
