@@ -6,6 +6,7 @@ import astropy.units as u
 class SpecSimSettings:
     def __init__(self,
                  R0s_file: str,
+                 phaseoffset_file: str,
                  designR0: float,
                  simpconvol: bool,
                  nolittrow: bool,
@@ -26,6 +27,7 @@ class SpecSimSettings:
                  ):
         """
         :param str R0s_file: Directory/filename of the R0s file.
+        :param str phaseoffset_file: Directory/filename of the pixel phase center offsets file.
         :param float designR0: The spectral resolution at the longest wavelength of m0.
         :param bool simpconvol: True if conducting a simplified convolution with MKIDs.
         :param bool nolittrow: True if Littrow configuration is NOT assumed.
@@ -45,6 +47,7 @@ class SpecSimSettings:
         :param str type_spectra: The type of spectrum to be simulated.
         """
         self.R0s_file = R0s_file
+        self.phaseoffset_file = phaseoffset_file
         self.designR0 = float(designR0)
         self.simpconvol = simpconvol
         self.nolittrow = nolittrow
