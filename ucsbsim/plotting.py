@@ -8,6 +8,7 @@ def quick_plot(
         xlabel=None,
         ylabel=None,
         ylim=None,
+        xlim=None,
         twin=None,
         first=False,
         **kwargs):
@@ -21,6 +22,7 @@ def quick_plot(
     :param xlabel: x axis label
     :param ylabel: y axis label
     :param ylim: y axis upper limit (convenient for twin)
+    :param xlim: x axis limits
     :param twin: y axis twin color, if any
     :param first: True if first line for plot, will make grid
     :param kwargs: color, linestyle, markerstyle, etc.
@@ -40,12 +42,14 @@ def quick_plot(
         ax.set_ylabel(ylabel)
     if ylim is not None:
         ax.set_ylim(top=ylim)
+    if xlim is not None:
+        ax.set_xlim(xlim)
     ax.legend()
     if twin is not None:
         ax.tick_params(axis="y", labelcolor=twin)
         ax.yaxis.label.set_color(twin)
         ax.spines['right'].set_color(twin)
-        ax.legend(loc='lower right', labelcolor=twin)
+        ax.legend(loc='center right', labelcolor=twin)
 
 
 def simulation_plot(
