@@ -11,9 +11,9 @@ import os
 
 from ucsbsim.spectrograph import GratingSetup, SpectrographSetup
 from ucsbsim.detector import MKIDDetector
-from ucsbsim.engine import Engine
+import ucsbsim.engine as engine
 from ucsbsim.plotting import quick_plot
-from synphot.models import Box1D
+from synphot.models import BlackBodyNorm1D, ConstFlux1D
 from synphot import SourceSpectrum
 from ucsbsim.msf import MKIDSpreadFunction
 from mkidpipeline.photontable import Photontable
@@ -64,10 +64,15 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # ==================================================================================================================
+    # CHECK AND/OR CREATE DIRECTORIES
+    # ==================================================================================================================
+    os.makedirs(f'{args.output_dir}/logging', exist_ok=True)
+
+    # ==================================================================================================================
     # START LOGGING TO FILE
     # ==================================================================================================================
     now = dt.now()
-    logging.basicConfig(filename=f'{args.output_dir}/extract_{now.strftime("%Y%m%d_%H%M%S")}.log',
+    logging.basicConfig(filename=f'{args.output_dir}/logging/extract_{now.strftime("%Y%m%d_%H%M%S")}.log',
                         format='%(levelname)s:%(message)s', level=logging.DEBUG)
     logging.info(f"The extraction of an observed spectrum is recorded."
                  f"\nThe date and time are: {now.strftime('%Y-%m-%d %H:%M:%S')}.")
@@ -108,19 +113,24 @@ if __name__ == '__main__':
     detector = MKIDDetector(sim.npix, sim.pixelsize, sim.designR0, sim.l0, R0s, resid_map)
     grating = GratingSetup(sim.l0, sim.m0, sim.m_max, sim.pixelsize, sim.npix, sim.focallength, sim.nolittrow)
     spectro = SpectrographSetup(grating, detector, sim.pixels_per_res_elem)
-    eng = Engine(spectro)
+    eng = engine.Engine(spectro)
     nord = spectro.nord
-    lambda_pixel = spectro.pixel_wavelengths().to(u.nm)[::-1]  # flip order, extracts in ascending wavelengths
+    lambda_pixel = spectro.pixel_wavelengths()[::-1]  # flip order, extracts in ascending wavelengths
 
     # ==================================================================================================================
     # OBSERVATION SPECTRUM EXTRACTION STARTS
     # ==================================================================================================================
     # obtain the pixel-space blaze function:
     wave = np.linspace(sim.minwave.value - 100, sim.maxwave.value + 100, 10000) * u.nm
-    blaze_no_int, _, _ = eng.blaze(wave, SourceSpectrum(Box1D, amplitude=1*u.photlam, x_0=(wave[-1]+wave[0])/2,
-                                                        width=(wave[-1]-wave[0])))
+    # retrieving the blazed calibration spectrum shape assuming it is known and converting to pixel-space wavelengths:
+    if sim.type_spectra == 'blackbody':
+        spectra = SourceSpectrum(BlackBodyNorm1D, temperature=sim.temp)  # flux for star of 1 R_sun at distance of 1 kpc
+    else:
+        spectra = SourceSpectrum(ConstFlux1D, amplitude=1)  # only blackbody supported now
+    blazed_spectrum, _, _ = eng.blaze(wave, spectra)
+    # TODO can we assume any knowledge about blaze shape? if not, how to divide out eventually?
     pix_leftedge = spectro.pixel_wavelengths(edge='left').to(u.nm).value
-    blaze_shape = [eng.lambda_to_pixel_space(wave, blaze_no_int[i], pix_leftedge[i]) for i in range(nord)][::-1]
+    blaze_shape = [eng.lambda_to_pixel_space(wave, blazed_spectrum[i], pix_leftedge[i]) for i in range(nord)][::-1]
     blaze_shape /= np.max(blaze_shape)  # normalize max to 1
     blaze_shape[blaze_shape == 0] = 1  # prevent divide by 0 or very small num. issue
 
@@ -148,7 +158,8 @@ if __name__ == '__main__':
     hdu_list = fits.HDUList([fits.PrimaryHDU(),
                              fits.BinTableHDU(Table(spec/blaze_shape), name='Spectrum'),
                              fits.BinTableHDU(Table(err_n/blaze_shape), name='- Errors'),
-                             fits.BinTableHDU(Table(err_p/blaze_shape), name='+ Errors')])
+                             fits.BinTableHDU(Table(err_p/blaze_shape), name='+ Errors'),
+                             fits.BinTableHDU(Table(lambda_pixel.to(u.Angstrom)), name='Wave Range')])
     hdu_list.writeto(fits_file, output_verify='ignore', overwrite=True)
     logging.info(f'The extracted spectrum with its errors has been saved to {fits_file}.')
     logging.info(f'\nTotal script runtime: {((time.time() - tic) / 60):.2f} min.')
@@ -162,14 +173,14 @@ if __name__ == '__main__':
     # ==================================================================================================================
     spectrum = fits.open(fits_file)
 
-    plt.grid()
     for i in range(nord):
-        plt.fill_between(lambda_pixel[i].value, np.array(spectrum[1].data[i]) - np.array(spectrum[2].data[i]),
+        plt.grid()
+        plt.fill_between(detector.pixel_indices, np.array(spectrum[1].data[i]) - np.array(spectrum[2].data[i]),
                          np.array(spectrum[1].data[i]) - np.array(spectrum[3].data[i]),
                          alpha=0.5, edgecolor='orange', facecolor='orange', linewidth=0.5)
-        plt.plot(lambda_pixel[i], spectrum[1].data[i])
-    plt.title(f"Unblazed & extracted {sim.type_spectra} spectrum")
-    plt.ylabel('Total Photons')
-    plt.xlabel('Wavelength (nm)')
-    plt.tight_layout()
-    plt.show()
+        plt.plot(detector.pixel_indices, spectrum[1].data[i])
+        plt.title(f"Unblazed & extracted {sim.type_spectra}, order {9-i}")
+        plt.ylabel('Intensity')
+        plt.xlabel('Pixel Index')
+        plt.tight_layout()
+        plt.show()
