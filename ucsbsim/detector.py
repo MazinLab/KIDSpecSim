@@ -7,6 +7,32 @@ from .filterphot import mask_deadtime
 from .engine import draw_photons
 
 
+def wave_to_phase(waves, minwave, maxwave):
+    """
+    :param waves: wavelengths in nm
+    :param minwave: minimum wavelength of spectrograph
+    :param maxwave: maximum wavelength of spectrograph
+    :return: phase values corresponding to wavelength
+    """
+    shape = np.shape(waves)
+    waves = waves.flatten()
+    if isinstance(waves, u.Quantity):
+        waves = waves.to(u.nm).value
+    # range is -1(pi/2) to 1(pi/2)
+    # smaller wavelengths wrap beginning at -1 and larger wavelengths wrap beginning at 1
+    # line from (freq_minw, -0.8) to (freq_maxw, -0.2)
+    # if -1.1, negative: -1.1+2*max_phase, positive: if 1.1, 1.1+2*min_phase, repeating until between -1 to 1
+    # linear equation: y = (y2-y1)/(x2-x1)*(x-x1) + y1 = 0.6/(freq_maxw-freq_minw)*(x-freq_minw) - 0.8
+    freq_minw = (c * u.m / u.s / minwave).decompose()  # this will be mapped to -0.8
+    freq_maxw = (c * u.m / u.s / maxwave).decompose()  # this will be mapped to -0.2
+    freqs = (c * u.m / u.s / (waves * u.nm)).decompose()  # converted wavelength to frequency (Hz)
+    phases = np.nan_to_num((0.6 / (freq_maxw - freq_minw) * (freqs - freq_minw)).decompose().value - 0.8,
+                           posinf=0, neginf=-1)
+    logging.info(f'Converted wavelengths to "linear-in-energy" phase space.')
+    phases = np.reshape(phases, shape)
+    return phases
+
+
 class MKIDDetector:
     def __init__(self, n_pix, pixel_size, design_R0, l0, R0s, phase_centers, resid_map=None):
         """
@@ -69,37 +95,6 @@ class MKIDDetector:
         except AttributeError:  # allow non-array args
             pass
         return wave ** 2 / rc
-
-    def wave_to_phase(self, waves, minwave, maxwave, ):
-        """
-        :param waves: wavelengths in nm
-        :param minwave: minimum wavelength of spectrograph
-        :param maxwave: maximum wavelength of spectrograph
-        :return: phase values corresponding to wavelength
-        """
-        shape = np.shape(waves)
-        waves = waves.flatten()
-        if isinstance(waves, u.Quantity):
-            waves = waves.to(u.nm).value
-        # range is -1(pi/2) to 1(pi/2)
-        # smaller wavelengths wrap beginning at -1 and larger wavelengths wrap beginning at 1
-        # line from (freq_minw, -0.8) to (freq_maxw, -0.2)
-        # if -1.1, negative: -1.1+2*max_phase, positive: if 1.1, 1.1+2*min_phase, repeating until between -1 to 1
-        # linear equation: y = (y2-y1)/(x2-x1)*(x-x1) + y1 = 0.6/(freq_maxw-freq_minw)*(x-freq_minw) - 0.8
-        freq_minw = (c * u.m / u.s / minwave).decompose()  # this will be mapped to -0.8
-        freq_maxw = (c * u.m / u.s / maxwave).decompose()  # this will be mapped to -0.2
-        freqs = (c * u.m / u.s / (waves * u.nm)).decompose()  # converted wavelength to frequency (Hz)
-        phases = np.nan_to_num((0.6 / (freq_maxw - freq_minw) * (freqs - freq_minw)).decompose().value - 0.8,
-                               posinf=0, neginf=0)
-        if phases.size:
-            for n, j in enumerate(phases):
-                while phases[n] < -1:
-                    phases[n] += 2
-                while phases[n] > 1:
-                    phases[n] -= 2
-        logging.info(f'Converted wavelengths to "linear-in-energy" phase space.')
-        phases = np.reshape(phases, shape)
-        return phases
 
     def observe(self, convol_wave, convol_result, phase: bool = True, minwave=None, maxwave=None, **kwargs):
         """
@@ -193,7 +188,7 @@ class MKIDDetector:
             # line from (freq_minw, -0.8) to (freq_maxw, -0.2)
             # if -1.1, negative: -1.1+2*max_phase, positive: if 1.1, 1.1+2*min_phase, repeating until between -1 to 1
             # linear equation: y = (y2-y1)/(x2-x1)*(x-x1) + y1 = 0.6/(freq_maxw-freq_minw)*(x-freq_minw) - 0.8
-            photons.wavelength = self.wave_to_phase(photons.wavelength, minwave, maxwave)
+            photons.wavelength = wave_to_phase(photons.wavelength, minwave, maxwave)
             for j in self.pixel_indices:  # sorting photons by resID (i.e. pixel) and multiplying phase center offsets
                 photons.wavelength[np.where(photons.resID == self.resid_map[j])] *= self.pixel_phase_centers[j]
             if photons.wavelength.size:
