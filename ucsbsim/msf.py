@@ -3,11 +3,13 @@ import matplotlib.pyplot as plt
 
 
 class MKIDSpreadFunction:
-    def __init__(self, bin_edges=None, cov_matrix=None, orders=None, filename: str = '', sim_settings=None):
+    def __init__(self, bin_edges=None, cov_matrix=None, orders=None, waves=None,
+                 filename: str = '', sim_settings=None):
         """
         :param bin_edges: n_ord+1 by n_pix array of wavelength or phase bins
         :param cov_matrix: n_ord by n_ord by n_pix array of covariance fractions belonging to another order
         :param orders: list or 1D array of orders in spectrograph
+        :param waves: n_ord by n_pix array of retrieved wavelengths or phases
         :param str filename: where the MKIDSpreadFunction exists or where to save a new file
         :param sim_settings: simulation settings for the spectrograph
         """
@@ -20,9 +22,14 @@ class MKIDSpreadFunction:
             self.bin_edges = bin_edges
             self.cov_matrix = cov_matrix
             self.orders = orders
+            self.waves = waves
+            assert self.waves.shape[0] == len(orders), 'Wavelengths/phases do not have the correct number of orders.'
+            assert self.cov_matrix.shape[0] == len(orders), \
+                "Covariance matrix doesn't have the correct number of orders."
             assert self.cov_matrix.shape[0] == self.cov_matrix.shape[1], 'Covariance matrix is not square.'
-            assert self.bin_edges.shape[0]-1 == self.cov_matrix.shape[0],\
-                'Bin edges and covariance have unequal number of orders.'
+            assert self.bin_edges.shape[0]-1 == len(orders), 'Bin edges do not have the correct number of orders.'
+            assert self.bin_edges.shape[-1] == self.waves.shape[-1], \
+                'Bin edges and wavelengths/phases have unequal number of pixels.'
             assert self.bin_edges.shape[-1] == self.cov_matrix.shape[-1],\
                 'Bin edges and covariance have unequal number of pixels.'
             self.sim_settings = sim_settings
@@ -30,7 +37,8 @@ class MKIDSpreadFunction:
     def save(self, filename=''):
         fn = filename or self.filename
         assert fn, "'filename' must be specified."
-        np.savez(fn, bin_edges=self.bin_edges, cov_matrix=self.cov_matrix, sim_settings=self.sim_settings)
+        np.savez(fn, bin_edges=self.bin_edges, cov_matrix=self.cov_matrix, waves=self.waves, orders=self.orders,
+                 sim_settings=self.sim_settings)
 
     def _load(self):
         msf = np.load(self.filename, allow_pickle=True)
@@ -40,6 +48,10 @@ class MKIDSpreadFunction:
         self.cov_matrix = msf['cov_matrix']
         assert msf['sim_settings'], 'File is missing simulation settings or syntax is incorrect.'
         self.sim_settings = msf['sim_settings']
+        assert msf['orders'].any(), 'File is missing orders or syntax is incorrect.'
+        self.orders = msf['orders']
+        assert msf['waves'].any(), 'File is missing wavelengths/phases or syntax is incorrect.'
+        self.waves = msf['waves']
 
     def plot(self, ax=None):
         if ax is None:
