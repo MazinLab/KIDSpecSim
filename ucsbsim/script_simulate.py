@@ -2,6 +2,7 @@ import os
 import warnings
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 import scipy
 import scipy.interpolate as interp
 from scipy.stats import norm
@@ -79,7 +80,7 @@ if __name__ == '__main__':
                              " will be created if it doesn't exist. (str)")
     parser.add_argument('type_spectra',
                         metavar='TYPE_SPECTRA',
-                        help='The type of spectrum to be simulated: can be "blackbody", "phoenix", or "delta". (str)')
+                        help='The type of spectrum: can be "blackbody", "phoenix", "flat", or "emission". (str)')
 
     # optional simulation args:
     parser.add_argument('-pl', '--pixellim',
@@ -100,7 +101,7 @@ if __name__ == '__main__':
                         help='The telescope area of the observation in cm2. (float)')
     parser.add_argument('-T', '--temp',
                         metavar='TEMP_K',
-                        default=4300,
+                        default=6500,
                         help='Temperature of the spectrum in K if "type_spectra" is "blackbody" or "phoenix". (float)')
     parser.add_argument('-sc', '--simpconvol',
                         action='store_true',
@@ -281,24 +282,24 @@ if __name__ == '__main__':
     # ==================================================================================================================
     warnings.filterwarnings("ignore")  # ignore tight_layout warnings
 
-
-    # phase/pixel space plot to verify that phases are within proper values and orders are more-or-less visible
-    from matplotlib.colors import LogNorm
+    # separating photons by resid (pixel)
     idx = [np.where(photons[:observed].resID == resid_map[j]) for j in range(sim.npix)]
     photons_pixel = [photons[:observed].wavelength[idx[j]].tolist() for j in range(sim.npix)]
-    bin_edges = np.linspace(-1, 0, 100)
+
+    # phase/pixel space plot to verify that phases are within proper values and orders are more-or-less visible
+    bin_edges = np.linspace(-1, -0.1, 100)
     centers = bin_edges[:-1] + np.diff(bin_edges) / 2
     hist_array = np.empty([sim.npix, len(bin_edges)-1])
     for j in detector.pixel_indices:
         if photons_pixel[j]:
             counts, edges = np.histogram(photons_pixel[j], bins=bin_edges)
             hist_array[j, :] = np.array([float(x) for x in counts])
-    plt.imshow(hist_array[:, ::-1].T, extent=[1, sim.npix, -1, 0], aspect='auto', norm=LogNorm())
+    plt.imshow(hist_array[:, ::-1].T, extent=[1, sim.npix, -1, -0.1], aspect='auto', norm=LogNorm())
     cbar = plt.colorbar()
     cbar.ax.set_ylabel('Photon Count')
     plt.title("Phase & Pixel Binning of Observed Photons")
     plt.xlabel("Pixel Index")
-    plt.ylabel(r"Phase of Photon ($\times \pi /2$)")
+    plt.ylabel(r"Phase ($\times \pi /2$)")
     plt.tight_layout()
     plt.show()
 
@@ -324,9 +325,8 @@ if __name__ == '__main__':
     hist_bins[1:, :] = [(lambda_pixel[i, :] + fsr[i] / 2).value for i in range(nord)[::-1]]
 
     photons_binned = np.empty((nord, sim.npix))
-    for j in range(sim.npix):  # sorting photons by resID (i.e. pixel)
-        ph = photons[:observed].wavelength[np.where(photons.resID == resid_map[j])].tolist()
-        photons_binned[:, j], _ = np.histogram(ph, bins=hist_bins[:, j], density=False)
+    for j in range(sim.npix):
+        photons_binned[:, j], _ = np.histogram(photons_pixel[j], bins=hist_bins[:, j], density=False)
 
     """Plotting stuff only below"""
     fig, axes = plt.subplots(3, 1, figsize=(15, 11))
@@ -344,21 +344,21 @@ if __name__ == '__main__':
     axes[0].set_xlim([sim.minwave.value - 25, sim.l0.value + 25])
 
     # plot zoom in of above:
-    quick_plot(axes[1], [bandpass_spectrum.waveset.to(u.nm)], [bandpass_spectrum(bandpass_spectrum.waveset)],
-               labels=['Instrument-incident'], color='r', first=True)
+    quick_plot(axes[1], [bandpass_spectrum.waveset.to(u.nm)[0]], [bandpass_spectrum(bandpass_spectrum.waveset)[0]],
+               labels=['Instrument-incident'], color='r', first=True, xlim=[667,800])
     # quick_plot(axes[0], masked_waves, masked_blaze, labels=[f'Blazed O{o}' for o in spectro.orders])
-    quick_plot(axes[1], [masked_waves[2]], [masked_broad[2]], color='g',
+    quick_plot(axes[1], [masked_waves[0]], [masked_broad[0]], color='g',
                labels=['Blazed+Broadened'] + ['_nolegend_' for o in spectro.orders[:-1]],
-               title="Zooming in to first plot to show details of blazing/optical-broadening", xlabel='Wavelength (nm)',
+               title="Zooming in to first plot to show details of blazing/optical-broadening, order 5", xlabel='Wavelength (nm)',
                ylabel=r"Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
 
     # plotting comparison between flux-integrated spectrum and integrated/convolution spectrum, must be same,
     # also plotting final counts FSR-binned to show general shape
     twin = axes[2].twinx()
     quick_plot(twin, lambda_pixel, photons_binned[::-1], ylabel="Photon Count", twin='b', color='y', linewidth=1,
-               labels=['Observed'] + ['_nolegend_' for o in spectro.orders[:-1]], first=True)
+               labels=['Observed'] + ['_nolegend_' for o in spectro.orders[:-1]], first=True, xlim=[400,800])
     quick_plot(axes[2], lambda_pixel, convol_summed, color='red', linewidth=5, alpha=0.5,
-               labels=["Post-Convol"] + ['_nolegend_' for o in range(nord - 1)])
+               labels=["Post-Convol"] + ['_nolegend_' for o in range(nord - 1)], xlim=[400,800])
     quick_plot(axes[2], lambda_pixel, direct_flux_calc, color='b', ylabel=r"Flux (phot $cm^{-2} s^{-1})$",
                labels=[r"Flux-int. input"] + ['_nolegend_' for o in range(nord - 1)], alpha=0.5, linewidth=5,
                title=r"Comparison of Input (integrated to flux space), "
