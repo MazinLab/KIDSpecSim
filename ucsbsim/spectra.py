@@ -9,7 +9,7 @@ from astropy import units as u
 from specutils import Spectrum1D
 from synphot import SpectralElement, SourceSpectrum
 from synphot.spectrum import BaseSpectrum
-from synphot.models import Box1D, BlackBodyNorm1D
+from synphot.models import Box1D, BlackBodyNorm1D, ConstFlux1D
 from .engine import gauss
 
 _atm = None
@@ -117,10 +117,16 @@ def BlackbodyModel(teff: float):
     return SourceSpectrum(BlackBodyNorm1D, temperature=teff)
 
 
-def EmissionModel(filename, C, target_R=50000):
+def FlatModel():
+    """
+    :return: model which returns the same flux at all wavelengths
+    """
+    return SourceSpectrum(ConstFlux1D, amplitude=1)
+
+
+def EmissionModel(filename, target_R=50000):
     """
     :param filename: file name of the emission line list, with wavelength in nm, FROM NIST
-    :param C: constant to multiply uncertainty for emission lines
     :param target_R: spectral resolution to diffraction limit line spectrum
     :return: full emission spectrum, intensity converted to photlam
     """
@@ -136,9 +142,9 @@ def EmissionModel(filename, C, target_R=50000):
     return SourceSpectrum.from_spectrum1d(Spectrum1D(flux=spectrum*u.photlam, spectral_axis=wave_grid*u.nm))
 
 
-def get_spectrum(spectrum_type: str, teff=None, emission_file=None, C=100):
+def get_spectrum(spectrum_type: str, teff=None, emission_file=None):
     """
-    :param str spectrum_type: 'blackbody', 'phoenix', or 'neon' only
+    :param str spectrum_type: 'blackbody', 'phoenix', 'flat', or 'emission' only
     :param teff: effective temperature for blackbody or phoenix model spectrum
     :param emission_file: file name for the desired emission spectrum
     :param C: constant to multiply uncertainty for emission lines
@@ -150,11 +156,14 @@ def get_spectrum(spectrum_type: str, teff=None, emission_file=None, C=100):
     elif spectrum_type == 'phoenix':
         logging.info(f'\nObtained Phoenix model spectrum of {teff} K star.')
         return PhoenixModel(teff)
-    elif spectrum_type == 'neon':
-        logging.info(f'\nObtained Neon emission spectrum.')
-        return EmissionModel(emission_file, C)
+    elif spectrum_type == 'flat':
+        logging.info(f'\nObtained flat flux model spectrum.')
+        return FlatModel()
+    elif spectrum_type == 'emission':
+        logging.info(f'\nObtained {emission_file} emission spectrum.')
+        return EmissionModel(emission_file)
     else:
-        raise ValueError("Only 'blackbody', 'phoenix', or 'neon' are supported for spectrum_type.")
+        raise ValueError("Only 'blackbody', 'phoenix', 'flat', or 'emission' are supported for spectrum_type.")
 
 def clip_spectrum(x, clip_range):
     """
