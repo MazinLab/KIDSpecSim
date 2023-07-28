@@ -1,20 +1,20 @@
 import numpy as np
 import scipy.interpolate as interp
 import scipy
-import scipy.signal as sig
+from scipy.signal import oaconvolve, find_peaks, gaussian
 import scipy.ndimage as ndi
 import astropy.units as u
 import matplotlib.pyplot as plt
 import logging
-from scipy.constants import c
 
 from . import sortarray
-from plotting import quick_plot
+from .plotting import quick_plot
 from lmfit import Parameters, minimize
 from mkidpipeline import photontable as pt
 
 u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # photon flux per wavelength
-SIG2WID = 2*np.sqrt(np.log(2))
+SIG2WID = 2 * np.sqrt(np.log(2))
+
 
 def _determine_apodization(x, pixel_samples_frac, pixel_max_npoints):
     """
@@ -109,16 +109,15 @@ def draw_photons(convol_wave,
     cdf = cdf.decompose()  # todo this is a slopy copy, decomposes units into MKS
     total_photons = cdf[-1, :]
 
-    # putting Poisson draw after limiting because int64 error
-    if total_photons.value.max() > limit_to:
-        total_photons_ltd = (total_photons.value / total_photons.value.max() * limit_to).astype(int)
-        # crappy limit to 1000 photons per pixel for testing
+    # putting Poisson draw after limiting because time-consuming
+    if total_photons.value.max() / exptime.value > limit_to:
+        total_photons_ltd = (total_photons.value / total_photons.value.max() * limit_to * exptime.value).astype(int)
         N = np.random.poisson(total_photons_ltd)
         # Now assume that you want N photons as a Poisson random number for each pixel
-        logging.info(f'\tLimited to a maximum of {N.max()} photons per pixel.')
+        logging.info(f'\tLimited to {limit_to} photons per pixel per second.')
     else:
         N = np.random.poisson(total_photons.value.astype(int))
-        logging.info(f'\tMax # of photons in any pixel: {N.max()}.')
+        logging.info(f'\tMax # of photons per second in any pixel: {N.max() / exptime.value}.')
 
     cdf /= total_photons
 
@@ -133,18 +132,19 @@ def draw_photons(convol_wave,
     return t_photons, l_photons
 
 
-def _n_bins(n_data):
+def _n_bins(n_data: int):
     # TODO include more algorithms based on number of data points
     """
-    :param n_data: number of data points
+    :param int n_data: number of data points
     :return: best number of bins based on various algorithms
     """
-    #if n_data > x:
+    if n_data:
+        return int(5 * n_data ** (1 / 3))
+    # if n_data > x:
     #    return bins
-    #if 500 <= n_data < y:
+    # if 500 <= n_data < y:
     #    return int(np.log2(n_data)+1)
-    #if y <= n_data < z:
-    #    return bins
+    # if y <= n_data < z:
 
 
 def gauss(x, mu, sig, A):
@@ -207,30 +207,28 @@ def param_to_array(params, n_gauss, post_opt=True):
     return mu, sig, A
 
 
-def wave_to_phase(waves, freq_minw, freq_maxw):
+def _get_params(n_gauss, guess, bounds=None):
     """
-    :param waves: wavelengths as Quantity or value in nm
-    :param freq_minw: frequency of the minimum detector wavelength in /s
-    :param freq_maxw: frequency of the maximum detector wavelength is /s
-    :return: phase of photons between -1 and 1
+    :param n_gauss: number of Gaussians being fit
+    :param guess: as list, guess values of mu, sig, and A
+    :return: Parameter class object containing parameters with bounds and guesses
     """
-    # range is -1 to 1, smaller wavelengths wrap beginning at -1 and larger wavelengths wrap beginning at 1
-    # line from (freq_minw, -0.8) to (freq_maxw, -0.2)
-    # if -1.1, negative: -1.1+2*max_phase, positive: if 1.1, 1.1+2*min_phase, repeating until between -1 to 1
-    # linear equation: y = (y2-y1)/(x2-x1)*(x-x1) + y1 = 0.6/(freq_maxw-freq_minw)*(x-freq_minw) - 0.8
-    if not isinstance(waves, u.Quantity):
-        wavelengths = waves*u.nm
+    params = Parameters()
+    # s = 1 if n_gauss == self.spectrograph.nord-1 else 0
+    mus = guess[0]
+    sigs = guess[1]
+    As = guess[2]
+
+    if bounds is not None:  # TODO add bounds to args
+        bounds = bounds
     else:
-        wavelengths = waves
-    freqs = (c * u.m / u.s / wavelengths).decompose()
-    phase = (0.6 / (freq_maxw - freq_minw) * (freqs - freq_minw)).decompose().value - 0.8
-    if phase.size:
-        for n, j in enumerate(phase):
-            while phase[n] < -1:
-                phase[n] += 2
-            while phase[n] > 1:
-                phase[n] -= 2
-    return phase
+        bounds = [[[] for i in range(n_gauss)], [[] for i in range(n_gauss)], [[] for i in range(n_gauss)]]
+
+    for i in range(n_gauss):
+        params.add(f'mu_{i}', value=mus[i], min=mus[i]-2*sigs[i], max=mus[i]+2*sigs[i])
+        params.add(f'sig_{i}', value=sigs[i], min=sigs[i] / 50, max=sigs[i])
+        params.add(f'A_{i}', value=As[i], min=3, max=2*As[-1])
+    return params
 
 
 class Engine:
@@ -291,7 +289,7 @@ class Engine:
         mkid_kernel_npoints = np.ceil((max_mkid_kernel_width / sampling).si.value).astype(int)  # points in Gaussian
         if not mkid_kernel_npoints % 2:  # ensuring it is odd so 1 point is at kernel center
             mkid_kernel_npoints += 1
-        return sig.gaussian(mkid_kernel_npoints, (self.spectrograph.dl_mkid_max() / sampling).si.value / SIG2WID)
+        return gaussian(mkid_kernel_npoints, (self.spectrograph.dl_mkid_max() / sampling).si.value / SIG2WID)
         # takes standev not FWHM, width/sampling is the dimensionless standev
 
     def mkid_kernel_waves(self, n_points, n_sigma=3, oversampling=10):
@@ -364,7 +362,7 @@ class Engine:
             logging.info('Multiplied function with MKID response.')
         else:
             sl = slice(pixel_max_npoints // 2, -(pixel_max_npoints // 2))
-            result = sig.oaconvolve(data, mkid_kernel[:, None, None], mode='full', axes=0)[sl] * u.photlam
+            result = oaconvolve(data, mkid_kernel[:, None, None], mode='full', axes=0)[sl] * u.photlam
             # takes the 67 sampling axis and turns it into ~95000 points each for each order/pixel [~95000, 5, 2048]
             # oaconvolve can't deal with units so you have to give it them
             logging.info('Fully-convolved spectrum with MKID response.')
@@ -398,57 +396,46 @@ class Engine:
         last = [flux_int.integral(leftedge[-1], leftedge[-1] + (leftedge[-1] - leftedge[-2]))]
         return integrated + last
 
-    def _get_params(self, pixel, max_phot, n_gauss, guess=None):
-        """
-        :param pixel: pixel
-        :param max_phot: maximum # of photons in any pixel
-        :param n_gauss: number of Gaussians being fit
-        :param guess: as list, guess values of mu, sig, and A
-        :return: Parameter class object containing parameters with bounds and guesses
-        """
-        params = Parameters()
-        #s = 1 if n_gauss == self.spectrograph.nord-1 else 0
-        if guess is None:
-            mus = self.spectrograph.pixel_wavelengths()[:n_gauss, pixel].to(u.nm).value[::-1]
-            sigs = self.spectrograph.sigma_mkid_pixel()[:n_gauss, pixel].to(u.nm).value[::-1]
-        else:
-            mus = guess[0]
-            sigs = guess[1]
-        As = [max_phot for i in range(n_gauss)]
-
-        for i in range(n_gauss):
-            params.add(f'mu_{i}', value=mus[i], min=mus[i] - sigs[i], max=mus[i] + sigs[i])
-            params.add(f'sig_{i}', value=sigs[i], min=0, max=3*sigs[i])
-            params.add(f'A_{i}', value=As[i], min=0, max=1.5 * max_phot)
-        return params
-
-    def fit_gaussians(self, pixel: int, photons, n_gauss: int, guess=None, plot=False):
+    def fit_gaussians(self, pixel: int, photons, n_gauss: int, plot=False):
         """
         :param pixel: pixel
         :param photons: list of photon wavelengths
         :param n_gauss: number of Gaussian functions to fit
-        :param guess: as list, guess values for mu, sigma, and amplitude
         :param plot: True if viewing the fit for the pixel
         :return: optimized and guess parameters for mu, sigma, and amplitude
         """
-        #bins = _n_bins(len(photons))
-        counts, edges = np.histogram(photons, bins=int(5*len(photons)**(1/3)))  # binning photons for shape fitting
-        counts = np.array([float(x) for x in counts])  # TODO update binning to be more robust
+        bins = _n_bins(len(photons))
+        counts, edges = np.histogram(photons, bins=bins, range=(-1,0))  # binning photons for shape fitting
+        counts = np.array([float(x) for x in counts])
         centers = edges[:-1] + np.diff(edges) / 2
-        params = self._get_params(pixel, np.max(counts), n_gauss, guess=guess)
+
+        peaks, _ = find_peaks(counts, distance=int(bins/11), height=2)
+        mu_guess = np.linspace(centers[peaks[0]], centers[peaks[-1]], n_gauss)
+        A_guess = np.linspace(counts[peaks[0]], counts[peaks[-1]], n_gauss)
+        sig_guess = [np.abs(mu_guess[0] - mu_guess[1]) / 2 for i in range(n_gauss)]
+        guess = [mu_guess, sig_guess, A_guess]
+        params = _get_params(n_gauss, guess=guess)
         opt_params = minimize(lmfit_gaussians, params, args=(centers, counts, n_gauss), method='least_squares')
+        if opt_params.redchi > 100:  # redo once with adjusted guess
+            mu_guess[0] += 0.08
+            mu_guess = np.linspace(mu_guess[0], mu_guess[-1], n_gauss)
+            A_int = interp.interp1d(centers, counts)
+            A_guess = A_int(mu_guess)
+            guess = [mu_guess, sig_guess, A_guess]
+            params = _get_params(n_gauss, guess=guess)
+            opt_params = minimize(lmfit_gaussians, params, args=(centers, counts, n_gauss), method='least_squares')
 
         if plot:
-            s = 1 if n_gauss == self.spectrograph.nord-1 else 0
+            s = 1 if n_gauss == self.spectrograph.nord - 1 else 0
             fig, ax = plt.subplots(1, 1)
             quick_plot(ax, [centers], [counts], labels=['Data'], first=True, color='k')
+            quick_plot(ax, [mu_guess], [A_guess], labels=['Guess'], marker='.')
             ax.fill_between(centers, 0, counts, color='k')
-            x = [np.linspace(-1,1, 10000) for i in range(n_gauss)]
+            x = [np.linspace(-1, 0, 1000) for i in range(n_gauss)]
             mu, sig, A = param_to_array(opt_params, n_gauss, post_opt=True)
             quick_plot(ax, x, gauss(x[0], mu[:, None], sig[:, None], A[:, None]).T,
                        labels=[f'Order {i}' for i in self.spectrograph.orders[::-1][s:]],
-                       title=f'Least-Squares Fit for Pixel {pixel+1}',
-                       xlabel='Phase', ylabel='Photon Count')
+                       title=f'Least-Squares Fit for Pixel {pixel + 1}', xlabel='Phase', ylabel='Photon Count')
             plt.show()
 
         return opt_params, params
