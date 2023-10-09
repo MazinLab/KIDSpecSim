@@ -18,7 +18,7 @@ from mkidpipeline.photontable import Photontable
 from ucsbsim.spectra import get_spectrum, apply_bandpass, AtmosphericTransmission, FilterTransmission, \
     TelescopeTransmission, clip_spectrum
 from ucsbsim.spectrograph import GratingSetup, SpectrographSetup
-from ucsbsim.detector import MKIDDetector
+from ucsbsim.detector import MKIDDetector, wave_to_phase
 import ucsbsim.engine as engine
 from ucsbsim.plotting import quick_plot
 from ucsbsim.simsettings import SpecSimSettings
@@ -47,7 +47,7 @@ Notes:
 """
 
 if __name__ == '__main__':
-    tic = time.time()  # recording start time for script
+    tic = time.perf_counter()  # recording start time for script
     u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # new unit name, photon flux per wavelength
 
     # ==================================================================================================================
@@ -93,7 +93,7 @@ if __name__ == '__main__':
                         help='Directory/file name of the NIST emission line spectrum.')
     parser.add_argument('-et', '--exptime',
                         metavar='EXPOSURE_TIME_S',
-                        default=50,
+                        default=500,
                         help='The total exposure time of the observation in seconds. (float)')
     parser.add_argument('-ta', '--telearea',
                         metavar='TELESCOPE_AREA_CM2',
@@ -151,35 +151,48 @@ if __name__ == '__main__':
                         help='The longest wavelength of any order in use in nm. (float)')
 
     # optional grating args:
+    parser.add_argument('-a', '--alpha',
+                        metavar='INCIDENCE_ANGLE',
+                        default=28.3,
+                        help='Alpha, the angle of incidence on the grating in degrees. (float)')
+    parser.add_argument('-del', '--delta',
+                        metavar='BLAZE_ANGLE',
+                        default=63,
+                        help='Delta, the grating blaze angle in degrees. (float)')
+    parser.add_argument('-d', '--groove_length',
+                        metavar='GROOVE_LENGTH',
+                        default=((1 / 316) * u.mm).to(u.nm).value,
+                        help='The groove length d, or distance between slits, of the grating in nm. (float)')
+
+    # optional spectrograph args:
     parser.add_argument('-m0', '--m0',
                         metavar='INITIAL_ORDER',
-                        default=5,
+                        default=4,
                         help='The initial order, at the longer wavelength end. (int)')
     parser.add_argument('-mm', '--m_max',
                         metavar='FINAL_ORDER',
-                        default=9,
+                        default=7,
                         help='The final order, at the shorter wavelength end. (int)')
-    parser.add_argument('-fl', '--focallength',
-                        metavar='FOCAL_LENGTH_MM',
-                        default=350,
-                        help='The focal length of the detector in mm. (float)')
-    parser.add_argument('-nl', '--nolittrow',
-                        action='store_true',
-                        default=False,
-                        help='If passed, indicates NOT to configure grating on Littrow (incident=reflected angle).')
-
-    # optional spectrograph args:
     parser.add_argument('-ppre', '--pixels_per_res_elem',
                         metavar='PIXELS_PER_RESOLUTION_ELEMENT',
                         default=2.5,
                         help='Number of pixels per spectral resolution element for the spectrograph. (float)')
+    parser.add_argument('-fl', '--focallength',
+                        metavar='FOCAL_LENGTH_MM',
+                        default=300,
+                        help='The focal length of the detector in mm. (float)')
+    parser.add_argument('-bcp', '--beta_cent_pix',
+                        metavar='BETA_CENTRAL_PIXEL',
+                        default=28.3,
+                        help='Beta, the reflectance angle, at the central pixel in degrees. (float)')
 
     # get arguments & simulation settings
     args = parser.parse_args()
-    sim = SpecSimSettings(args.R0s_file, args.phaseoffset_file, args.designR0, args.simpconvol, args.nolittrow, args.l0,
-                          args.m0, args.m_max, args.minwave, args.maxwave, args.npix, args.pixellim, args.exptime,
-                          args.telearea, args.pixelsize, args.focallength, args.pixels_per_res_elem, args.temp,
-                          args.type_spectra)
+    sim = SpecSimSettings(args.R0s_file, args.phaseoffset_file, args.type_spectra, args.pixellim, args.emission_file,
+                          args.exptime, args.telearea, args.temp, args.simpconvol, args.minwave, args.maxwave,
+                          args.npix, args.pixelsize, args.designR0, args.l0, args.alpha, args.delta,
+                          args.groove_length, args.m0, args.m_max, args.pixels_per_res_elem, args.focallength,
+                          args.beta_cent_pix)
 
     # ==================================================================================================================
     # CHECK AND/OR CREATE DIRECTORIES
@@ -194,7 +207,7 @@ if __name__ == '__main__':
     now = dt.now()
     logging.basicConfig(filename=f'{args.output_dir}/logging/sim_{now.strftime("%Y%m%d_%H%M%S")}.log',
                         format='%(levelname)s:%(message)s', level=logging.DEBUG)
-    logging.info(f"The simulation of a {sim.type_spectra} spectrum's journey through the spectrometer is recorded."
+    logging.info(f"The simulation of a(n) {sim.type_spectra} spectrum's journey through the spectrometer is recorded."
                  f"\nThe date and time are: {now.strftime('%Y-%m-%d %H:%M:%S')}.")
 
     # ==================================================================================================================
@@ -219,6 +232,22 @@ if __name__ == '__main__':
         logging.info(f'The individual pixel phase center offsets were generated randomly and '
                      f'saved to {sim.phaseoffset_file}.')
 
+    resid_map = np.arange(sim.npix, dtype=int) * 10 + 100  # TODO replace once known
+
+    detector = MKIDDetector(sim.npix, sim.pixelsize, sim.designR0, sim.l0, R0s, phase_centers, resid_map)
+    grating = GratingSetup(sim.alpha, sim.delta, sim.groove_length)
+    spectro = SpectrographSetup(sim.m0, sim.m_max, sim.l0, sim.pixels_per_res_elem, sim.focallength,
+                                grating, detector)
+    eng = engine.Engine(spectro)
+
+    # ==================================================================================================================
+    # SIMULATION STARTS
+    # ==================================================================================================================
+    # setting up engine and spectrograph, obtaining various needed properties:
+    nord = spectro.nord
+    lambda_pixel = spectro.pixel_wavelengths().to(u.nm)
+
+    # populate desired bandpasses
     bandpasses = []
     if args.atmobandpass:
         bandpasses.append(AtmosphericTransmission())
@@ -232,22 +261,9 @@ if __name__ == '__main__':
         ones = Spectrum1D(spectral_axis=w, flux=t)
         bandpasses.append(SpectralElement.from_spectrum1d(ones))
 
-    resid_map = np.arange(sim.npix, dtype=int) * 10 + 100  # TODO replace once known
-
-    detector = MKIDDetector(sim.npix, sim.pixelsize, sim.designR0, sim.l0, R0s, phase_centers, resid_map)
-    grating = GratingSetup(sim.l0, sim.m0, sim.m_max, sim.pixelsize, sim.npix, sim.focallength, sim.nolittrow)
-    spectro = SpectrographSetup(grating, detector, sim.pixels_per_res_elem)
-    eng = engine.Engine(spectro)
-
-    # ==================================================================================================================
-    # SIMULATION STARTS:
-    # ==================================================================================================================
-    # setting up engine and spectrograph, obtaining various needed properties:
-    nord = spectro.nord
-    lambda_pixel = spectro.pixel_wavelengths().to(u.nm)
-
     # obtaining spectra and passing through several transformations:
-    spectrum = get_spectrum(sim.type_spectra, teff=sim.temp, emission_file=args.emission_file)
+    spectrum = get_spectrum(sim.type_spectra, teff=sim.temp, emission_file=args.emission_file,
+                            minwave=sim.minwave, maxwave=sim.maxwave)
     bandpass_spectrum = apply_bandpass(spectrum, bandpass=bandpasses)
     clipped_spectrum = clip_spectrum(bandpass_spectrum, clip_range=(sim.minwave, sim.maxwave))
     blazed_spectrum, masked_waves, masked_blaze = eng.blaze(clipped_spectrum.waveset, clipped_spectrum)
@@ -272,7 +288,7 @@ if __name__ == '__main__':
 
     # at this point we are simulating the pipeline and have gone past the "wavecal" part. Next is >to spectrum.
     logging.info(f'\nSaved photon table of {sim.type_spectra} spectrum to {h5_file}')
-    logging.info(f'\nTotal simulation time: {((time.time() - tic) / 60):.2f} min.')
+    logging.info(f'\nTotal simulation time: {((time.perf_counter() - tic) / 60):.2f} min.')
     # ==================================================================================================================
     # SIMULATION ENDS
     # ==================================================================================================================
@@ -289,7 +305,7 @@ if __name__ == '__main__':
     # phase/pixel space plot to verify that phases are within proper values and orders are more-or-less visible
     bin_edges = np.linspace(-1, -0.1, 100)
     centers = bin_edges[:-1] + np.diff(bin_edges) / 2
-    hist_array = np.empty([sim.npix, len(bin_edges)-1])
+    hist_array = np.zeros([sim.npix, len(bin_edges) - 1])
     for j in detector.pixel_indices:
         if photons_pixel[j]:
             counts, edges = np.histogram(photons_pixel[j], bins=bin_edges)
@@ -303,13 +319,13 @@ if __name__ == '__main__':
     plt.tight_layout()
     plt.show()
 
-
     """Calculations for intermediate plotting"""
     # integrating the flux density spectrum to go to pixel space
     mkid_kernel = eng.build_mkid_kernel(N_SIGMA_MKID, spectro.sampling(OSAMP))
     pix_leftedge = spectro.pixel_wavelengths(edge='left').to(u.nm).value
     direct_flux_calc = [eng.lambda_to_pixel_space(clipped_spectrum.waveset, broadened_spectrum[i],
                                                   pix_leftedge[i]) for i in range(nord)]
+    np.savetxt('Ar_flux_integrated.csv', direct_flux_calc, delimiter=',')
 
     # dividing convolution by kernel normalization and integrating
     x = eng.mkid_kernel_waves(len(mkid_kernel), n_sigma=N_SIGMA_MKID, oversampling=OSAMP)
@@ -323,6 +339,7 @@ if __name__ == '__main__':
     hist_bins = np.empty((nord + 1, sim.npix))  # choosing rough histogram bins by using FSR of each pixel/wave
     hist_bins[0, :] = (lambda_pixel[-1, :] - fsr[-1] / 2).value
     hist_bins[1:, :] = [(lambda_pixel[i, :] + fsr[i] / 2).value for i in range(nord)[::-1]]
+    hist_bins = wave_to_phase(hist_bins, minwave=sim.minwave, maxwave=sim.maxwave)
 
     photons_binned = np.empty((nord, sim.npix))
     for j in range(sim.npix):
@@ -340,28 +357,32 @@ if __name__ == '__main__':
     quick_plot(axes[0], masked_waves, masked_broad, color='g',
                labels=['Blazed+Broadened, R~3500'] + ['_nolegend_' for o in spectro.orders[:-1]],
                title="Comparison of Input (Instrument-incident) and Blazed/Optically-broadened Spectra",
-               xlabel='Wavelength (nm)', ylabel=r"Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
+               ylabel=r"Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
     axes[0].set_xlim([sim.minwave.value - 25, sim.l0.value + 25])
+    #axes[0].set_yscale('log')
+    #axes[0].set_ylim(bottom=1)
 
     # plot zoom in of above:
-    quick_plot(axes[1], [bandpass_spectrum.waveset.to(u.nm)[0]], [bandpass_spectrum(bandpass_spectrum.waveset)[0]],
-               labels=['Instrument-incident'], color='r', first=True, xlim=[667,800])
+    quick_plot(axes[1], [bandpass_spectrum.waveset.to(u.nm)], [bandpass_spectrum(bandpass_spectrum.waveset)],
+               labels=['Instrument-incident'], color='r', first=True, xlim=[700, 800])
     # quick_plot(axes[0], masked_waves, masked_blaze, labels=[f'Blazed O{o}' for o in spectro.orders])
     quick_plot(axes[1], [masked_waves[0]], [masked_broad[0]], color='g',
                labels=['Blazed+Broadened'] + ['_nolegend_' for o in spectro.orders[:-1]],
-               title="Zooming in to first plot to show details of blazing/optical-broadening, order 5", xlabel='Wavelength (nm)',
+               title=f"Zooming in to first plot to show details of blazing/optical-broadening, order {spectro.orders[0]}",
                ylabel=r"Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
+    #axes[0].set_yscale('log')
+    #axes[0].set_ylim(bottom=1)
 
     # plotting comparison between flux-integrated spectrum and integrated/convolution spectrum, must be same,
     # also plotting final counts FSR-binned to show general shape
     twin = axes[2].twinx()
     quick_plot(twin, lambda_pixel, photons_binned[::-1], ylabel="Photon Count", twin='b', color='y', linewidth=1,
-               labels=['Observed'] + ['_nolegend_' for o in spectro.orders[:-1]], first=True, xlim=[400,800])
-    quick_plot(axes[2], lambda_pixel, convol_summed, color='red', linewidth=5, alpha=0.5,
-               labels=["Post-Convol"] + ['_nolegend_' for o in range(nord - 1)], xlim=[400,800])
+               labels=['Observed (IGNORE!!!)'] + ['_nolegend_' for o in spectro.orders[:-1]], first=True, xlim=[400, 800])
+    quick_plot(axes[2], lambda_pixel, convol_summed, color='red', linewidth=2, alpha=0.5,
+               labels=["Post-Convol"] + ['_nolegend_' for o in range(nord - 1)], xlim=[400, 800])
     quick_plot(axes[2], lambda_pixel, direct_flux_calc, color='b', ylabel=r"Flux (phot $cm^{-2} s^{-1})$",
-               labels=[r"Flux-int. input"] + ['_nolegend_' for o in range(nord - 1)], alpha=0.5, linewidth=5,
-               title=r"Comparison of Input (integrated to flux space), "
+               labels=[r"Flux-int. input"] + ['_nolegend_' for o in range(nord - 1)], alpha=0.5, linewidth=2,
+               xlabel='Wavelength (nm)', title=r"Comparison of Input (integrated to flux space), "
                      r"Post-Convolution (integrated), and Observed Photon Count (FSR-binned) Spectra (all same shape)")
     fig.tight_layout()
     plot_file = f'{args.output_dir}/intplots_R0{sim.designR0}.pdf'
