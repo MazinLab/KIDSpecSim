@@ -3,8 +3,8 @@ import astropy.units as u
 import logging
 from scipy.constants import c
 
-from .filterphot import mask_deadtime
-from .engine import draw_photons
+from ucsbsim.filterphot import mask_deadtime
+from ucsbsim.engine import draw_photons
 
 
 def wave_to_phase(waves, minwave, maxwave):
@@ -28,22 +28,30 @@ def wave_to_phase(waves, minwave, maxwave):
     freqs = (c * u.m / u.s / (waves * u.nm)).decompose()  # converted wavelength to frequency (Hz)
     phases = np.nan_to_num((0.6 / (freq_maxw - freq_minw) * (freqs - freq_minw)).decompose().value - 0.8,
                            posinf=0, neginf=-1)
-    logging.info(f'Converted wavelengths to "linear-in-energy" phase space.')
     phases = np.reshape(phases, shape)
     return phases
 
 
 class MKIDDetector:
-    def __init__(self, n_pix, pixel_size, design_R0, l0, R0s, phase_centers, resid_map=None):
+    def __init__(
+            self,
+            n_pix: int,
+            pixel_size: u.Quantity,
+            design_R0: float,
+            l0: u.Quantity,
+            R0s: np.ndarray,
+            phase_centers: np.ndarray,
+            resid_map: np.ndarray = None
+    ):
         """
         Simulation of an MKID detector array.
-        :param n_pix: number of pixels in linear array
-        :param pixel_size: physical size of each pixel in astropy units
-        :param R0: spectral resolution of the longest wavelength in spectrometer range
-        :param l0: longest wavelength in spectrometer range in astropy units
-        :param R0s: array of R0s that deviate slightly from design as expected, None means no deviation
-        :param phase_centers: the phase center offset from 0 for each pixel
-        :return: MKIDDetector class object
+        :param int n_pix: number of pixels in linear array
+        :param u.Quantity pixel_size: physical size of each pixel in astropy units
+        :param float R0: spectral resolution of the longest wavelength in spectrometer range
+        :param u.Quantity l0: longest wavelength in spectrometer range in astropy units
+        :param np.ndarray R0s: array of R0s that deviate slightly from design as expected, None means no deviation
+        :param np.ndarray phase_centers: the phase center offset from 0 for each pixel
+        :param np.ndarray resid_map: the IDs for each resonator (pixel).
         """
         self.n_pixels = n_pix
         self.pixel_size = pixel_size
@@ -71,16 +79,16 @@ class MKIDDetector:
                 raise ValueError('The user-supplied array of R0s and design R0 do not match.')
         return self.R0s[pixel.astype(int)]
 
-    def mkid_constant(self, pixel: int):
+    def mkid_constant(self, pixel):
         """
         :param pixel: the pixel index or indices
         :return: MKID constant for given pixel, R0*l0
         """
         return self.R0(pixel) * self.waveR0
 
-    def mkid_resolution_width(self, wave, pixel: int):
+    def mkid_resolution_width(self, wave, pixel):
         """
-        :param wave: wavelength(s) as float, int, or u.Quantity
+        :param wave: wavelength(s) as u.Quantity
         :param pixel: the pixel index or indices
         :return: FWHM of the MKID at given wavelength and pixel
         """
@@ -122,6 +130,7 @@ class MKIDDetector:
                      f"\n\tPhoton merge time: {merge_time_window_s:.0e}"
                      f"\n\tSaturation wavelength: {SATURATION_WAVELENGTH_NM}"
                      f"\n\tDeadtime: {DEADTIME}")
+        logging.warning(f'Simulated dataset may take up to {total_photons * 16 / 1024 ** 3:.2} GB of RAM.')
 
         if self.resid_map is None:  # TODO check if shape of resid matches npix
             self.resid_map = np.arange(pixel_count.size, dtype=int) * 10 + 100  # something arbitrary
