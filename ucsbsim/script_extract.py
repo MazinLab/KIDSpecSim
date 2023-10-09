@@ -10,7 +10,7 @@ from astropy.table import Table
 import os
 
 from ucsbsim.spectrograph import GratingSetup, SpectrographSetup
-from ucsbsim.detector import MKIDDetector
+from ucsbsim.detector import MKIDDetector, wave_to_phase
 import ucsbsim.engine as engine
 from ucsbsim.plotting import quick_plot
 from synphot.models import BlackBodyNorm1D, ConstFlux1D
@@ -110,16 +110,19 @@ if __name__ == '__main__':
         R0s = np.loadtxt(sim.R0s_file, delimiter=',')
         logging.info(f'\nThe individual R0s were imported from {sim.R0s_file}.')
 
-    detector = MKIDDetector(sim.npix, sim.pixelsize, sim.designR0, sim.l0, R0s, resid_map)
-    grating = GratingSetup(sim.l0, sim.m0, sim.m_max, sim.pixelsize, sim.npix, sim.focallength, sim.nolittrow)
-    spectro = SpectrographSetup(grating, detector, sim.pixels_per_res_elem)
+    detector = MKIDDetector(sim.npix, sim.pixelsize, sim.designR0, sim.l0, R0s, None, resid_map)
+    grating = GratingSetup(sim.alpha, sim.delta, sim.groove_length)
+    spectro = SpectrographSetup(sim.m0, sim.m_max, sim.l0, sim.pixels_per_res_elem, sim.focallength, grating, detector)
     eng = engine.Engine(spectro)
     nord = spectro.nord
-    lambda_pixel = spectro.pixel_wavelengths()[::-1]  # flip order, extracts in ascending wavelengths
+    lambda_pixel = spectro.pixel_wavelengths().to(u.nm)[::-1]
+    sim_phase = wave_to_phase(spectro.pixel_wavelengths().to(u.nm)[::-1], minwave=sim.minwave, maxwave=sim.maxwave)
+    # flip order axis, ascending phase
 
     # ==================================================================================================================
     # OBSERVATION SPECTRUM EXTRACTION STARTS
     # ==================================================================================================================
+    '''
     # obtain the pixel-space blaze function:
     wave = np.linspace(sim.minwave.value - 100, sim.maxwave.value + 100, 10000) * u.nm
     # retrieving the blazed calibration spectrum shape assuming it is known and converting to pixel-space wavelengths:
@@ -133,9 +136,9 @@ if __name__ == '__main__':
     blaze_shape = [eng.lambda_to_pixel_space(wave, blazed_spectrum[i], pix_leftedge[i]) for i in range(nord)][::-1]
     blaze_shape /= np.max(blaze_shape)  # normalize max to 1
     blaze_shape[blaze_shape == 0] = 1  # prevent divide by 0 or very small num. issue
-
+    '''
     spec = np.zeros([nord, sim.npix])
-    for j in range(sim.npix):
+    for j in detector.pixel_indices:
         spec[:, j], _ = np.histogram(photons_pixel[j], bins=msf.bin_edges[:, j])  # binning photons by MSF bins edges
 
     # to plot covariance as errors, must sum the counts "added" from other orders as well as "stolen" by other orders
@@ -149,16 +152,16 @@ if __name__ == '__main__':
     #      ^ multiply counts*cov in other orders to add to Order 9
 
     err_p = np.array([[int(np.sum(msf.cov_matrix[:, i, j] * spec[:, j])) -
-                       msf.cov_matrix[i, i, j] * spec[i, j] for j in range(sim.npix)] for i in range(nord)])
+                       msf.cov_matrix[i, i, j] * spec[i, j] for j in detector.pixel_indices] for i in range(nord)])
     err_n = np.array([[int(np.sum(msf.cov_matrix[i, :, j] * spec[:, j]) -
-                           msf.cov_matrix[i, i, j] * spec[i, j]) for j in range(sim.npix)] for i in range(nord)])
+                           msf.cov_matrix[i, i, j] * spec[i, j]) for j in detector.pixel_indices] for i in range(nord)])
 
     # saving extracted and unblazed spectrum to file
-    fits_file = f'{args.output_dir}/{sim.type_spectra}_extracted_R0{sim.designR0}.fits'
+    fits_file = f'{args.output_dir}/extracted_R0{sim.designR0}.fits'
     hdu_list = fits.HDUList([fits.PrimaryHDU(),
-                             fits.BinTableHDU(Table(spec/blaze_shape), name='Spectrum'),
-                             fits.BinTableHDU(Table(err_n/blaze_shape), name='- Errors'),
-                             fits.BinTableHDU(Table(err_p/blaze_shape), name='+ Errors'),
+                             fits.BinTableHDU(Table(spec), name='Spectrum'),
+                             fits.BinTableHDU(Table(err_n), name='- Errors'),
+                             fits.BinTableHDU(Table(err_p), name='+ Errors'),
                              fits.BinTableHDU(Table(lambda_pixel.to(u.Angstrom)), name='Wave Range')])
     hdu_list.writeto(fits_file, output_verify='ignore', overwrite=True)
     logging.info(f'The extracted spectrum with its errors has been saved to {fits_file}.')
@@ -173,14 +176,43 @@ if __name__ == '__main__':
     # ==================================================================================================================
     spectrum = fits.open(fits_file)
 
+    fig, ax = plt.subplots(1, 1)
+    quick_plot(ax,
+               sim_phase,
+               spectrum[1].data,
+               xlabel='Pixel Index',
+               ylabel='Relative Intensity',
+               title=f"Extracted {sim.type_spectra} spectrum (blaze present)",
+               labels=[f'Order {spectro.orders[::-1][i]}' for i in range(nord)],
+               first=True)
     for i in range(nord):
-        plt.grid()
-        plt.fill_between(detector.pixel_indices, np.array(spectrum[1].data[i]) - np.array(spectrum[2].data[i]),
+        ax.fill_between(sim_phase[i],
+                         np.array(spectrum[1].data[i]) - np.array(spectrum[2].data[i]),
                          np.array(spectrum[1].data[i]) - np.array(spectrum[3].data[i]),
-                         alpha=0.5, edgecolor='orange', facecolor='orange', linewidth=0.5)
-        plt.plot(detector.pixel_indices, spectrum[1].data[i])
-        plt.title(f"Unblazed & extracted {sim.type_spectra}, order {9-i}")
-        plt.ylabel('Intensity')
+                         alpha=0.5,
+                         edgecolor='orange',
+                         facecolor='orange',
+                         linewidth=0.5)
+    plt.tight_layout()
+    plt.show()
+    
+    # plot the residual between model and observation:
+    model = np.genfromtxt('Ar_flux_integrated.csv', delimiter=',')
+    for n, i in enumerate(model[::-1]):
+        plt.grid()
+        model[::-1][n] /= np.max(i)
+        normed = spectrum[1].data[n]/np.max(spectrum[1].data[n])
+        plt.plot(detector.pixel_indices, model[::-1][n]-normed)
+        plt.title(f'Residual between model and observation, Order {spectro.orders[::-1][n]}')
+        plt.ylabel('Residual, both normalized to 1 at peak')
         plt.xlabel('Pixel Index')
-        plt.tight_layout()
+        plt.show()
+        
+        plt.grid()
+        plt.plot(detector.pixel_indices, normed, label='Observation')
+        plt.plot(detector.pixel_indices, model[::-1][n], '--', label='Model')
+        plt.title(f"Side-by-side comparison, Order {spectro.orders[::-1][n]}")
+        plt.ylabel('Normalized Flux')
+        plt.xlabel('Pixel Index')
+        plt.legend()
         plt.show()
