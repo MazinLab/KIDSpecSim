@@ -124,25 +124,50 @@ def FlatModel():
     return SourceSpectrum(ConstFlux1D, amplitude=1)
 
 
-def EmissionModel(filename, target_R=50000):
+def EmissionModel(filename, minwave, maxwave, target_R=50000):
     """
     :param filename: file name of the emission line list, with wavelength in nm, FROM NIST
+    :param minwave: the min wave of the desired model, in nm or as u.Quantity
+    :param maxwave: the max wave of the desired model, in nm or as u.Quantity
     :param target_R: spectral resolution to diffraction limit line spectrum
     :return: full emission spectrum, intensity converted to photlam
     """
     file = pd.read_csv(filename, delimiter=',')
     flux = np.array(file['intens'])
     wave = np.array(file['obs_wl_air(nm)'])
-    uncert = np.array(file['unc_obs_wl'])
+    try:
+        uncert = np.array(file['unc_obs_wl'])
+    except KeyError:
+        uncert = np.full(wave.shape, 0.0010)
+    if isinstance(flux[0], str):
+        include = np.full(len(flux), False)
+        for n, i in enumerate(flux):
+            try:
+                flux[n] = float(i[2:-1])
+                wave[n] = float(wave[n][2:-1])
+                if isinstance(uncert[n], str):
+                    uncert[n] = float(uncert[n][2:-1])
+                include[n] = True
+            except ValueError:
+                include[n] = False
+        flux = flux[include]
+        wave = wave[include]
+        uncert = uncert[include]
     target_dl = (wave[0]+wave[-1])/2 / target_R
     sigma_factor = target_dl/min(uncert)  # 3 sigma approx to 1st Airy ring
-    wave_grid = np.arange(wave[0], wave[-1], target_dl)
-    line_gauss = gauss(wave_grid[None, :], wave[:, None], uncert[:, None] * sigma_factor/3, flux[:, None])
+    
+    if isinstance(minwave, u.Quantity):
+        minwave = minwave.to(u.nm).value
+    if isinstance(maxwave, u.Quantity):
+        maxwave = maxwave.to(u.nm).value
+    wave_grid = np.arange(minwave, maxwave, target_dl)
+    line_gauss = gauss(wave_grid[None, :].astype(float), wave[:, None].astype(float),
+                       uncert[:, None].astype(float) * sigma_factor/3, flux[:, None].astype(float))
     spectrum = np.sum(line_gauss, axis=1)
     return SourceSpectrum.from_spectrum1d(Spectrum1D(flux=spectrum*u.photlam, spectral_axis=wave_grid*u.nm))
 
 
-def get_spectrum(spectrum_type: str, teff=None, emission_file=None):
+def get_spectrum(spectrum_type: str, teff=None, emission_file=None, minwave=None, maxwave=None):
     """
     :param str spectrum_type: 'blackbody', 'phoenix', 'flat', or 'emission' only
     :param teff: effective temperature for blackbody or phoenix model spectrum
@@ -161,7 +186,7 @@ def get_spectrum(spectrum_type: str, teff=None, emission_file=None):
         return FlatModel()
     elif spectrum_type == 'emission':
         logging.info(f'\nObtained {emission_file} emission spectrum.')
-        return EmissionModel(emission_file)
+        return EmissionModel(emission_file, minwave, maxwave)
     else:
         raise ValueError("Only 'blackbody', 'phoenix', 'flat', or 'emission' are supported for spectrum_type.")
 
