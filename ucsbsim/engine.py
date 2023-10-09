@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.interpolate as interp
 import scipy
-from scipy.signal import oaconvolve, find_peaks, gaussian
+from scipy.signal import oaconvolve, find_peaks, gaussian, correlate
 import scipy.ndimage as ndi
 import astropy.units as u
 import matplotlib.pyplot as plt
@@ -14,6 +14,12 @@ from mkidpipeline import photontable as pt
 
 u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # photon flux per wavelength
 SIG2WID = 2 * np.sqrt(np.log(2))
+
+
+def nearest_index(array, value):
+    array = np.asarray(array)
+    idx = (np.abs(array - value)).argmin()
+    return idx
 
 
 def _determine_apodization(x, pixel_samples_frac, pixel_max_npoints):
@@ -201,9 +207,24 @@ def param_to_array(params, n_gauss, post_opt=True):
     :return: adding new parameters or separating them as arrays
     """
     param = params.params if post_opt else params
-    mu = np.array([param[f'mu_{i}'].value for i in range(n_gauss)])
-    sig = np.array([param[f'sig_{i}'].value for i in range(n_gauss)])
-    A = np.array([param[f'A_{i}'].value for i in range(n_gauss)])
+    try:
+        mu = np.array([param[f'mu_{i}'].value for i in range(n_gauss)])
+        sig = np.array([param[f'sig_{i}'].value for i in range(n_gauss)])
+        A = np.array([param[f'A_{i}'].value for i in range(n_gauss)])
+    except KeyError:
+        try:
+            mu = np.array([param[f'mu_{i}'].value for i in range(n_gauss - 1)])
+            sig = np.array([param[f'sig_{i}'].value for i in range(n_gauss - 1)])
+            A = np.array([param[f'A_{i}'].value for i in range(n_gauss - 1)])
+        except KeyError:
+            try:
+                mu = np.array([param[f'mu_{i}'].value for i in range(n_gauss - 2)])
+                sig = np.array([param[f'sig_{i}'].value for i in range(n_gauss - 2)])
+                A = np.array([param[f'A_{i}'].value for i in range(n_gauss - 2)])
+            except KeyError:
+                mu = np.array([param[f'mu_{i}'].value for i in range(n_gauss - 3)])
+                sig = np.array([param[f'sig_{i}'].value for i in range(n_gauss - 3)])
+                A = np.array([param[f'A_{i}'].value for i in range(n_gauss - 3)])
     return mu, sig, A
 
 
@@ -225,9 +246,9 @@ def _get_params(n_gauss, guess, bounds=None):
         bounds = [[[] for i in range(n_gauss)], [[] for i in range(n_gauss)], [[] for i in range(n_gauss)]]
 
     for i in range(n_gauss):
-        params.add(f'mu_{i}', value=mus[i], min=mus[i]-2*sigs[i], max=mus[i]+2*sigs[i])
-        params.add(f'sig_{i}', value=sigs[i], min=sigs[i] / 50, max=sigs[i])
-        params.add(f'A_{i}', value=As[i], min=3, max=2*As[-1])
+        params.add(f'mu_{i}', value=mus[i], min=mus[i] - sigs[i], max=mus[i] + sigs[i])
+        params.add(f'sig_{i}', value=sigs[i], min=sigs[i] / 2, max=1.5 * sigs[i])
+        params.add(f'A_{i}', value=As[i], min=0)
     return params
 
 
@@ -243,7 +264,7 @@ class Engine:
         """
         blaze_efficiencies = self.spectrograph.blaze(wave)
         order_mask = self.spectrograph.order_mask(wave.to(u.nm), fsr_edge=False)
-        blazed_spectrum = blaze_efficiencies * spectra(wave)
+        blazed_spectrum = blaze_efficiencies * spectra(wave.to(u.nm))
         masked_blaze = [blazed_spectrum[i, order_mask[i]] for i in range(len(self.spectrograph.orders))]
         masked_waves = [wave[order_mask[i]].to(u.nm) for i in range(len(self.spectrograph.orders))]
         logging.info('Multiplied spectrum with blaze efficiencies.')
@@ -285,11 +306,11 @@ class Engine:
         :return: a kernel corresponding to an MKID resolution element of width covering n_sigma on either side.
         mkid_kernel_npoints specifies how many points are used, though the kernel will round up to the next odd number.
         """
-        max_mkid_kernel_width = 2 * n_sigma * self.spectrograph.dl_mkid_max() / SIG2WID  # FWHM to standev
+        max_mkid_kernel_width = 2 * n_sigma * self.spectrograph.dl_mkid_max / SIG2WID  # FWHM to standev
         mkid_kernel_npoints = np.ceil((max_mkid_kernel_width / sampling).si.value).astype(int)  # points in Gaussian
         if not mkid_kernel_npoints % 2:  # ensuring it is odd so 1 point is at kernel center
             mkid_kernel_npoints += 1
-        return gaussian(mkid_kernel_npoints, (self.spectrograph.dl_mkid_max() / sampling).si.value / SIG2WID)
+        return gaussian(mkid_kernel_npoints, (self.spectrograph.dl_mkid_max / sampling).si.value / SIG2WID)
         # takes standev not FWHM, width/sampling is the dimensionless standev
 
     def mkid_kernel_waves(self, n_points, n_sigma=3, oversampling=10):
@@ -300,7 +321,7 @@ class Engine:
         :return: wavelength array corresponding to kernel for each pixel
         """
         pixel_rescale = self.spectrograph.pixel_rescale(oversampling).to(u.nm)
-        dl_mkid_max = self.spectrograph.dl_mkid_max().to(u.nm)
+        dl_mkid_max = self.spectrograph.dl_mkid_max.to(u.nm)
         sampling = self.spectrograph.sampling(oversampling).to(u.nm)
         npix = self.spectrograph.detector.n_pixels
         nord = self.spectrograph.nord
@@ -324,7 +345,7 @@ class Engine:
         :return: convolution products of the spectrum with the MKID response
         """
         lambda_pixel = self.spectrograph.pixel_wavelengths()
-        dl_pixel = self.spectrograph.dl_pixel()
+        dl_pixel = self.spectrograph.dl_pixel
         pixel_rescale = self.spectrograph.pixel_rescale(oversampling)
 
         if simp:
@@ -387,55 +408,84 @@ class Engine:
         :return: direct integration to put flux density of spectrum into pixel space
         """
         if isinstance(array, u.Quantity):
-            array = array.value
+            array = np.nan_to_num(array.value)
         else:
-            array = array.to(u.photlam).value
+            array = np.nan_to_num(array.to(u.photlam).value)
         flux_int = interp.InterpolatedUnivariateSpline(array_wave.to(u.nm).value, array, k=1, ext=1)
         integrated = [flux_int.integral(leftedge[j], leftedge[j + 1])
                       for j in range(self.spectrograph.detector.n_pixels - 1)]
         last = [flux_int.integral(leftedge[-1], leftedge[-1] + (leftedge[-1] - leftedge[-2]))]
         return integrated + last
 
-    def fit_gaussians(self, pixel: int, photons, n_gauss: int, plot=False):
+    def fit_gaussians(
+            self,
+            pixel: int,
+            photons,
+            n_ord: int,
+            bin_edges,
+            plot=False
+    ):
         """
         :param pixel: pixel
         :param photons: list of photon wavelengths
-        :param n_gauss: number of Gaussian functions to fit
+        :param n_ord: number of orders
+        :param bin_edges: sequence of bin_edges for pixel histogram
         :param plot: True if viewing the fit for the pixel
         :return: optimized and guess parameters for mu, sigma, and amplitude
         """
-        bins = _n_bins(len(photons))
-        counts, edges = np.histogram(photons, bins=bins, range=(-1,0))  # binning photons for shape fitting
+        
+        # for any photons that got wrapped around to 1 at -1, connect it back so we can histogram
+        for n, p in enumerate(photons):
+            while photons[n] > 0:
+                photons[n] -= 2
+        
+        counts, edges = np.histogram(photons, bins=bin_edges)
+
+        # turn integer counts into floats
         counts = np.array([float(x) for x in counts])
+        
+        # change the edges into center points
         centers = edges[:-1] + np.diff(edges) / 2
 
-        peaks, _ = find_peaks(counts, distance=int(bins/11), height=2)
-        mu_guess = np.linspace(centers[peaks[0]], centers[peaks[-1]], n_gauss)
-        A_guess = np.linspace(counts[peaks[0]], counts[peaks[-1]], n_gauss)
-        sig_guess = [np.abs(mu_guess[0] - mu_guess[1]) / 2 for i in range(n_gauss)]
+        # find peaks and retrieve info
+        peaks, peak_dict = find_peaks(counts, height=3, width=1, distance=int(len(bin_edges) / 20))
+        peak_heights = peak_dict['peak_heights']
+        peak_widths = peak_dict['widths']
+        n_gauss = min([n_ord, len(peaks)])
+
+        # get up to n_ord peaks, less if no flux in some order
+        top_peak = peaks[np.argsort(peak_heights)[::-1][:n_gauss]]
+        top_peak = np.array([int(i) for i in top_peak])
+        
+        # get the FWHM so they can be turned into sigma guesses
+        top_width = peak_widths[np.argsort(peak_heights)[::-1][:n_gauss]]
+
+        # reorder the found peaks/widths in phase
+        ordered_peak = top_peak[np.argsort(centers[top_peak])]
+        ordered_width = top_width[np.argsort(centers[top_peak])]
+
+        # retrieve guesses for lmfit
+        mu_guess = centers[ordered_peak]
+        A_guess = counts[ordered_peak]
+        sig_guess = (np.abs(bin_edges[1] - bin_edges[0]) * ordered_width) / SIG2WID
+
+        # turn guesses into parameter objects and do the lmfit minimization
         guess = [mu_guess, sig_guess, A_guess]
         params = _get_params(n_gauss, guess=guess)
         opt_params = minimize(lmfit_gaussians, params, args=(centers, counts, n_gauss), method='least_squares')
-        if opt_params.redchi > 100:  # redo once with adjusted guess
-            mu_guess[0] += 0.08
-            mu_guess = np.linspace(mu_guess[0], mu_guess[-1], n_gauss)
-            A_int = interp.interp1d(centers, counts)
-            A_guess = A_int(mu_guess)
-            guess = [mu_guess, sig_guess, A_guess]
-            params = _get_params(n_gauss, guess=guess)
-            opt_params = minimize(lmfit_gaussians, params, args=(centers, counts, n_gauss), method='least_squares')
-
+        mu, sig, A = param_to_array(opt_params, n_gauss, post_opt=True)
+        
+        # plot the best-fit 
         if plot:
-            s = 1 if n_gauss == self.spectrograph.nord - 1 else 0
             fig, ax = plt.subplots(1, 1)
             quick_plot(ax, [centers], [counts], labels=['Data'], first=True, color='k')
             quick_plot(ax, [mu_guess], [A_guess], labels=['Guess'], marker='.')
             ax.fill_between(centers, 0, counts, color='k')
-            x = [np.linspace(-1, 0, 1000) for i in range(n_gauss)]
-            mu, sig, A = param_to_array(opt_params, n_gauss, post_opt=True)
-            quick_plot(ax, x, gauss(x[0], mu[:, None], sig[:, None], A[:, None]).T,
-                       labels=[f'Order {i}' for i in self.spectrograph.orders[::-1][s:]],
-                       title=f'Least-Squares Fit for Pixel {pixel + 1}', xlabel='Phase', ylabel='Photon Count')
+            x = [np.linspace(bin_edges[0], bin_edges[-1], 1000) for i in range(n_gauss)]
+            quick_plot(ax, x, gauss(x, mu[:, None], sig[:, None], A[:, None]).T,
+                       labels=[f'Order {i}' for i in self.spectrograph.orders[::-1]],
+                       title=f'Least-Squares Fit for Pixel {pixel}', xlabel='Phase', ylabel='Photon Count')
+            plt.legend()
             plt.show()
 
-        return opt_params, params
+        return (mu, sig, A), counts, opt_params.redchi
