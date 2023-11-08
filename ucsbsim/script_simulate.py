@@ -29,7 +29,7 @@ from mkidpipeline.steps.buildhdf import buildfromarray
 """
 Simulation of the MKID spectrometer. The steps are:
 -A source spectrum is obtained.
--It is filtered through atmospheric, telescopic, and filter bandpasses to emulate the spectrum's journey from the
+-It is filtered through atmospheric, telescopic, and/or filter bandpasses to emulate the spectrum's journey from the
  star to the spectrograph.
 -It is multiplied by the blaze efficiency of the grating, which determines how much of the flux will be incident on
  each pixel of the detector.
@@ -71,6 +71,9 @@ if __name__ == '__main__':
     parser.add_argument('output_dir',
                         metavar='OUTPUT_DIRECTORY',
                         help='Directory for the output files. (str)')
+    parser.add_argument('output_h5file',
+                        metavar='OUTPUT_h5_FILENAME',
+                        help='Photon table file name. (str)')
     parser.add_argument('R0s_file',
                         metavar='R0S_FILE_NAME',
                         help="Directory/filename of the R0s file, will be created if it doesn't exist. (str)")
@@ -111,10 +114,6 @@ if __name__ == '__main__':
                         action='store_true',
                         default=False,
                         help='If passed, indicates the spectrum will be multiplied with atmospheric attenuation.')
-    parser.add_argument('-fb', '--filterbandpass',
-                        action='store_true',
-                        default=False,
-                        help='If passed, indicates the spectrum will be multiplied with the filter bandpass.')
     parser.add_argument('-minw', '--minwave',
                         metavar='MINIMUM_WAVELENGTH_NM',
                         default=400,
@@ -195,7 +194,7 @@ if __name__ == '__main__':
                           args.beta_cent_pix)
 
     # ==================================================================================================================
-    # CHECK AND/OR CREATE DIRECTORIES
+    # CHECK FOR AND/OR CREATE DIRECTORIES
     # ==================================================================================================================
     os.makedirs(f'{args.output_dir}/logging', exist_ok=True)
     os.makedirs(os.path.dirname(sim.R0s_file), exist_ok=True)
@@ -205,7 +204,7 @@ if __name__ == '__main__':
     # START LOGGING TO FILE
     # ==================================================================================================================
     now = dt.now()
-    logging.basicConfig(filename=f'{args.output_dir}/logging/sim_{now.strftime("%Y%m%d_%H%M%S")}.log',
+    logging.basicConfig(filename=f'{args.output_dir}/logging/{args.output_h5file}.log',
                         format='%(levelname)s:%(message)s', level=logging.DEBUG)
     logging.info(f"The simulation of a(n) {sim.type_spectra} spectrum's journey through the spectrometer is recorded."
                  f"\nThe date and time are: {now.strftime('%Y-%m-%d %H:%M:%S')}.")
@@ -223,18 +222,18 @@ if __name__ == '__main__':
         logging.info(f'The individual R0s were generated randomly from the design R0 and saved to {sim.R0s_file}.')
 
     try:
-        phase_centers = np.loadtxt(sim.phaseoffset_file, delimiter=',')
+        phase_offsets = np.loadtxt(sim.phaseoffset_file, delimiter=',')
         logging.info(f'\nThe pixel center phase offsets were imported from {sim.phaseoffset_file}.')
     except IOError as e:
         logging.info(e)
-        phase_centers = np.random.uniform(.8, 1.2, size=sim.npix)
-        np.savetxt(sim.phaseoffset_file, phase_centers, delimiter=',')
+        phase_offsets = np.random.uniform(.8, 1.2, size=sim.npix)
+        np.savetxt(sim.phaseoffset_file, phase_offsets, delimiter=',')
         logging.info(f'The individual pixel phase center offsets were generated randomly and '
                      f'saved to {sim.phaseoffset_file}.')
 
     resid_map = np.arange(sim.npix, dtype=int) * 10 + 100  # TODO replace once known
 
-    detector = MKIDDetector(sim.npix, sim.pixelsize, sim.designR0, sim.l0, R0s, phase_centers, resid_map)
+    detector = MKIDDetector(sim.npix, sim.pixelsize, sim.designR0, sim.l0, R0s, phase_offsets, resid_map)
     grating = GratingSetup(sim.alpha, sim.delta, sim.groove_length)
     spectro = SpectrographSetup(sim.m0, sim.m_max, sim.l0, sim.pixels_per_res_elem, sim.focallength,
                                 grating, detector)
@@ -243,43 +242,115 @@ if __name__ == '__main__':
     # ==================================================================================================================
     # SIMULATION STARTS
     # ==================================================================================================================
-    # setting up engine and spectrograph, obtaining various needed properties:
+    # obtaining various needed properties:
     nord = spectro.nord
     lambda_pixel = spectro.pixel_wavelengths().to(u.nm)
+    lambda_left = spectro.pixel_wavelengths(edge='left')
 
-    # populate desired bandpasses
+    # populate desired bandpasses:
     bandpasses = []
     if args.atmobandpass:
         bandpasses.append(AtmosphericTransmission())
-    if args.filterbandpass:
-        bandpasses.append(FilterTransmission(sim.minwave, sim.maxwave))
     if args.telebandpass:
         bandpasses.append(TelescopeTransmission(reflectivity=args.reflect))
-    if not bandpasses:  # for no bandpasses, just convert to finer grid spacing
-        w = np.linspace(300, 1000, 10000) * u.nm
-        t = np.ones(10000) * u.dimensionless_unscaled
-        ones = Spectrum1D(spectral_axis=w, flux=t)
-        bandpasses.append(SpectralElement.from_spectrum1d(ones))
 
-    # obtaining spectra and passing through several transformations:
+    # obtaining spectra:
     spectrum = get_spectrum(sim.type_spectra, teff=sim.temp, emission_file=args.emission_file,
                             minwave=sim.minwave, maxwave=sim.maxwave)
+
+    # converting to finer grid spacing:
+    w = np.linspace(300, 1000, 100000) * u.nm
+    t = np.ones(100000) * u.dimensionless_unscaled
+    ones = Spectrum1D(spectral_axis=w, flux=t)
+    fine_grid = SpectralElement.from_spectrum1d(ones)
+    spectrum = apply_bandpass(spectrum, bandpass=[fine_grid, FilterTransmission(sim.minwave, sim.maxwave)])
+
+    # apply bandpasses and obtain associated noise:
     bandpass_spectrum = apply_bandpass(spectrum, bandpass=bandpasses)
+
+    # clip spectrum in order to blaze within limits
     clipped_spectrum = clip_spectrum(bandpass_spectrum, clip_range=(sim.minwave, sim.maxwave))
+
+    # blaze spectrum and directly integrate into pixel space to begin noise calculation:
     blazed_spectrum, masked_waves, masked_blaze = eng.blaze(clipped_spectrum.waveset, clipped_spectrum)
+    blazed_int_spec = np.array([
+        eng.lambda_to_pixel_space(
+            clipped_spectrum.waveset,
+            blazed_spectrum[i],
+            lambda_left[i]
+        ) for i in range(nord)
+    ])
+
+    # optically-broaden spectrum and obtain associated noise:
     broadened_spectrum = eng.optically_broaden(clipped_spectrum.waveset, blazed_spectrum)
-    masked_broad = [eng.optically_broaden(masked_waves[i], masked_blaze[i], axis=0) for i in range(nord)]
+    broad_int_spec = np.array([
+        eng.lambda_to_pixel_space(
+            clipped_spectrum.waveset,
+            broadened_spectrum[i],
+            lambda_left[i]
+        ) for i in range(nord)
+    ])
+    broad_noise = np.nan_to_num(np.abs(blazed_int_spec - broad_int_spec))
 
     # conducting the convolution with MKID resolution widths:
     convol_wave, convol_result = eng.convolve_mkid_response(clipped_spectrum.waveset, broadened_spectrum, OSAMP,
                                                             N_SIGMA_MKID, simp=sim.simpconvol)
 
+    # building the kernel to divide out:
+    mkid_kernel = eng.build_mkid_kernel(N_SIGMA_MKID, spectro.sampling(OSAMP))
+    x = eng.mkid_kernel_waves(len(mkid_kernel), n_sigma=N_SIGMA_MKID, oversampling=OSAMP)
+
+    # integrating the kernel with each grid spacing:
+    norms = np.sum(mkid_kernel) * (x[:, :, 1] - x[:, :, 0]) / SIGMA_FRAC  # since 3 sigma is not exactly 1
+
+    # calculating the spacing for every pixel-order:
+    dx = (convol_wave[1, :, :] - convol_wave[0, :, :]).to(u.nm)
+
+    # returning the convolution spacing back in line with everything else:
+    convol_normed = convol_result.to(u.ph/u.cm**2/u.s) / norms[None, ...]*dx[None,...].value
+
+    # integrating the convolution to go to pixel-order array size:
+    convol_int = np.sum(convol_normed, axis=0)
+
+    # getting the relative noise as a result of convolution:
+    convol_noise = np.nan_to_num(np.abs(blazed_int_spec - convol_int.value)) - broad_noise
+
     # putting convolved spectrum through MKID observation sequence:
-    photons, observed = detector.observe(convol_wave, convol_result, minwave=sim.minwave, maxwave=sim.maxwave,
-                                         limit_to=sim.pixellim, exptime=sim.exptime, area=sim.telearea)
+    photons, observed, reduce_factor = detector.observe(convol_wave, convol_normed, minwave=sim.minwave,
+                                                        maxwave=sim.maxwave,
+                                                        limit_to=sim.pixellim, exptime=sim.exptime, area=sim.telearea)
+
+    # separate photons by resid (pixel) and realign (no offset):
+    idx = [np.where(photons[:observed].resID == resid_map[j]) for j in range(sim.npix)]
+    photons_realign = [(photons[:observed].wavelength[idx[j]] / phase_offsets[j]).tolist() for j in range(sim.npix)]
+
+    # use FSR to bin and order sort:
+    fsr = spectro.fsr(spectro.orders).to(u.nm)
+    hist_bins = np.empty((nord + 1, sim.npix))  # choosing rough histogram bins by using FSR of each pixel/wave
+    hist_bins[0, :] = (lambda_pixel[-1, :] - fsr[-1] / 2).value
+    hist_bins[1:, :] = [(lambda_pixel[i, :] + fsr[i] / 2).value for i in range(nord)[::-1]]
+    hist_bins = wave_to_phase(hist_bins, minwave=sim.minwave, maxwave=sim.maxwave)
+
+    photons_binned = np.empty((nord, sim.npix))
+    for j in range(sim.npix):
+        photons_binned[:, j], _ = np.histogram(photons_realign[j], bins=hist_bins[:, j], density=False)
+
+    # normalize to level of convolution since that's where it came from and calculate noise:
+    photons_binned = (photons_binned*u.ph*reduce_factor[None, :]/(sim.exptime.to(u.s) * sim.telearea.to(u.cm ** 2))).to(u.ph/u.cm**2/u.s).value
+    observe_noise = np.nan_to_num(np.abs(blazed_int_spec - photons_binned[::-1])) - broad_noise - convol_noise
+
+    # save noise to file:
+    np.savez(
+        f'{args.output_dir}/{args.output_h5file}_noise.npz',
+        original=blazed_int_spec,
+        broad_noise=broad_noise,
+        convol_noise=convol_noise,
+        observe_noise=observe_noise
+    )
+    logging.info(f'\nSaved noise profiles to {args.output_dir}/{args.output_h5file}_noise.npz')
 
     # saving final photon list to h5 file, store linear phase conversion in header:
-    h5_file = f'{args.output_dir}/R0{sim.designR0}_{sim.pixellim}.h5'
+    h5_file = f'{args.output_dir}/{args.output_h5file}.h5'
     buildfromarray(photons[:observed], user_h5file=h5_file)
     pt = Photontable(h5_file, mode='write')
     pt.update_header('sim_settings', sim)
@@ -287,7 +358,7 @@ if __name__ == '__main__':
     pt.disablewrite()  # allows other scripts to open the table
 
     # at this point we are simulating the pipeline and have gone past the "wavecal" part. Next is >to spectrum.
-    logging.info(f'\nSaved photon table of {sim.type_spectra} spectrum to {h5_file}')
+    logging.info(f'\nSaved photon table to {h5_file}.')
     logging.info(f'\nTotal simulation time: {((time.perf_counter() - tic) / 60):.2f} min.')
     # ==================================================================================================================
     # SIMULATION ENDS
@@ -298,17 +369,13 @@ if __name__ == '__main__':
     # ==================================================================================================================
     warnings.filterwarnings("ignore")  # ignore tight_layout warnings
 
-    # separating photons by resid (pixel)
-    idx = [np.where(photons[:observed].resID == resid_map[j]) for j in range(sim.npix)]
-    photons_pixel = [photons[:observed].wavelength[idx[j]].tolist() for j in range(sim.npix)]
-
     # phase/pixel space plot to verify that phases are within proper values and orders are more-or-less visible
     bin_edges = np.linspace(-1, -0.1, 100)
     centers = bin_edges[:-1] + np.diff(bin_edges) / 2
     hist_array = np.zeros([sim.npix, len(bin_edges) - 1])
     for j in detector.pixel_indices:
-        if photons_pixel[j]:
-            counts, edges = np.histogram(photons_pixel[j], bins=bin_edges)
+        if photons_realign[j]:
+            counts, edges = np.histogram(photons_realign[j], bins=bin_edges)
             hist_array[j, :] = np.array([float(x) for x in counts])
     plt.imshow(hist_array[:, ::-1].T, extent=[1, sim.npix, -1, -0.1], aspect='auto', norm=LogNorm())
     cbar = plt.colorbar()
@@ -320,74 +387,63 @@ if __name__ == '__main__':
     plt.show()
 
     """Calculations for intermediate plotting"""
-    # integrating the flux density spectrum to go to pixel space
-    mkid_kernel = eng.build_mkid_kernel(N_SIGMA_MKID, spectro.sampling(OSAMP))
-    pix_leftedge = spectro.pixel_wavelengths(edge='left').to(u.nm).value
-    direct_flux_calc = [eng.lambda_to_pixel_space(clipped_spectrum.waveset, broadened_spectrum[i],
-                                                  pix_leftedge[i]) for i in range(nord)]
-    np.savetxt('Ar_flux_integrated.csv', direct_flux_calc, delimiter=',')
-
-    # dividing convolution by kernel normalization and integrating
-    x = eng.mkid_kernel_waves(len(mkid_kernel), n_sigma=N_SIGMA_MKID, oversampling=OSAMP)
-    norms = np.sum(mkid_kernel) * (x[:, :, 1] - x[:, :, 0]) / SIGMA_FRAC  # since 3 sigma is not exactly 1
-    convol_for_plot = (convol_result / (norms[None, ...] * u.nm)).to(u.photlam)
-    dx = (convol_wave[1, :, :] - convol_wave[0, :, :]).to(u.nm)
-    convol_summed = np.sum(convol_for_plot.value, axis=0) * u.photlam * dx
-
-    # use FSR to bin
-    fsr = spectro.fsr(spectro.orders).to(u.nm)
-    hist_bins = np.empty((nord + 1, sim.npix))  # choosing rough histogram bins by using FSR of each pixel/wave
-    hist_bins[0, :] = (lambda_pixel[-1, :] - fsr[-1] / 2).value
-    hist_bins[1:, :] = [(lambda_pixel[i, :] + fsr[i] / 2).value for i in range(nord)[::-1]]
-    hist_bins = wave_to_phase(hist_bins, minwave=sim.minwave, maxwave=sim.maxwave)
-
-    photons_binned = np.empty((nord, sim.npix))
-    for j in range(sim.npix):
-        photons_binned[:, j], _ = np.histogram(photons_pixel[j], bins=hist_bins[:, j], density=False)
+    masked_broad = [eng.optically_broaden(masked_waves[i], masked_blaze[i], axis=0) for i in range(nord)]
 
     """Plotting stuff only below"""
-    fig, axes = plt.subplots(3, 1, figsize=(15, 11))
+    fig, axes = plt.subplots(2, 1, figsize=(11, 8.5))
     axes = axes.ravel()
-    plt.suptitle(f"Intermediate plots for MKIDSpec {sim.type_spectra} simulation ({sim.pixellim} Photon Limit)",
-                 fontweight='bold')
-    # plotting input, bandpassed, blazed, and broadened spectrum:
-    quick_plot(axes[0], [bandpass_spectrum.waveset.to(u.nm)], [bandpass_spectrum(bandpass_spectrum.waveset)],
-               labels=['Instrument-incident, R~50,000'], color='r', first=True)
-    # quick_plot(axes[0], masked_waves, masked_blaze, labels=[f'Blazed O{o}' for o in spectro.orders])
-    quick_plot(axes[0], masked_waves, masked_broad, color='g',
+    plt.suptitle(f"Intermediate plots for MKIDSpec {sim.type_spectra} simulation", fontweight='bold')
+
+    # plotting bandpassed and blazed/broadened spectrum:
+    quick_plot(axes[0], [bandpass_spectrum.waveset.to(u.nm)],
+               [bandpass_spectrum(bandpass_spectrum.waveset)/np.max(bandpass_spectrum(bandpass_spectrum.waveset))],
+               labels=['Incident, R~50,000'], color='r', first=True, xlim=[400, 800])
+    broad_max = np.max([np.max(masked_broad[i].value) for i in range(nord)])
+    quick_plot(axes[0], masked_waves,
+               [masked_broad[i] / broad_max for i in range(nord)], color='g',
                labels=['Blazed+Broadened, R~3500'] + ['_nolegend_' for o in spectro.orders[:-1]],
-               title="Comparison of Input (Instrument-incident) and Blazed/Optically-broadened Spectra",
-               ylabel=r"Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
-    axes[0].set_xlim([sim.minwave.value - 25, sim.l0.value + 25])
-    #axes[0].set_yscale('log')
-    #axes[0].set_ylim(bottom=1)
+               title="Comparison of Input (Instrument-incident) and Blazed/Opt.-Broadened Spectra (not relative)",
+               ylabel=r"Normalized Flux Density")
 
-    # plot zoom in of above:
-    quick_plot(axes[1], [bandpass_spectrum.waveset.to(u.nm)], [bandpass_spectrum(bandpass_spectrum.waveset)],
-               labels=['Instrument-incident'], color='r', first=True, xlim=[700, 800])
-    # quick_plot(axes[0], masked_waves, masked_blaze, labels=[f'Blazed O{o}' for o in spectro.orders])
-    quick_plot(axes[1], [masked_waves[0]], [masked_broad[0]], color='g',
-               labels=['Blazed+Broadened'] + ['_nolegend_' for o in spectro.orders[:-1]],
-               title=f"Zooming in to first plot to show details of blazing/optical-broadening, order {spectro.orders[0]}",
-               ylabel=r"Flux Density (phot $cm^{-2} s^{-1} \AA^{-1})$")
-    #axes[0].set_yscale('log')
-    #axes[0].set_ylim(bottom=1)
-
-    # plotting comparison between flux-integrated spectrum and integrated/convolution spectrum, must be same,
-    # also plotting final counts FSR-binned to show general shape
-    twin = axes[2].twinx()
-    quick_plot(twin, lambda_pixel, photons_binned[::-1], ylabel="Photon Count", twin='b', color='y', linewidth=1,
-               labels=['Observed (IGNORE!!!)'] + ['_nolegend_' for o in spectro.orders[:-1]], first=True, xlim=[400, 800])
-    quick_plot(axes[2], lambda_pixel, convol_summed, color='red', linewidth=2, alpha=0.5,
+    # plotting comparison between flux-integrated spectrum and integrated/convolved spectrum, must be same,
+    # also plotting final counts FSR-binned
+    quick_plot(axes[1], lambda_pixel, photons_binned[::-1], color='k', linewidth=1, linestyle='--',
+               labels=['Obs. Count to Flux'] + ['_nolegend_' for o in spectro.orders[:-1]], first=True, xlim=[400, 800])
+    quick_plot(axes[1], lambda_pixel, convol_int, color='red', linewidth=1.5, alpha=0.4,
                labels=["Post-Convol"] + ['_nolegend_' for o in range(nord - 1)], xlim=[400, 800])
-    quick_plot(axes[2], lambda_pixel, direct_flux_calc, color='b', ylabel=r"Flux (phot $cm^{-2} s^{-1})$",
-               labels=[r"Flux-int. input"] + ['_nolegend_' for o in range(nord - 1)], alpha=0.5, linewidth=2,
-               xlabel='Wavelength (nm)', title=r"Comparison of Input (integrated to flux space), "
-                     r"Post-Convolution (integrated), and Observed Photon Count (FSR-binned) Spectra (all same shape)")
+    quick_plot(axes[1], lambda_pixel, blazed_int_spec, color='b', ylabel=r"Flux (phot $cm^{-2} s^{-1})$",
+               labels=["Input-integrated"] + ['_nolegend_' for o in range(nord - 1)], alpha=0.4, linewidth=1.5,
+               xlabel='Wavelength (nm)', title=r"Comparison of Input (integrated to pixel space), "
+                                               r"Post-Convolution (integrated), and Observed Photon Count (FSR-binned)")
     fig.tight_layout()
-    plot_file = f'{args.output_dir}/intplots_R0{sim.designR0}.pdf'
+    plot_file = f'{args.output_dir}/{args.output_h5file}_plots.pdf'
     fig.savefig(plot_file)
     logging.info(f'\nSaved intermediate plots to {plot_file}.')
+    plt.show()
+
+    # plot noise from various sources only
+    fig2, ax = plt.subplots(1, 1, figsize=(8, 4))
+    plt.suptitle(f"Noise plot for MKIDSpec {sim.type_spectra} simulation", fontweight='bold')
+
+    quick_plot(ax, lambda_pixel, broad_noise+convol_noise+observe_noise, color='b', first=True,
+               labels=["Opt.-Broadening Noise"] + ['_nolegend_' for o in spectro.orders[:-1]])
+    for i in range(nord):
+        ax.fill_between(lambda_pixel[i].value, 0, (broad_noise + convol_noise + observe_noise)[i], color='b')
+    quick_plot(ax, lambda_pixel, convol_noise, color='g',
+               labels=["Convol. Noise"] + ['_nolegend_' for o in spectro.orders[:-1]])
+    for i in range(nord):
+        ax.fill_between(lambda_pixel[i].value, 0, (convol_noise + observe_noise)[i], color='g')
+    quick_plot(ax, lambda_pixel, observe_noise, color='pink',
+               labels=["Observing Noise"] + ['_nolegend_' for o in spectro.orders[:-1]])
+    for i in range(nord):
+        ax.fill_between(lambda_pixel[i].value, 0, observe_noise[i], color='pink')
+    quick_plot(ax, lambda_pixel, blazed_int_spec, color='k', linestyle='--', linewidth=0.5,
+               labels=["Original, Blazed"] + ['_nolegend_' for o in spectro.orders[:-1]],
+               xlabel='Wavelength (nm)', ylabel=r"Flux (phot $cm^{-2} s^{-1})$")
+    fig2.tight_layout()
+    plot_file = f'{args.output_dir}/{args.output_h5file}_noiseplots.pdf'
+    fig2.savefig(plot_file)
+    logging.info(f'\nSaved noise plots to {plot_file}.')
     plt.show()
 
 """
