@@ -194,7 +194,7 @@ def fit_func_1pix(params, x_phases, y_counts, orders, pix, plot=False):
         plt.tight_layout()
         plt.show()
 
-    return model - y_counts
+    return (model - y_counts)/np.nan_to_num(np.sqrt(y_counts), nan=1)
 
 
 def param_extract_1pix(params, n_ord):
@@ -417,6 +417,7 @@ if __name__ == '__main__':
     opt_params = []
     redchi = np.empty([sim.npix])
     # do the least squares fit:
+    pixels = [0]
     for pix in pixels:
         plot = True if pix in [0,10,100,1000,2000] else False
 
@@ -433,27 +434,29 @@ if __name__ == '__main__':
         )
 
         opt_params.append(
-            minimize(fit_func_1pix, params[pix], args=(bin_centers, bin_counts[:, pix], spectro.orders, pix, plot)
-                     )
+            minimize(fit_func_1pix, params[0], args=(bin_centers, bin_counts[:, pix], spectro.orders, pix, plot)
+                     , nan_policy='omit')
         )
-        redchi[pix] = opt_params[pix].redchi
+        redchi[0] = opt_params[0].redchi
 
         #opt_params = minimize(fit_func, params, args=(bin_centers, bin_counts, spectro.orders, pixels))
 
     # extract the new parameters and evaluate at each order and pixel:
-    phi_m0, _, e_coefs, _ = param_extract(opt_params.params, sim.npix, nord)
+    phi_m0, (s_0, s_1, s_2), sig_coefs, amps = param_extract_1pix(opt_params[0].params, nord)
 
     # TODO USE BREAKPOINT BEFORE THIS calculate the other order centers based on m0 by solving the quadratic equation:
     m0 = spectro.orders[0]
     other_ord = spectro.orders[1:]
-    const = s_0 - s_2 / 2 - (other_ord / m0) * (s_0 - s_2 / 2 + s_1 * new_phi_m0 + 3 / 2 * s_2 * new_phi_m0 ** 2)
+    const = s_0 - s_2 / 2 - (other_ord / m0) * (s_0 - s_2 / 2 + s_1 * phi_m0 + 3 / 2 * s_2 * phi_m0 ** 2)
     other_phis = (-s_1 - np.sqrt(s_1 ** 2 - 6 * s_2 * const)) / (3 * s_2)
-    all_phis = np.append(new_phi_m0, other_phis)
+    all_phis = np.append(phi_m0, other_phis)
 
     all_phis = all_phis[::-1]
-    sig = np.polynomial.legendre.Legendre((q_0, q_1, q_2))(all_phis)
+    sig = np.polynomial.legendre.Legendre(sig_coefs)(all_phis)
     amps = np.array(amps)
 
+    photon_bins = np.zeros([nord + 1, sim.npix])
+    photon_bins[0, :] = -1
     # get the order bin edges:
     photon_bins[1:-1, pix] = gauss_intersect(all_phis, sig, amps)
 
@@ -478,7 +481,7 @@ if __name__ == '__main__':
                [bin_counts[:, pix]-np.sum(gauss(bin_centers, all_phis[:, None], sig[:, None], amps[:, None]).T, axis=0)],
                marker='.', color='purple', linestyle='None', labels=[None], ylabel='Residual', xlabel='Phase')
     res.set_xlim([-1,0])
-    res.text(-0.3,10, f'Red. Chi^2={opt_params.redchi:.1f}')
+    res.text(-0.3,10, f'Red. Chi^2={opt_params[0].redchi:.1f}')
     for b in photon_bins[:, pix]:
         res.axvline(b, linestyle='--', color='black')
     plt.tight_layout()
@@ -517,8 +520,6 @@ if __name__ == '__main__':
 
     # initializing empty arrays for msf products:
     covariance = np.zeros([nord, nord, sim.npix])
-    photon_bins = np.zeros([nord + 1, sim.npix])
-    photon_bins[0, :] = -1
     for n, j in enumerate(pixels):
         # get the covariance matrices:
         gauss_sum = np.sum(
