@@ -3,6 +3,7 @@ import scipy.interpolate as interp
 import scipy
 from scipy.signal import oaconvolve, find_peaks, gaussian, correlate
 import scipy.ndimage as ndi
+from scipy.constants import h, c
 import astropy.units as u
 import matplotlib.pyplot as plt
 import logging
@@ -20,6 +21,14 @@ def nearest_index(array, value):
     array = np.asarray(array)
     idx = (np.abs(array - value)).argmin()
     return idx
+
+
+def wave_to_eV(waves):
+    return ((h*u.J*u.s) * (c * u.m / u.s) / waves).to(u.eV)
+
+
+def eV_to_wave(eVs):
+    return ((h*u.J*u.s) * (c * u.m / u.s) / eVs).to(u.nm)
 
 
 def _determine_apodization(x, pixel_samples_frac, pixel_max_npoints):
@@ -112,7 +121,7 @@ def draw_photons(convol_wave,
     cdf = np.cumsum(result_pix, axis=0)
     rest_of_way_to_photons = area * exptime
     cdf *= rest_of_way_to_photons
-    cdf = cdf.decompose()  # todo this is a slopy copy, decomposes units into MKS
+    cdf = cdf.decompose()  # todo this is a slopy copy, decomposes units into photons
     total_photons = cdf[-1, :]
 
     # putting Poisson draw after limiting because time-consuming
@@ -123,8 +132,10 @@ def draw_photons(convol_wave,
         logging.info(f'\tLimited to {limit_to} photons per pixel per second.')
     else:
         N = np.random.poisson(total_photons.value.astype(int))
+        total_photons_ltd = total_photons.value
         logging.info(f'\tMax # of photons per second in any pixel: {N.max() / exptime.value}.')
 
+    reduce_factor = total_photons.value / total_photons_ltd
     cdf /= total_photons
 
     logging.info("\tBeginning random draw for photon wavelengths (from CDF) and arrival times (from uniform random).")
@@ -135,23 +146,20 @@ def draw_photons(convol_wave,
         l_photons.append(cdf_interp(np.random.uniform(0, 1, size=n)) * u.nm)
         t_photons.append(np.random.uniform(0, 1, size=n) * exptime)
     logging.info("Completed photon draw, obtained random arrival times and wavelengths for individual photons.")
-    return t_photons, l_photons
+    return t_photons, l_photons, reduce_factor
 
 
-def _n_bins(n_data: int):
+def n_bins(n_data: int, method: str = 'rice'):
     # TODO include more algorithms based on number of data points
     """
     :param int n_data: number of data points
+    :param str method: # of bin method to use, only Rice available currently
     :return: best number of bins based on various algorithms
     """
-    if n_data:
-        return int(5 * n_data ** (1 / 3))
-    # if n_data > x:
-    #    return bins
-    # if 500 <= n_data < y:
-    #    return int(np.log2(n_data)+1)
-    # if y <= n_data < z:
-
+    if method == 'rice':
+        return int(4 * n_data ** (1 / 3))
+    else:
+        raise ValueError(f'Method {method} not supported.')
 
 def gauss(x, mu, sig, A):
     """
@@ -403,15 +411,23 @@ class Engine:
         """
         Conducts a direct integration of the fluxden on the wavelength scale to convert to pixel space.
         :param array_wave: wavelength
-        :param array: fluxden
-        :param leftedge: pixel left edge wavelengths
+        :param array: fluxden as photlam
+        :param leftedge: pixel left edge wavelengths in AA
         :return: direct integration to put flux density of spectrum into pixel space
         """
         if isinstance(array, u.Quantity):
-            array = np.nan_to_num(array.value)
+            array = np.nan_to_num(array.to(u.ph / u.nm / u.cm ** 2 / u.s).value)
         else:
-            array = np.nan_to_num(array.to(u.photlam).value)
-        flux_int = interp.InterpolatedUnivariateSpline(array_wave.to(u.nm).value, array, k=1, ext=1)
+            array = np.nan_to_num(array)
+        if isinstance(array_wave, u.Quantity):
+            array_wave = np.nan_to_num(array_wave.to(u.nm).value)
+        else:
+            array_wave = np.nan_to_num(array_wave)
+        if isinstance(leftedge, u.Quantity):
+            leftedge = np.nan_to_num(leftedge.to(u.nm).value)
+        else:
+            leftedge = np.nan_to_num(leftedge)
+        flux_int = interp.InterpolatedUnivariateSpline(array_wave, array, k=1, ext=1)
         integrated = [flux_int.integral(leftedge[j], leftedge[j + 1])
                       for j in range(self.spectrograph.detector.n_pixels - 1)]
         last = [flux_int.integral(leftedge[-1], leftedge[-1] + (leftedge[-1] - leftedge[-2]))]
@@ -433,17 +449,17 @@ class Engine:
         :param plot: True if viewing the fit for the pixel
         :return: optimized and guess parameters for mu, sigma, and amplitude
         """
-        
+
         # for any photons that got wrapped around to 1 at -1, connect it back so we can histogram
         for n, p in enumerate(photons):
             while photons[n] > 0:
                 photons[n] -= 2
-        
+
         counts, edges = np.histogram(photons, bins=bin_edges)
 
         # turn integer counts into floats
         counts = np.array([float(x) for x in counts])
-        
+
         # change the edges into center points
         centers = edges[:-1] + np.diff(edges) / 2
 
@@ -456,7 +472,7 @@ class Engine:
         # get up to n_ord peaks, less if no flux in some order
         top_peak = peaks[np.argsort(peak_heights)[::-1][:n_gauss]]
         top_peak = np.array([int(i) for i in top_peak])
-        
+
         # get the FWHM so they can be turned into sigma guesses
         top_width = peak_widths[np.argsort(peak_heights)[::-1][:n_gauss]]
 
@@ -474,7 +490,7 @@ class Engine:
         params = _get_params(n_gauss, guess=guess)
         opt_params = minimize(lmfit_gaussians, params, args=(centers, counts, n_gauss), method='least_squares')
         mu, sig, A = param_to_array(opt_params, n_gauss, post_opt=True)
-        
+
         # plot the best-fit 
         if plot:
             fig, ax = plt.subplots(1, 1)
