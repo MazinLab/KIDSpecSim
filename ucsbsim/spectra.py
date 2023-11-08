@@ -16,6 +16,7 @@ _atm = None
 
 u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # new unit name, photon flux per wavelength
 
+
 # todo make use of Specutils/and pysynphot.
 # https://synphot.readthedocs.io/en/latest/synphot/spectrum.html#specutils
 
@@ -61,7 +62,7 @@ def TelescopeTransmission(reflectivity: float = .9):
     return SpectralElement.from_spectrum1d(spec)
 
 
-def FilterTransmission(min=400*u.nm, max=800*u.nm):
+def FilterTransmission(min=400 * u.nm, max=800 * u.nm):
     """
     :param min: shorter wavelength edge
     :param max: longer wavelength edge
@@ -114,14 +115,14 @@ def BlackbodyModel(teff: float):
     :param float teff: effective temperature of model star
     :return: blackbody model of star as SourceSpectrum object
     """
-    return SourceSpectrum(BlackBodyNorm1D, temperature=teff)
+    return SourceSpectrum(BlackBodyNorm1D, temperature=teff)*1e16
 
 
 def FlatModel():
     """
     :return: model which returns the same flux at all wavelengths
     """
-    return SourceSpectrum(ConstFlux1D, amplitude=1)
+    return SourceSpectrum(ConstFlux1D, amplitude=1e5)
 
 
 def EmissionModel(filename, minwave, maxwave, target_R=50000):
@@ -153,18 +154,18 @@ def EmissionModel(filename, minwave, maxwave, target_R=50000):
         flux = flux[include]
         wave = wave[include]
         uncert = uncert[include]
-    target_dl = (wave[0]+wave[-1])/2 / target_R
-    sigma_factor = target_dl/min(uncert)  # 3 sigma approx to 1st Airy ring
-    
+    target_dl = (wave[0] + wave[-1]) / 2 / target_R
+    sigma_factor = target_dl / min(uncert)  # 3 sigma approx to 1st Airy ring
+
     if isinstance(minwave, u.Quantity):
         minwave = minwave.to(u.nm).value
     if isinstance(maxwave, u.Quantity):
         maxwave = maxwave.to(u.nm).value
     wave_grid = np.arange(minwave, maxwave, target_dl)
     line_gauss = gauss(wave_grid[None, :].astype(float), wave[:, None].astype(float),
-                       uncert[:, None].astype(float) * sigma_factor/3, flux[:, None].astype(float))
+                       uncert[:, None].astype(float) * sigma_factor / 3, flux[:, None].astype(float))
     spectrum = np.sum(line_gauss, axis=1)
-    return SourceSpectrum.from_spectrum1d(Spectrum1D(flux=spectrum*u.photlam, spectral_axis=wave_grid*u.nm))
+    return SourceSpectrum.from_spectrum1d(Spectrum1D(flux=spectrum * u.photlam, spectral_axis=wave_grid * u.nm))
 
 
 def get_spectrum(spectrum_type: str, teff=None, emission_file=None, minwave=None, maxwave=None):
@@ -172,7 +173,8 @@ def get_spectrum(spectrum_type: str, teff=None, emission_file=None, minwave=None
     :param str spectrum_type: 'blackbody', 'phoenix', 'flat', or 'emission' only
     :param teff: effective temperature for blackbody or phoenix model spectrum
     :param emission_file: file name for the desired emission spectrum
-    :param C: constant to multiply uncertainty for emission lines
+    :param minwave: minimum wavelength
+    :param maxwave: maximum wavelength
     :return: SourceSpectrum object of chosen spectrum
     """
     if spectrum_type == 'blackbody':
@@ -189,6 +191,7 @@ def get_spectrum(spectrum_type: str, teff=None, emission_file=None, minwave=None
         return EmissionModel(emission_file, minwave, maxwave)
     else:
         raise ValueError("Only 'blackbody', 'phoenix', 'flat', or 'emission' are supported for spectrum_type.")
+
 
 def clip_spectrum(x, clip_range):
     """
