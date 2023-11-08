@@ -40,7 +40,7 @@ class MKIDDetector:
             design_R0: float,
             l0: u.Quantity,
             R0s: np.ndarray,
-            phase_centers: np.ndarray,
+            phase_offsets: np.ndarray,
             resid_map: np.ndarray = None
     ):
         """
@@ -50,7 +50,7 @@ class MKIDDetector:
         :param float R0: spectral resolution of the longest wavelength in spectrometer range
         :param u.Quantity l0: longest wavelength in spectrometer range in astropy units
         :param np.ndarray R0s: array of R0s that deviate slightly from design as expected, None means no deviation
-        :param np.ndarray phase_centers: the phase center offset from 0 for each pixel
+        :param np.ndarray phase_offsets: the phase center offset factor for each pixel
         :param np.ndarray resid_map: the IDs for each resonator (pixel).
         """
         self.n_pixels = n_pix
@@ -60,7 +60,7 @@ class MKIDDetector:
         self.design_R0 = design_R0
         self.pixel_indices = np.arange(self.n_pixels, dtype=int)
         self.R0s = R0s
-        self.pixel_phase_centers = phase_centers
+        self.pixel_phase_offsets = phase_offsets
         self.resid_map = resid_map
 
     def R0(self, pixel: int):
@@ -114,7 +114,7 @@ class MKIDDetector:
         :param kwargs: additional keyword args to pass to draw_photons (exptime, area, etc.)
         :return: recarray of observed photons, total number observed
         """
-        arrival_times, arrival_wavelengths = draw_photons(convol_wave, convol_result, **kwargs)
+        arrival_times, arrival_wavelengths, reduce_factor = draw_photons(convol_wave, convol_result, **kwargs)
 
         from mkidcore.binfile.mkidbin import PhotonNumpyType
         pixel_count = np.array([x.size for x in arrival_times])
@@ -199,7 +199,7 @@ class MKIDDetector:
             # linear equation: y = (y2-y1)/(x2-x1)*(x-x1) + y1 = 0.6/(freq_maxw-freq_minw)*(x-freq_minw) - 0.8
             photons.wavelength = wave_to_phase(photons.wavelength, minwave, maxwave)
             for j in self.pixel_indices:  # sorting photons by resID (i.e. pixel) and multiplying phase center offsets
-                photons.wavelength[np.where(photons.resID == self.resid_map[j])] *= self.pixel_phase_centers[j]
+                photons.wavelength[np.where(photons.resID == self.resid_map[j])] *= self.pixel_phase_offsets[j]
             if photons.wavelength.size:
                 for n, j in enumerate(photons.wavelength):
                     while photons.wavelength[n] < -1:
@@ -211,4 +211,4 @@ class MKIDDetector:
                      f'{total_merged} photons had their energies merged, '
                      f'{np.sum(total_missed)} photons were missed due to deadtime,'
                      f'and {observed} photons were observed.')
-        return photons, observed
+        return photons, observed, reduce_factor
