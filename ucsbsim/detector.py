@@ -40,7 +40,7 @@ class MKIDDetector:
             design_R0: float,
             l0: u.Quantity,
             R0s: np.ndarray,
-            phase_offsets: np.ndarray,
+            phase_offsets: np.ndarray = None,
             resid_map: np.ndarray = None
     ):
         """
@@ -199,7 +199,10 @@ class MKIDDetector:
             # linear equation: y = (y2-y1)/(x2-x1)*(x-x1) + y1 = 0.6/(freq_maxw-freq_minw)*(x-freq_minw) - 0.8
             photons.wavelength = wave_to_phase(photons.wavelength, minwave, maxwave)
             for j in self.pixel_indices:  # sorting photons by resID (i.e. pixel) and multiplying phase center offsets
-                photons.wavelength[np.where(photons.resID == self.resid_map[j])] *= self.pixel_phase_offsets[j]
+                try:
+                    photons.wavelength[np.where(photons.resID == self.resid_map[j])] *= self.pixel_phase_offsets[j]
+                except TypeError:
+                    print("Phases were not offset because offset values were not provided.")
             if photons.wavelength.size:
                 for n, j in enumerate(photons.wavelength):
                     while photons.wavelength[n] < -1:
