@@ -132,8 +132,8 @@ if __name__ == '__main__':
         spectra = SourceSpectrum(ConstFlux1D, amplitude=1)  # only blackbody supported now
     blazed_spectrum, _, _ = eng.blaze(wave, spectra)
     # TODO can we assume any knowledge about blaze shape? if not, how to divide out eventually?
-    pix_leftedge = spectro.pixel_wavelengths(edge='left').to(u.nm).value
-    blaze_shape = [eng.lambda_to_pixel_space(wave, blazed_spectrum[i], pix_leftedge[i]) for i in range(nord)][::-1]
+    lambda_left = spectro.pixel_wavelengths(edge='left').to(u.nm).value
+    blaze_shape = [eng.lambda_to_pixel_space(wave, blazed_spectrum[i], lambda_left[i]) for i in range(nord)][::-1]
     blaze_shape /= np.max(blaze_shape)  # normalize max to 1
     blaze_shape[blaze_shape == 0] = 1  # prevent divide by 0 or very small num. issue
     '''
@@ -207,7 +207,7 @@ if __name__ == '__main__':
         plt.ylabel('Residual, both normalized to 1 at peak')
         plt.xlabel('Pixel Index')
         plt.show()
-        
+
         plt.grid()
         plt.plot(detector.pixel_indices, normed, label='Observation')
         plt.plot(detector.pixel_indices, model[::-1][n], '--', label='Model')

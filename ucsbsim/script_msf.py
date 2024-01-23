@@ -1,11 +1,16 @@
 import numpy as np
 from numpy.polynomial.legendre import Legendre
 import matplotlib.pyplot as plt
+from matplotlib.colors import colorConverter
+import matplotlib.patches as mpatches
+import matplotlib as mpl
 import scipy.signal
 import scipy
 import scipy.interpolate as interp
 from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import copy
+import numdifftools as ndt
 
 import astropy.units as u
 import time
@@ -13,7 +18,7 @@ from datetime import datetime as dt
 import argparse
 import logging
 import os
-from lmfit import Parameters, minimize
+from lmfit import Parameters, minimize, Minimizer
 from synphot import SourceSpectrum
 from synphot.models import BlackBodyNorm1D, ConstFlux1D
 
@@ -25,7 +30,7 @@ from ucsbsim.spectrograph import GratingSetup, SpectrographSetup
 from ucsbsim.detector import MKIDDetector, wave_to_phase
 from ucsbsim.plotting import quick_plot
 from ucsbsim.simsettings import SpecSimSettings
-
+from ucsbsim.lmfit_conf_revised import conf_interval
 
 # TODO edit below
 """
@@ -39,7 +44,6 @@ Extraction of the MKID Spread Function from calibration spectrum. The steps are:
  This will later be used to determine the error band of some extracted spectrum.
 -Saves newly obtained bin edges and covariance matrices to files.
 """
-
 
 '''
 def init_params_new(
@@ -186,8 +190,8 @@ def init_params(
         s_guess,
         amp_guess,
         miss_ord=None,
-        miss_per=0.1,
-        reg_per=0.15,
+        miss_per=0.3,
+        reg_per=0.3,
         degree=2,
         e_domain=[-1, 0]
 ):
@@ -195,7 +199,7 @@ def init_params(
     :param phi_guess: n_ord guess values for phases
     :param e_guess: n_ord guess values for energies of given phases
     :param s_guess: n_ord guess values for sigmas of given energies
-    :param amp_guess: n_ord guess values for amps
+    :param amp_guess: n_ord guess values for fit_amps
     :param miss_ord: as list, the orders that are probably missing/0
     :param miss_per: the percentage to add to the threshold for missing orders
     :param reg_per: the percentage to add to the threshold for existing orders
@@ -206,12 +210,20 @@ def init_params(
     parameters = Parameters()
 
     # use Legendre polyfitting on the theoretical/peak-finding data to get guess coefs
-    e_coefs = Legendre.fit(x=phi_guess, y=e_guess, deg=degree, domain=e_domain).coef
+    e_coefs = Legendre.fit(x=phi_guess, y=e_guess / e_guess[-1], deg=degree, domain=e_domain).coef
 
-    s_coefs = Legendre.fit(x=e_guess, y=s_guess, deg=degree, domain=[e_guess[0], e_guess[-1]]).coef
+    s_coefs = Legendre.fit(x=e_guess / e_guess[-1], y=s_guess, deg=degree, domain=[e_guess[0] / e_guess[-1], 1]).coef
+
+    parameters.add(name=f's0', value=s_coefs[0])
+    parameters.add(name=f's1', value=s_coefs[1])
+    parameters.add(name=f's2', value=s_coefs[2])
 
     # add phi_0s to params object:
     parameters.add(name=f'phi_0', value=phi_guess[-1], min=phi_guess[-1] - 0.2, max=phi_guess[-1] + 0.2)
+
+    # add polynomial coefficients to params object:
+    parameters.add(name=f'e1', value=e_coefs[1])
+    parameters.add(name=f'e2', value=e_coefs[2])
 
     # add amplitudes to params object:
     if miss_ord is None:  # no orders were identified as missing
@@ -219,116 +231,81 @@ def init_params(
             parameters.add(
                 name=f'O{i}_amp',
                 value=amp_guess[i],
-                min=amp_guess[i] * (1 - reg_per),
+                # min=amp_guess[i] * (1 - reg_per),
                 max=amp_guess[i] * (1 + reg_per)
             )
     else:
         for i in range(len(amp_guess)):
             if i in miss_ord:
-                parameters.add(name=f'O{i}_amp', value=amp_guess[i], vary=False)
+                parameters.add(name=f'O{i}_amp', value=0, vary=False)
             else:
                 parameters.add(
                     name=f'O{i}_amp',
                     value=amp_guess[i],
-                    min=amp_guess[i] * (1 - reg_per),
+                    # min=amp_guess[i] * (1 - reg_per),
                     max=amp_guess[i] * (1 + reg_per)
                 )
 
-    # add polynomial coefficients to params object:
-    parameters.add(name=f'e0', value=e_coefs[0])# , min=2, max=3)  # , min=e0_bound[0], max=e0_bound[-1])
-    parameters.add(name=f'e1', value=e_coefs[1])#, min=-3, max=-1.4)  # , min=e1_bound[0], max=e1_bound[-1])
-    parameters.add(name=f'e2', value=e_coefs[2])#, min=-1e-5, max=1e-5)  # , min=e2_bound[0], max=e2_bound[-1])  # the curvation factor is small
-
-    parameters.add(name=f's0', value=s_coefs[0])#, min=0.015, max=0.04)  # , min=s0_bound[0], max=s0_bound[-1])
-    parameters.add(name=f's1', value=s_coefs[1])#, min=1e-15, max=1e-3)  # , min=s1_bound[0], max=s1_bound[-1])
-    parameters.add(name=f's2', value=s_coefs[2])#, min=-1e-3, max=1e-3)  # , min=-0.01, max=0.01)  # the curvation coef is of order the others
-
-    return parameters, e_coefs, s_coefs
+    return parameters
 
 
 def fit_func(
         params,
         x_phases,
-        y_counts,
-        orders,
-        pix,
-        res_mask=None,
+        y_counts=None,
+        orders=None,
+        nord=None,
+        pix: int = None,
+        leg_e=None,
+        leg_s=None,
         degree=2,
-        e_domain=[-1, 0],
-        s_domain=None,
-        evaluate=None,
-        plot=False
+        plot=False,
+        to_sum=False
 ):
-    have_roots = True
-    # turn dictionary of param values into list:
-    param_vals = list(params.valuesdict().values())
+    # turn dictionary of param values into separate params:
+    s0, s1, s2, phi_0, e1, e2, *amps = tuple(params.valuesdict().values())
+    e0 = e0_from_params(e1, e2, phi_0)
 
-    # by how I ordered it, the first param is always the phi_0 value
-    phi_0 = param_vals[0]
+    # pass coef parameters to energy/sigma polys:
+    setattr(leg_e, 'coef', [e0, e1, e2])
+    setattr(leg_s, 'coef', (s0, s1, s2))
 
-    # the 1 through n_ord + 1 params are the amplitudes:
-    amps = np.array(param_vals[1:nord + 1])
-
-    # the next poly_degree+1 params are the e coefficients:
-    e0, e1, e2 = param_vals[nord + 1:nord + 2 + degree]
-
-    # pass coef parameters to energy poly and get energies at each phase center:
-    e_poly = Legendre((e0, e1, e2), domain=e_domain)
-
-    # calculate the other phi_m based on phi_0:
-    m0 = orders[0]
-    other_orders = orders[1:][::-1]  # flipping so that orders are in ascending *lambda* (like the rest)
-    grating_eq = other_orders / m0 * e_poly(phi_0)
     try:
-        phis = []
-        for i in grating_eq:
-            roots = (e_poly - i).roots()
-            if all(roots < 0):
-                phis.append(roots[(-1 < roots) & (roots < phi_0)][0])
+        # calculate the other phi_m based on phi_0:
+        phis = phis_from_grating_eq(orders, phi_0, leg=leg_e, coefs=[e0, e1, e2])
+
+        # get sigmas at each phase center:
+        sigs = leg_s(leg_e(phis))
+
+        # put the phi, sigma, and fit_amps together for Gaussian model:
+        gauss_i = np.nan_to_num(gauss(x_phases, phis[:, None], sigs[:, None], np.array(amps)[:, None]), nan=0)
+        model = np.sum(gauss_i, axis=1).flatten()
+
+        if y_counts is not None:
+            if np.iscomplex(phis).any() or not np.isfinite(phis).any():
+                residual = np.full_like(y_counts, np.max(y_counts) / np.sqrt(np.max(y_counts)))
             else:
-                phis.append(roots.min())
+                # get the residuals and weighted reduced chi^2:
+                residual = np.divide(model - y_counts, np.sqrt(y_counts), where=y_counts != 0)
+                residual[y_counts == 0] = model[y_counts == 0]
+
     except IndexError:
-        have_roots = False
-        residual = np.full_like(y_counts, np.max(y_counts) / np.sqrt(np.max(y_counts)))
-
-    if np.iscomplex(phis).any():
-        residual = np.full_like(y_counts, np.max(y_counts) / np.sqrt(np.max(y_counts)))
-        model = np.zeros_like(x_phases)
-
-    elif have_roots:
-        phis = np.array(phis)
-        phis = np.append(phis, phi_0)
-        # the last poly_degree+1 params are the sigma coefficients:
-        s0, s1, s2 = param_vals[nord + 2 + degree:]
-
-        # pass coef parameters to sigma poly and get sigmas at each phase center:
-        sigs = Legendre((s0, s1, s2), domain=s_domain)(e_poly(phis))
-
-        # put the phi, sigma, and amps together for Gaussian model:
-        gauss_i = np.nan_to_num(gauss(x=x_phases, mu=phis[:, None], sig=sigs[:, None], A=amps[:, None]), nan=0)
-        model = np.array([np.sum(gauss_i, axis=1)]).flatten()
-
-        # get the residuals and weighted reduced chi^2:
-        residual = np.divide(
-            model - y_counts,
-            np.sqrt(y_counts),
-            where=y_counts != 0)  # TODO change back
-        residual[y_counts == 0] = 0
-
-    #if res_mask is not None:
-    #    residual[~res_mask] = np.nan
+        if y_counts is not None:
+            residual = np.full_like(y_counts, np.max(y_counts) / np.sqrt(np.max(y_counts)))
+        else:
+            print(f'Cannot retrieve model for pixel {pix}.')
 
     # WARNING, WILL PLOT HUNDREDS IF FIT SUCKS/CAN'T CONVERGE
     if plot:
-        mask = np.isfinite(residual)
-        N = mask.sum()
-        N_dof = N - len(param_vals)
-        red_chi2 = np.sum(residual[mask] ** 2) / N_dof
+
+        N_dof = len(residual) - len(params)
+        red_chi2 = np.sum(residual ** 2) / N_dof
 
         fig = plt.figure(1)
         ax = fig.add_axes((.1, .3, .8, .6))
         ax.plot(x_phases, y_counts, label='Data')
-        ax.plot(x_phases, model, label='Model')
+        for n, i in enumerate(gauss_i.T):
+            ax.plot(x_phases, i, label=f'O{7 - n}')
         ax.legend()
         ax.set_ylabel('Count')
         ax.set_xlim([-1, 0])
@@ -344,8 +321,11 @@ def fit_func(
         plt.suptitle(f"Pixel {pix} Fitting Iteration")
         plt.show()
 
-    if evaluate is not None:
-        return gauss(x=evaluate, mu=phis[:, None], sig=sigs[:, None], A=amps[:, None])
+    if y_counts is None:
+        if to_sum:
+            return model
+        else:
+            return gauss_i
     else:
         return residual
 
@@ -358,7 +338,7 @@ def extract_params(params, n_ord, degree=2):
     :return: the extracted parameters
     """
     phi_0 = params[f'phi_0'].value
-    e_coefs = np.array([params[f'e{c}'].value for c in range(degree + 1)])
+    e_coefs = np.array([params[f'e{c}'].value for c in range(1, degree + 1)])
     s_coefs = np.array([params[f's{c}'].value for c in range(degree + 1)])
     amps = np.array([params[f'O{i}_amp'].value for i in range(n_ord)])
 
@@ -378,9 +358,12 @@ def gauss(x, mu, sig, A):
 
 def quad_formula(a, b, c):
     """
-    :return: quadratic formula results for ax^2 + bx + c = 0
+    :return: quadratic formula results for ax^2 + bx + c = 0 or linear bx + c = 0
     """
-    return ((-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)), ((-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a))
+    if a == 0:
+        return [-c / b]
+    else:
+        return [((-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)), ((-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a))]
 
 
 def gauss_intersect(mu, sig, A):
@@ -390,19 +373,25 @@ def gauss_intersect(mu, sig, A):
     :param A: 2 amplitudes of Gaussians
     :return: analytic calculation of the intersection point between 2 1D Gaussian functions
     """
-    n = len(mu)
-    if n != len(sig) or n != len(A):
-        raise ValueError("mu, sig, and A must all be the same size.")
-    a = 1 / sig[0] ** 2 - 1 / sig[1] ** 2
-    b = 2 * mu[1] / sig[1] ** 2 - 2 * mu[0] / sig[0] ** 2
-    c = (mu[0] / sig[0]) ** 2 - (mu[1] / sig[1]) ** 2 - 2 * np.log(A[0] / A[1])
-    solp, soln = quad_formula(a=a, b=b, c=c)
-    if mu[0] < solp < mu[1]:
-        return solp
-    elif mu[0] < soln < mu[1]:
-        return soln
-    else:
+    if A[1] == 0:
         return np.nan
+    else:
+        n = len(mu)
+        if n != len(sig) or n != len(A):
+            raise ValueError("mu, sig, and A must all be the same size.")
+        a = 1 / sig[0] ** 2 - 1 / sig[1] ** 2
+        b = 2 * mu[1] / sig[1] ** 2 - 2 * mu[0] / sig[0] ** 2
+        c = (mu[0] / sig[0]) ** 2 - (mu[1] / sig[1]) ** 2 - 2 * np.log(A[0] / A[1])
+        if a == 0:
+            return quad_formula(a=a, b=b, c=c)[0]
+        else:
+            solp, soln = tuple(quad_formula(a=a, b=b, c=c))
+            if mu[0] < solp < mu[1]:
+                return solp
+            elif mu[0] < soln < mu[1]:
+                return soln
+            else:
+                return np.nan
 
 
 def nearest_idx(array, value):
@@ -413,6 +402,45 @@ def sig_to_R(sig, lam):
     dlam = sig * 2 * np.sqrt(2 * np.log(2))
     R = lam / dlam
     return np.abs(R)
+
+
+def e0_from_params(e1, e2, phi_0):
+    return 1 - e2 * (1 / 2 * (3 * ((phi_0 + 0.5) * 2) ** 2 - 1)) - e1 * 2 * (phi_0 + 0.5)
+
+
+def phis_from_grating_eq(orders, phi_0, leg, coefs=None, analytic=True):
+    grating_eq = orders[1:][::-1] / orders[0] * leg(phi_0)
+
+    phis = []
+    for i in grating_eq:
+        if analytic:
+            # all weird because domain centering added extra terms
+            # roots = np.array(quad_formula(6*coefs[2], 6*coefs[2]+2*coefs[1], coefs[2] + coefs[0] + coefs[1] - i))
+            roots = np.roots([6 * coefs[2], 6 * coefs[2] + 2 * coefs[1], coefs[2] + coefs[0] + coefs[1] - i])
+        else:
+            roots = (leg_e - i).roots()
+        if ~np.isfinite(roots).all():
+            phis.append(np.nan)
+        elif len(roots) == 1:
+            phis.append(roots[0])
+        elif all(roots < 0):
+            phis.append(roots[(-1 < roots) & (roots < phi_0)][0])
+        else:
+            phis.append(roots.min())
+
+    return np.append(np.array(phis), phi_0)
+
+
+def cov_from_params(params, model, nord, edges_idx, dx, **kwargs):
+    model_sum = np.array([np.sum(model[edges_idx[i]:edges_idx[i + 1]]) * dx for i in range(nord)])
+    cov = np.empty([nord, nord])
+    for k in range(nord):
+        suppress_params = copy.deepcopy(params)
+        suppress_params.add(f'O{k}_amp', value=0)
+        suppress_model = fit_func(suppress_params, nord=nord, **kwargs)
+        suppress_model_sum = np.array([np.sum(suppress_model[edges_idx[i]:edges_idx[i + 1]]) * dx for i in range(nord)])
+        cov[:, k] = np.nan_to_num((model_sum - suppress_model_sum) / model_sum)
+    return cov
 
 
 if __name__ == '__main__':
@@ -517,7 +545,7 @@ if __name__ == '__main__':
     # converting and calculating the simulation phases, energies, sigmas ("true"):
     sim_phase = np.nan_to_num(
         wave_to_phase(spectro.pixel_wavelengths().to(u.nm)[::-1], minwave=sim.minwave, maxwave=sim.maxwave))
-    #avg_peak_sep = np.average(np.diff(sim_phase, axis=0))
+    # avg_peak_sep = np.average(np.diff(sim_phase, axis=0))
 
     energy = np.nan_to_num(engine.wave_to_eV(spectro.pixel_wavelengths().to(u.nm)[::-1]).value)
     sig_start = wave_to_phase(spectro.pixel_wavelengths().to(u.nm)[::-1] - (detector.mkid_resolution_width(
@@ -542,22 +570,14 @@ if __name__ == '__main__':
 
     # create lists/arrays to place loop values, param objects can only go in lists:
     red_chi2 = np.full([sim.npix], fill_value=1e6)
-    e_init = np.zeros([3, sim.npix])
-    s_init = np.zeros([3, sim.npix])
-    phi_init = np.zeros([4, sim.npix])
-    amp_init = np.zeros([nord, sim.npix])
+    missing_cov = []
 
-    # create empty arrays to hold phi, sigma, and amp values for gaussian model:
-    fit_e = np.empty([3, sim.npix])  # the e coefficients
-    phis = np.empty([nord, sim.npix])  # the evaluated order phase centers
-    fit_sig = np.empty([3, sim.npix])  # the sig coefficients
-    sigs = np.empty([nord, sim.npix])  # the evaluated order sigmas
-    amps = np.empty([nord, sim.npix])  # the amplitudes of each order
-    gausses = np.empty([1000, sim.npix])  # the entire n_ord Gaussian model summed
+    # create empty arrays to hold phi values for gaussian model:
+    fit_phi = np.empty([nord, sim.npix])
+    gausses = np.zeros([1000, sim.npix])  # the entire n_ord Gaussian model summed
+    gausses_i = np.zeros([1000, nord, sim.npix])
 
-    # for use in recovery of other phis:
-    m0 = spectro.orders[0]
-    other_orders = spectro.orders[1:][::-1]
+    covariance = np.zeros([nord, nord, sim.npix])  # the overlap matrix
 
     # create empty array for order bin edges:
     order_edges = np.empty([nord + 1, sim.npix])
@@ -567,11 +587,22 @@ if __name__ == '__main__':
     n = 0
 
     # TODO change pixel indices here
-    #pixels = [107, 1635]
-    snr = 2
+    redchi_val = 5
+    # cov_cutoff = 0.01
+    max_evals = None  # 1500
+    # xtol = 1e-5
+    method = 'leastsq'
+    pixels = [1735]#, 1743, 1836, 1964]
+    #pixels = [1735, 1764, 1769, 1772, 1797, 1811, 1830, 1853, 1854, 1862, 1872]
+    leg_e = Legendre(coef=(0, 0, 0), domain=np.array(args.bin_range))
+    leg_e_pre = Legendre(coef=(0, 0, 0), domain=np.array(args.bin_range))
+    snr = 3
     # do the lmfit:
     for p in pixels:
         print(p)
+        leg_s = Legendre(coef=(0, 0, 0), domain=[energy[0, p] / energy[-1, p], 1])
+        leg_s_pre = Legendre(coef=(0, 0, 0), domain=[energy[0, p] / energy[-1, p], 1])
+
         # TODO move into function, can be function of parameters and use avg distance from 0 + avg peak sep
         # TODO construct initial guess algo by ruling out different cases depending on peaks
         peaks, _ = scipy.signal.find_peaks(bin_counts[:, p], distance=int(0.1 * n_bins), height=snr ** 2)
@@ -628,77 +659,180 @@ if __name__ == '__main__':
                 peaks_nord = [nearest_idx(bin_centers, sim_phase[i, p]) for i in range(nord)]
                 miss_ord = None
 
-        phi_init[:, p] = bin_centers[peaks_nord]
-        amp_init[:, p] = bin_counts[peaks_nord, p]
+        phi_init = bin_centers[peaks_nord]
+        amp_init = bin_counts[peaks_nord, p]
 
         # obtain Parameter object:
-        params, e_coefs, s_coefs = init_params(phi_guess=phi_init[:, p], e_guess=energy[:, p], s_guess=sigmas[:, p],
-                                               amp_guess=amp_init[:, p], miss_ord=miss_ord)
-        e_init[:, p] = e_coefs
-        s_init[:, p] = s_coefs
+        params = init_params(phi_guess=phi_init, e_guess=energy[:, p], s_guess=sigmas[:, p],
+                             amp_guess=amp_init, miss_ord=miss_ord)
 
         opt_params = minimize(
-                fit_func,
-                params,  # params
-                args=(
-                    bin_centers,  # x_phases
-                    bin_counts[:, p],  # y_counts
-                    spectro.orders,  # orders
-                    p,  # pix
-                    bin_counts[:, p] > snr ** 2,  # res_mask
-                    2,  # degree
-                    [-1, 0],  # e_domain
-                    [energy[0, p], energy[-1, p]],  # s_domain
-                    None,  # evaluate
-                    False,  # plot
-                ),
-                nan_policy='omit'
-            )
+            fit_func,
+            params,  # params
+            args=(
+                bin_centers,  # x_phases
+                bin_counts[:, p],  # y_counts
+                spectro.orders,  # orders
+                nord,  # number of orders
+                p,  # pix
+                leg_e,  # energy legendre poly object
+                leg_s,  # sigma legendre poly object
+                2,  # degree
+                False,  # plot  # TODO CHANGE
+            ),
+            nan_policy='omit',
+            max_nfev=max_evals,
+            method=method,
+            # xtol=xtol
+        )
+        # print(opt_params.message)
         red_chi2[p] = opt_params.redchi
 
         # extract the successfully fit parameters:
-        phis[-1, p], fit_e[:, p], fit_sig[:, p], amps[:, p] = extract_params(opt_params.params, nord)
+        fit_phi0, fit_e_coef, fit_s_coef, fit_amps = extract_params(opt_params.params, nord)
+        fit_e0 = e0_from_params(fit_e_coef[0], fit_e_coef[1], fit_phi0)
 
-        e_poly = Legendre(fit_e[:, p], domain=[-1, 0], window=[-1,1])
-        grating_eq = other_orders / m0 * e_poly(phis[-1, p])
-        phis_i = []
-        for i in grating_eq:
-            roots = (e_poly - i).roots()
-            if all(roots < 0):
-                phis_i.append(roots[(-1 < roots) & (roots < phis[-1, p])][0])
-            else:
-                phis_i.append(roots.min())
-        phis[:-1, p] = phis_i
+        setattr(leg_e, 'coef', [fit_e0, fit_e_coef[0], fit_e_coef[1]])
+        setattr(leg_s, 'coef', fit_s_coef)
 
-        s_poly = Legendre(fit_sig[:, p], domain=[energy[0, p], energy[-1, p]], window=[-1,1])
-        sigs[:, p] = s_poly(e_poly(phis[:, p]))
+        fit_phis = phis_from_grating_eq(spectro.orders, fit_phi0, leg=leg_e,
+                                        coefs=[fit_e0, fit_e_coef[0], fit_e_coef[1]])
+        fit_sigs = leg_s(leg_e(fit_phis))
 
         # get the order bin edges:
-        idx = np.argwhere(amps[:, p] != 0)
+        idx = np.argwhere(fit_amps != 0).flatten()
         for h, i in enumerate(idx[:-1]):
-            order_edges[i + 1, p] = gauss_intersect(phis[[i, idx[h + 1]], p], sigs[[i, idx[h + 1]], p],
-                                                    amps[[i, idx[h + 1]], p])
+            order_edges[i + 1, p] = gauss_intersect(fit_phis[[i, idx[h + 1]]], fit_sigs[[i, idx[h + 1]]],
+                                                    fit_amps[[i, idx[h + 1]]])
 
         # store model to array:
-        x = np.linspace(-1, 0, 1000)
-        gausses_i = fit_func(params=opt_params.params, x_phases=bin_centers, y_counts=bin_counts[:, p],
-                             s_domain=[energy[0, p], energy[-1, p]], orders=spectro.orders, pix=p, evaluate=x)
-        #gausses_i[:, amps[:, p] < 25] = 0
-        gausses[:, p] = np.sum(gausses_i, axis=1)
+        fine_phase_grid = np.linspace(-1, 0, 1000)
+        gausses_i[:, :, p] = fit_func(params=opt_params.params, x_phases=fine_phase_grid,
+                                      orders=spectro.orders, nord=nord, pix=p, leg_e=leg_e, leg_s=leg_s)
+        gausses[:, p] = np.sum(gausses_i[:, :, p], axis=1)
+
+        # generate more robust errors on parameters:
+        if opt_params.params['phi_0'].stderr is None:
+            for par in opt_params.params:
+                opt_params.params[par].stderr = abs(opt_params.params[par].value * 0.1)
+
+        mini = Minimizer(fit_func, opt_params.params, fcn_args=(
+            bin_centers,  # x_phases
+            bin_counts[:, p],  # y_counts
+            spectro.orders,  # orders
+            nord,  # number of orders
+            p,  # pix
+            leg_e,  # energy legendre poly object
+            leg_s,  # sigma legendre poly object
+            2,  # degree
+            False,))
+
+        ci = conf_interval(mini, opt_params, sigmas=[1], maxiter=400)
+        vary_params = list(ci.keys())
+
+        # find order-bleeding covar using CI errors:
+
+        # put this into definition:
+        dx = fine_phase_grid[1] - fine_phase_grid[0]
+        edges_idx = [nearest_idx(fine_phase_grid, e) for e in order_edges[:, p]]
+
+        original_cov = cov_from_params(opt_params.params, gausses[:, p], nord, edges_idx, dx,
+                                       x_phases=fine_phase_grid,
+                                       orders=spectro.orders,
+                                       pix=p,
+                                       leg_e=leg_e,
+                                       leg_s=leg_s,
+                                       to_sum=True
+                                       )
+
+        per_leg_e = Legendre(coef=(0, 0, 0), domain=np.array(args.bin_range))
+        per_leg_s = Legendre(coef=(0, 0, 0), domain=[energy[0, p] / energy[-1, p], 1])
+        perturb_params = copy.deepcopy(opt_params.params)
+        for n_p, par in enumerate(vary_params):
+            original_val = opt_params.params[par].value
+            p_err = ci[par][2][1]-ci[par][1][1]
+            m_err = ci[par][1][1]-ci[par][0][1]
+
+            perturb_params.add(par, value=original_val + p_err)
+            perturb_model = fit_func(params=perturb_params, x_phases=fine_phase_grid, orders=spectro.orders,
+                                     nord=nord, pix=p, leg_e=per_leg_e, leg_s=per_leg_s, to_sum=True)
+            cov_p = cov_from_params(perturb_params, perturb_model, nord, edges_idx, dx,
+                                    x_phases=fine_phase_grid,
+                                    orders=spectro.orders,
+                                    pix=p,
+                                    leg_e=per_leg_e,
+                                    leg_s=per_leg_s,
+                                    to_sum=True
+                                    )
+
+            # fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(15, 5))
+            # axes = axes.ravel()
+            # ax1 = axes[0]
+            # ax2 = axes[1]
+            # ax1.grid()
+            # ax1.set_title(f'Parameter "{par}":\n'
+            #               f'Optimized: {original_val:.3e} PLUS Uncert: {p_err:.3e}')
+            # ax1.set_ylabel('Photon Count')
+            # ax1.set_xlabel(r'Phase $\times 2\pi$')
+            # ax1.plot(bin_centers, bin_counts[:, p], 'k', label='Data')
+            # ax1.fill_between(bin_centers, 0, bin_counts[:, p], color='k')
+            # ax1.plot(fine_phase_grid, fit_func(opt_params.params, fine_phase_grid, orders=spectro.orders, nord=nord,
+            #                                    pix=p, leg_e=leg_e, leg_s=leg_s, to_sum=True), label='Optimized')
+            # ax1.plot(fine_phase_grid, fit_func(perturb_params, fine_phase_grid, orders=spectro.orders, nord=nord, pix=p,
+            #                                    leg_e=per_leg_e, leg_s=per_leg_s, to_sum=True), label='Perturbed')
+            # ax1.legend()
+
+            perturb_params.add(par, value=original_val - m_err)
+            perturb_model = fit_func(params=perturb_params, x_phases=fine_phase_grid, orders=spectro.orders,
+                                     nord=nord, pix=p, leg_e=per_leg_e, leg_s=per_leg_s, to_sum=True)
+            cov_n = cov_from_params(perturb_params, perturb_model, nord, edges_idx, dx,
+                                    x_phases=fine_phase_grid,
+                                    orders=spectro.orders,
+                                    pix=p,
+                                    leg_e=per_leg_e,
+                                    leg_s=per_leg_s,
+                                    to_sum=True
+                                    )
+
+            # ax2.grid()
+            # ax2.set_title(f'Parameter "{par}":\n'
+            #               f'Optimized: {original_val:.3e} MINUS Uncert: {m_err:.3e}')
+            # ax2.set_ylabel('Photon Count')
+            # ax2.set_xlabel(r'Phase $\times 2\pi$')
+            # ax2.plot(bin_centers, bin_counts[:, p], 'k', label='Data')
+            # ax2.fill_between(bin_centers, 0, bin_counts[:, p], color='k')
+            # ax2.plot(fine_phase_grid, fit_func(opt_params.params, fine_phase_grid, orders=spectro.orders, nord=nord,
+            #                                    pix=p, leg_e=leg_e, leg_s=leg_s, to_sum=True), label='Optimized')
+            # ax2.plot(fine_phase_grid, fit_func(perturb_params, fine_phase_grid, orders=spectro.orders, nord=nord, pix=p,
+            #                                    leg_e=per_leg_e, leg_s=per_leg_s, to_sum=True), label='Perturbed')
+            # ax2.legend()
+            # plt.show()
+
+            if ((original_cov - cov_p) ** 2).sum() > ((original_cov - cov_n) ** 2).sum():
+                covariance[:, :, p] = cov_p
+                perturb_params.add(par, value=original_val + p_err)
+            else:
+                covariance[:, :, p] = cov_n
+                perturb_params.add(par, value=original_val - m_err)
+
+        if (np.abs(covariance[:, :, p] - original_cov) > 0.01).any():
+            bleed = np.nanmax(np.abs(covariance[:, :, p] - original_cov))
+            print(f'The max change in covariance was {bleed:.3f} for Pixel {p}.')
 
         # plot the individual pixels:
-        if red_chi2[p] > 1e6:  # TODO change back
+        if red_chi2[p] > redchi_val:
             param_vals = list(opt_params.params.valuesdict().values())
 
             # get the post residuals and weighted reduced chi^2:
-            residual = fit_func(
+            opt_residual = fit_func(
                 params=opt_params.params,
                 x_phases=bin_centers,
                 y_counts=bin_counts[:, p],
-                s_domain=[energy[0, p], energy[-1, p]],
                 orders=spectro.orders,
+                nord=nord,
                 pix=p,
-                res_mask=bin_counts[:, p] > snr ** 2
+                leg_e=leg_e,
+                leg_s=leg_s
             )
 
             fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(14, 8))
@@ -724,51 +858,29 @@ if __name__ == '__main__':
             # TODO make the middle figure log scale
             ax2.figure.add_axes(ax2_2)
 
-            # first figure with model and pre/post residual:
-            e_p = Legendre(e_init[:, p], domain=[-1, 0], window=[-1,1])
-
-            grating_eq = other_orders / m0 * e_p(phi_init[-1, p])
-            phis_p = []
-            for i in grating_eq:
-                roots = (e_p - i).roots()
-                if all(roots < 0):
-                    phis_p.append(roots[(-1 < roots) & (roots < phi_init[-1, p])][0])
-                else:
-                    phis_p.append(roots.min())
-            phis_p = np.array(phis_p)
-            phis_p = np.append(phis_p, phi_init[-1, p])
-
-            sigs_p = Legendre(s_init[:, p], domain=[energy[0, p], energy[-1, p]], window=[-1,1])(e_p(phis_p))
-
-            amps_p = amp_init[:, p]
-
-            initial = np.sum(gauss(bin_centers, phis_p[:, None], sigs_p[:, None], amps_p[:, None]), axis=1)
+            # get the pre initial guess
+            pre_gauss = fit_func(params, fine_phase_grid, orders=spectro.orders, nord=nord, pix=p, leg_e=leg_e_pre,
+                                 leg_s=leg_s_pre, to_sum=True)
 
             # get the pre residuals and weighted reduced chi^2:
-            pre_mask = bin_counts[:, p] > 0  # TODO change back
-            pre_residual = np.divide(
-                initial - bin_counts[:, p],
-                np.sqrt(bin_counts[:, p]),
-                where=pre_mask)
-            pre_residual[~pre_mask] = 0  # TODO change back
-            N = np.isfinite(pre_residual).sum()
+            pre_residual = fit_func(params, bin_centers, bin_counts[:, p], spectro.orders, nord, p, leg_e_pre,
+                                    leg_s_pre)
+            N = len(pre_residual)
             N_dof2 = N - len(param_vals)
-            N_dof2 = 1 if N_dof2 == 0 else N_dof2
-            pre_red_chi2 = np.sum(pre_residual[np.isfinite(pre_residual)] ** 2) / N_dof2
+            pre_red_chi2 = np.sum(pre_residual ** 2) / N_dof2
 
             ax1.grid()
             ax1.plot(bin_centers, bin_counts[:, p], 'k', label='Data')
             ax1.fill_between(bin_centers, 0, bin_counts[:, p], color='k')
-            quick_plot(ax1, [x for i in range(nord)], gauss(x, phis_p[:, None], sigs_p[:, None], amps_p[:, None]).T,
-                       labels=['Init. Guess'] + ['_nolegend_' for o in spectro.orders[:-1]], color='gray')
-            quick_plot(ax1, [x for i in range(nord)], gausses_i.T, labels=[f'Order {i}' for i in spectro.orders[::-1]],
+            ax1.plot(fine_phase_grid, pre_gauss, color='gray', label='Init. Guess')
+            quick_plot(ax1, [fine_phase_grid for i in range(nord)], gausses_i[:, :, p].T,
+                       labels=[f'Order {i}' for i in spectro.orders[::-1]],
                        title=f'Least-Squares Fit', xlabel=r'Phase $\times 2\pi$', ylabel='Photon Count')
             for b in order_edges[:-1, p]:
                 ax1.axvline(b, linestyle='--', color='black')
             ax1.axvline(order_edges[-1, p], linestyle='--', color='black', label='Order Edges')
             ax1.set_xlim([-1, 0])
-            #ax1.set_yscale(matplotlib.scale.FuncScale(ax1, (lambda e: e**0.5, lambda e: e**2)))
-            #ax1.set_ylim(bottom=25)
+            # ax1.set_yscale(matplotlib.scale.FuncScale(ax1, (lambda e: e**0.5, lambda e: e**2)))
             ax1.legend()
 
             res1.grid()
@@ -777,54 +889,52 @@ if __name__ == '__main__':
             res1.set_xlim([-1, 0])
 
             res2.grid()
-            quick_plot(res2, [bin_centers], [residual], marker='.', color='purple', linestyle='None',
+            quick_plot(res2, [bin_centers], [opt_residual], marker='.', color='purple', linestyle='None',
                        ylabel='Weight. Resid.', labels=[r'Post Red. $\chi^2=$'f'{red_chi2[p]:.1f}'],
                        xlabel=r'Phase $\times 2\pi$')
             res2.set_xlim([-1, 0])
             for b in order_edges[:, p]:
                 res2.axvline(b, linestyle='--', color='black')
 
-            # ax1.set_yscale('log')
-            # ax1.set_ylim(bottom=0.1)
-
             # second figure with polynomials:
-            if not np.isnan(phis[0, p]) and not np.isnan(phis[-1, p]):
-                new_x = np.linspace(phis[0, p] - 0.01, phis[-1, p] + 0.01, 1000)
-            elif not np.isnan(phis[0, p]):
-                new_x = np.linspace(phis[0, p] - 0.01, phis[-2, p] + 0.01, 1000)
-            elif not np.isnan(phis[-1, p]):
-                new_x = np.linspace(phis[1, p] - 0.01, phis[-1, p] + 0.01, 1000)
+            if not np.isnan(fit_phis[0]) and not np.isnan(fit_phis[-1]):
+                new_x = np.linspace(fit_phis[0] - 0.01, fit_phis[-1] + 0.01, 1000)
+            elif not np.isnan(fit_phis[0]):
+                new_x = np.linspace(fit_phis[0] - 0.01, fit_phis[-2] + 0.01, 1000)
+            elif not np.isnan(fit_phis[-1]):
+                new_x = np.linspace(fit_phis[1] - 0.01, fit_phis[-1] + 0.01, 1000)
 
             ax2.grid()
             ax2.set_ylabel('Deviation from Linear (nm)')
 
 
             def e_poly_linear(x):
-                b = e_poly(phis[0, p]) - phis[0, p] * (e_poly(phis[-1, p]) - e_poly(phis[0, p])) / (
-                        phis[-1, p] - phis[0, p])
-                return (e_poly(phis[-1, p]) - e_poly(phis[0, p])) / (phis[-1, p] - phis[0, p]) * x + b
+                b = leg_e(fit_phis[0]) - fit_phis[0] * (leg_e(fit_phis[-1]) - leg_e(fit_phis[0])) / (
+                        fit_phis[-1] - fit_phis[0])
+                return (leg_e(fit_phis[-1]) - leg_e(fit_phis[0])) / (fit_phis[-1] - fit_phis[0]) * x + b
 
 
-            masked_reg = engine.eV_to_wave(e_poly(new_x) * u.eV)
-            masked_lin = engine.eV_to_wave(e_poly_linear(new_x) * u.eV)
+            masked_reg = engine.eV_to_wave(leg_e(new_x) * energy[-1, p] * u.eV)
+            masked_lin = engine.eV_to_wave(e_poly_linear(new_x) * energy[-1, p] * u.eV)
             deviation = masked_reg - masked_lin
             ax2.plot(new_x, deviation, color='k')
-            for m, i in enumerate(phis[:, p]):
-                ax2.plot(i, engine.eV_to_wave(e_poly(i) * u.eV) - engine.eV_to_wave(e_poly_linear(i) * u.eV), '.',
+            for m, i in enumerate(fit_phis):
+                ax2.plot(i, engine.eV_to_wave(leg_e(i) * energy[-1, p] * u.eV) - engine.eV_to_wave(
+                    e_poly_linear(i) * energy[-1, p] * u.eV), '.',
                          markersize=10, label=f'Order {spectro.orders[::-1][m]}')
             ax2.legend()
 
             ax2_2.grid()
             ax2_2.set_ylabel('R')
             ax2_2.set_xlabel(r'Phase $\times 2\pi$')
-            s_eval = s_poly(e_poly(new_x))
+            s_eval = leg_s(leg_e(new_x))
             R = sig_to_R(s_eval, new_x)
             ax2_2.plot(new_x, R, color='k')
-            for m, i in enumerate(phis[:, p]):
-                ax2_2.plot(i, sig_to_R(sigs[m, p], i), '.', markersize=10, label=f'Order {spectro.orders[::-1][m]}')
+            for m, i in enumerate(fit_phis):
+                ax2_2.plot(i, sig_to_R(fit_sigs[m], i), '.', markersize=10, label=f'Order {spectro.orders[::-1][m]}')
             ax2.set_title(
-                r'$E(\varphi)=$'f'{fit_e[2, p]:.2e}P_2+{fit_e[1, p]:.1e}P_1+{fit_e[0, p]:.2f}P_0\n'
-                r'$\sigma(\varphi)=$'f'{fit_sig[2, p]:.2e}P_2+{fit_sig[1, p]:.2e}P_1+{fit_sig[0, p]:.2e}P_0'
+                r'$E(\varphi)=$'f'{fit_e_coef[1]:.2e}P_2+{fit_e_coef[0]:.2f}P_1+{fit_e0:.2f}P_0\n'
+                r'$\sigma(E)=$'f'{fit_s_coef[2]:.2e}P_2+{fit_s_coef[1]:.2e}P_1+{fit_s_coef[0]:.2e}P_0'
             )
 
             ax1.set_xticks([])  # removes axis labels
@@ -833,12 +943,14 @@ if __name__ == '__main__':
 
             plt.show()
 
+            fit_phi[:, p] = fit_phis
+
     # plot all decent pixel models together:
-    idxs = np.where(red_chi2 > 10)
-    print(r'Number of pixels with reduced $\chi^2$ less than 10:', sim.npix - len(idxs[0]))
+    idxs = np.where(red_chi2 > redchi_val)
+    print(f'Number of pixels with red-chi2 less than {redchi_val}: {sim.npix - len(idxs[0])}')
 
     gausses[:, [idxs]] = 0
-    gausses[gausses < 4] = 0.1  # TODO change back
+    gausses[gausses < 0.01] = 0.01  # TODO change back
     plt.imshow(gausses[::-1], extent=[1, sim.npix, bin_centers[0], bin_centers[-1]], aspect='auto', norm=LogNorm())
     cbar = plt.colorbar()
     cbar.ax.set_ylabel('Photon Count')
@@ -848,43 +960,64 @@ if __name__ == '__main__':
     plt.tight_layout()
     plt.show()
 
+    # TODO DELETE
+    # gausses_i[gausses_i < 0.01] = 0.01
+    # #C0 = colorConverter.to_rgba('C0')
+    # #C1 = colorConverter.to_rgba('C1')
+    # #C2 = colorConverter.to_rgba('C2')
+    # #C3 = colorConverter.to_rgba('C3')
+    # 
+    # cm0 = mpl.colors.LinearSegmentedColormap.from_list('my_cmap', ['none', 'C0'],256)
+    # cm1 = mpl.colors.LinearSegmentedColormap.from_list('my_cmap2',['none', 'C1'],256)
+    # cm2 = mpl.colors.LinearSegmentedColormap.from_list('my_cmap3',['none', 'C2'],256)
+    # cm3 = mpl.colors.LinearSegmentedColormap.from_list('my_cmap4',['none', 'C3'],256)
+    # 
+    # cm0._init()
+    # cm1._init()
+    # cm2._init()
+    # cm3._init()
+    # 
+    # alphas = np.linspace(0, 0.8, cm0.N + 3)
+    # cm0._lut[:, -1] = alphas
+    # cm1._lut[:, -1] = alphas
+    # cm2._lut[:, -1] = alphas
+    # cm3._lut[:, -1] = alphas
+    # 
+    # img0 = plt.imshow(gausses_i[:, 0, :], interpolation='nearest', cmap=cm0, origin='lower', aspect='auto', norm=LogNorm())#, extent=[1, sim.npix, bin_centers[0], bin_centers[-1]])
+    # img1 = plt.imshow(gausses_i[:, 1, :], interpolation='nearest', cmap=cm1, origin='lower', aspect='auto', norm=LogNorm())#, extent=[1, sim.npix, bin_centers[0], bin_centers[-1]])
+    # img2 = plt.imshow(gausses_i[:, 2, :], interpolation='nearest', cmap=cm2, origin='lower', aspect='auto', norm=LogNorm())#, extent=[1, sim.npix, bin_centers[0], bin_centers[-1]])
+    # img3 = plt.imshow(gausses_i[:, 3, :], interpolation='nearest', cmap=cm3, origin='lower', aspect='auto', norm=LogNorm())#, extent=[1, sim.npix, bin_centers[0], bin_centers[-1]])
+    # 
+    # plt.yticks([0, 200, 400, 600, 800, 1000],[-1, -0.8, -0.6, -0.4, -0.2, 0])
+    # plt.title("Virtual Pixel Model")
+    # plt.xlabel("Pixel Index")
+    # plt.ylabel(r"Phase ($\times \pi /2$)")
+    # 
+    # c3 = mpatches.Patch(color='C3', label='Order 4')
+    # c2 = mpatches.Patch(color='C2', label='Order 5')
+    # c1 = mpatches.Patch(color='C1', label='Order 6')
+    # c0 = mpatches.Patch(color='C0', label='Order 7')
+    # 
+    # plt.legend(handles=[c3, c2, c1, c0])
+    # 
+    # plt.tight_layout()
+    # plt.show()
+
     plt.grid()
-    plt.plot(detector.pixel_indices, red_chi2, '.', markersize=3)
-    plt.axhline(10, color='red', label='Cut-off')
+    plt.plot(detector.pixel_indices[red_chi2 < 1e6], red_chi2[red_chi2 < 1e6], '.', markersize=3)
+    plt.axhline(redchi_val, color='red', label='Cut-off')
     plt.semilogy()
-    plt.title(r'Weighted Reduced $\chi^2$')
+    plt.title(r'Weighted Reduced $\chi^2$ for all pixels')
     plt.ylabel(r'Weighted Red. $\chi^2$')
     plt.xlabel('Pixel Index')
     plt.legend()
     plt.show()
 
-    # initializing empty arrays for msf products:
-    covariance = np.zeros([nord, nord, sim.npix])
-    phase_grid = np.linspace(-1, 0, 10000)
-    for j in pixels:
-        # get the covariance matrices:
-        gauss_sum = np.sum(
-            gauss(phase_grid, phis[:, j, None], sigs[:, j, None], amps[:, j, None]), axis=0
-        ) * (phase_grid[1] - phase_grid[0])
-
-        gauss_int = [
-            interp.InterpolatedUnivariateSpline(
-                x=phase_grid,
-                y=gauss(phase_grid, phis[i, j], sigs[i, j], amps[i, j]),
-                k=1,
-                ext=1
-            ) for i in range(nord)
-        ]
-
-        covariance[:, :, j] = [[
-            gauss_int[i].integral(order_edges[k, j], order_edges[k + 1, j]) / gauss_sum[i] for k in range(nord)
-        ] for i in range(nord)]
-
     logging.info(f"Finished fitting all pixels across all orders.")
 
     # assign bin edges, covariance matrices, bin centers, and simulation settings to MSF class and save:
     covariance = np.nan_to_num(covariance)
-    msf = MKIDSpreadFunction(bin_edges=order_edges, cov_matrix=covariance, waves=phis, sim_settings=sim)
+    msf = MKIDSpreadFunction(bin_edges=order_edges, cov_matrix=covariance, waves=fit_phi, sim_settings=sim)
     msf_file = f'{args.output_dir}/msf_R0{sim.designR0}_{sim.pixellim}.npz'
     msf.save(msf_file)
     logging.info(f'\nSaved MSF bin edges and covariance matrix to {msf_file}.')
