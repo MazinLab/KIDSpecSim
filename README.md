@@ -2,16 +2,18 @@
 
 ### Introduction
 
+**New changes in code are not reflected in this guide at the moment.**
+
 This package comprises three main scripts (and their supporting modules) that may act in series or separately:
 1) script_simulate.py reduces a model spectrum to a photon table similar to how the MKID spectrometer will.
 In the command line arguments, essentially all spectrograph properties may be tailored.
 The option to generate a calibration spectrum is much like an on-sky source minus the atmospheric and telescopic
 bandpasses.
 2) script_msf.py loads either a real or simulated calibration photon table (specific file syntax is used) and extracts
-the MKID Spread Function (MSF) from it via least-squares fitting. The intersections between these fitted Gaussian
-functions defines the bin edges for the orders. The covariance matrix defines what fraction of each 
+the MKID Spread Function (MSF) from it via non-linear least-squares fitting. The intersections between these fitted
+Gaussian functions defines the bin edges for the orders. The covariance matrix defines what fraction of each 
 order Gaussian may be part of another order, and thus will be used to generate the error band on an extracted spectrum.
-3) script_extract.py loads either a real or simulated observation photon table and applies
+4) script_extract.py loads either a real or simulated observation photon table and applies
 the MSF products to it to extract an output spectrum which has been order-sorted, unblazed, and has an error band
 on the counts.
 
