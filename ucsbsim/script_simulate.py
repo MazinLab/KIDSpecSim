@@ -16,7 +16,7 @@ from synphot import SpectralElement
 
 from mkidpipeline.photontable import Photontable
 from ucsbsim.spectra import get_spectrum, apply_bandpass, AtmosphericTransmission, FilterTransmission, \
-    TelescopeTransmission, clip_spectrum
+    TelescopeTransmission, FineGrid, clip_spectrum
 from ucsbsim.spectrograph import GratingSetup, SpectrographSetup
 from ucsbsim.detector import MKIDDetector, wave_to_phase
 import ucsbsim.engine as engine
@@ -42,7 +42,7 @@ Simulation of the MKID spectrometer. The steps are:
 
 Notes:
 -When simulating a calibration spectrum, there will be no multiplication with atmospheric or telescopic bandpasses
- to set the source in the laboratory setting, i.e. not coming from on-sky.
+ to simulate the source in the laboratory setting, i.e. not coming from on-sky.
 -The intermediate plots shown will therefore be more interesting when simulating an on-sky source (i.e. Phoenix model).
 """
 
@@ -55,7 +55,7 @@ if __name__ == '__main__':
     # ==================================================================================================================
     N_SIGMA_MKID = 3
     SIGMA_FRAC = norm.cdf(N_SIGMA_MKID)
-    OSAMP = 10
+    OSAMP = 10  # how much to oversample to smallest pixel's dlambda
 
     # ==================================================================================================================
     # PARSE ARGUMENTS
@@ -248,7 +248,8 @@ if __name__ == '__main__':
     lambda_left = spectro.pixel_wavelengths(edge='left')
 
     # populate desired bandpasses:
-    bandpasses = []
+    # converting to finer grid spacing and filtering through our min/max range:
+    bandpasses = [FineGrid(sim.minwave, sim.maxwave), FilterTransmission(sim.minwave, sim.maxwave)]
     if args.atmobandpass:
         bandpasses.append(AtmosphericTransmission())
     if args.telebandpass:
@@ -257,13 +258,6 @@ if __name__ == '__main__':
     # obtaining spectra:
     spectrum = get_spectrum(sim.type_spectra, teff=sim.temp, emission_file=args.emission_file,
                             minwave=sim.minwave, maxwave=sim.maxwave)
-
-    # converting to finer grid spacing:
-    w = np.linspace(300, 1000, 100000) * u.nm
-    t = np.ones(100000) * u.dimensionless_unscaled
-    ones = Spectrum1D(spectral_axis=w, flux=t)
-    fine_grid = SpectralElement.from_spectrum1d(ones)
-    spectrum = apply_bandpass(spectrum, bandpass=[fine_grid, FilterTransmission(sim.minwave, sim.maxwave)])
 
     # apply bandpasses and obtain associated noise:
     bandpass_spectrum = apply_bandpass(spectrum, bandpass=bandpasses)
@@ -446,12 +440,3 @@ if __name__ == '__main__':
     logging.info(f'\nSaved noise plots to {plot_file}.')
     plt.show()
 
-"""
-    # plotting all photons in every pixel
-    plt.plot(detector.pixel_indices, np.sum(photons_binned, axis=0))
-    plt.title(f"Total number of photons in each pixel, {sim.type_spectra} spectrum")
-    plt.xlabel("Pixel Index")
-    plt.ylabel("Photon Count")
-    plt.tight_layout()
-    plt.show()
-"""

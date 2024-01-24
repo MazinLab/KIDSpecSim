@@ -73,6 +73,13 @@ def FilterTransmission(min=400 * u.nm, max=800 * u.nm):
     return SpectralElement(Box1D, amplitude=1, x_0=center, width=wid)
 
 
+def FineGrid(min, max):
+    w = np.linspace(min.to(u.nm).value-100, max.to(u.nm).value+100, 100000) * u.nm
+    t = np.ones(100000) * u.dimensionless_unscaled
+    ones = Spectrum1D(spectral_axis=w, flux=t)
+    return SpectralElement.from_spectrum1d(ones)
+
+
 def apply_bandpass(spectra, bandpass):
     """
     :param spectra: spectra to apply bandpasses to, as list or object

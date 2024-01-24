@@ -11,6 +11,8 @@ from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import copy
 import numdifftools as ndt
+from specutils import Spectrum1D
+from synphot import SpectralElement
 
 import astropy.units as u
 import time
@@ -23,7 +25,7 @@ from synphot import SourceSpectrum
 from synphot.models import BlackBodyNorm1D, ConstFlux1D
 
 from mkidpipeline.photontable import Photontable
-from ucsbsim.spectra import get_spectrum
+from ucsbsim.spectra import get_spectrum, apply_bandpass, clip_spectrum, FineGrid
 import ucsbsim.engine as engine
 from ucsbsim.msf import MKIDSpreadFunction
 from ucsbsim.spectrograph import GratingSetup, SpectrographSetup
@@ -475,7 +477,7 @@ def cov_from_params(params, model, nord, order_edges, valid_idx, x_phases, **fit
     """
     # TODO turn into integration
     model = interp.InterpolatedUnivariateSpline(x=x_phases, y=model, k=1, ext=1)
-    model_sum = np.array([model.integral(order_edges[i], order_edges[i + 1]) for i in range(len(order_edges)-1)])
+    model_sum = np.array([model.integral(order_edges[i], order_edges[i + 1]) for i in range(len(order_edges) - 1)])
     cov = np.zeros([nord, nord])
     for k in valid_idx:
         suppress_params = copy.deepcopy(params)
@@ -483,7 +485,7 @@ def cov_from_params(params, model, nord, order_edges, valid_idx, x_phases, **fit
         suppress_model = fit_func(suppress_params, x_phases, **fit_kwargs)
         suppress_model = interp.InterpolatedUnivariateSpline(x=x_phases, y=suppress_model, k=1, ext=1)
         suppress_model_sum = np.array([
-            suppress_model.integral(order_edges[i], order_edges[i + 1]) for i in range(len(order_edges)-1)])
+            suppress_model.integral(order_edges[i], order_edges[i + 1]) for i in range(len(order_edges) - 1)])
         cov[valid_idx, k] = (model_sum - suppress_model_sum) / model_sum
     return cov
 
@@ -566,18 +568,13 @@ if __name__ == '__main__':
         R0s = np.loadtxt(fname=sim.R0s_file, delimiter=',')
         logging.info(msg=f'\nThe individual R0s were imported from {sim.R0s_file}.')
 
-    # creating the spectrometer objects:
-    detector = MKIDDetector(
-        n_pix=sim.npix,
-        pixel_size=sim.pixelsize,
-        design_R0=sim.designR0,
-        l0=sim.l0,
-        R0s=R0s,
-        resid_map=resid_map
-    )
+    phase_offsets = np.loadtxt(sim.phaseoffset_file, delimiter=',')
 
+    # creating the spectrometer objects:
+    detector = MKIDDetector(sim.npix, sim.pixelsize, sim.designR0, sim.l0, R0s, phase_offsets, resid_map)
     grating = GratingSetup(sim.alpha, sim.delta, sim.groove_length)
-    spectro = SpectrographSetup(sim.m0, sim.m_max, sim.l0, sim.pixels_per_res_elem, sim.focallength, grating, detector)
+    spectro = SpectrographSetup(sim.m0, sim.m_max, sim.l0, sim.pixels_per_res_elem, sim.focallength,
+                                grating, detector)
     eng = engine.Engine(spectro)
 
     # shortening some longer variable names:
@@ -633,7 +630,7 @@ if __name__ == '__main__':
     max_evals = None
     xtol = None
     method = 'leastsq'
-    #pixels = [1671, 1708]
+    #pixels = range(1680, 1750)
     leg_e = Legendre(coef=(0, 0, 0), domain=np.array(args.bin_range))
     snr2 = 9
     # do the non-linear least squares fit:
@@ -674,6 +671,18 @@ if __name__ == '__main__':
                     peaks_sort[2]]
                 )
                 missing_ord = [0]
+            elif 1680 < p < 1750 and len(peaks_sort) == 3:
+                # weird zone with flip flop between order 4 and 5
+                peaks, _ = scipy.signal.find_peaks(bin_counts[:, p], distance=int(0.2 * n_bins), height=snr2)
+                idx = np.argsort(bin_counts[peaks, p])[::-1]
+                peaks_sort = np.sort(peaks[idx])
+                peaks_nord = np.array([
+                    peaks_sort[0],
+                    int((peaks_sort[0] + peaks_sort[1]) / 2),
+                    peaks_sort[1],
+                    int(peaks_sort[1] + (peaks_sort[1] - peaks_sort[0]) / 2)]
+                )
+                missing_ord = [1, 3]
             elif p > 1300 and len(peaks_sort) == 3:  # 1 order missing
                 peaks_nord = np.array([
                     peaks_sort[0],
@@ -743,7 +752,8 @@ if __name__ == '__main__':
         order_edges[:-1, p][order_edges[:-1, p] == 0] = np.nan  # the rest of the positions are invalid
 
         # re-histogram the photon table using the virtual pixel edges:
-        ord_counts[valid_idx, p], _ = np.histogram(photons_pixel[p], bins=order_edges[np.isfinite(order_edges[:, p]), p])
+        ord_counts[valid_idx, p], _ = np.histogram(photons_pixel[p],
+                                                   bins=order_edges[np.isfinite(order_edges[:, p]), p])
 
         # store model to array:
         fine_phase_grid = np.linspace(-1, 0, 1000)
@@ -759,9 +769,9 @@ if __name__ == '__main__':
 
         # apply the cov to data and extract errors:
         p_err[:, p] = np.array([int(np.sum(covariance[:, i, p] * ord_counts[:, p]) -
-                                covariance[i, i, p] * ord_counts[i, p]) for i in range(nord)])
+                                    covariance[i, i, p] * ord_counts[i, p]) for i in range(nord)])
         m_err[:, p] = np.array([int(np.sum(covariance[i, :, p] * ord_counts[:, p]) -
-                                covariance[i, i, p] * ord_counts[i, p]) for i in range(nord)])
+                                    covariance[i, i, p] * ord_counts[i, p]) for i in range(nord)])
 
         # plot the individual pixels:
         if red_chi2[p] > redchi_val:
@@ -925,42 +935,51 @@ if __name__ == '__main__':
     # ==================================================================================================================
     # retrieving the theoretical blazed calibration spectrum shape:
     spectra = get_spectrum(sim.type_spectra)
-    blazed_spectrum, _, _ = eng.blaze(pix_waves, spectra)
+    spectra = apply_bandpass(spectra, bandpass=[FineGrid(sim.minwave, sim.maxwave)])
+    spectra = clip_spectrum(spectra, clip_range=(sim.minwave, sim.maxwave))
+
+    blazed_spectrum, _, _ = eng.blaze(spectra.waveset, spectra)
     blazed_spectrum = np.nan_to_num(blazed_spectrum)
-    pix_leftedge = spectro.pixel_wavelengths(edge='left').to(u.nm).value[::-1]
-    blaze_shape = [eng.lambda_to_pixel_space(pix_waves[i], blazed_spectrum[i], pix_leftedge[i]) for i in range(nord)]
+    pix_leftedge = spectro.pixel_wavelengths(edge='left')
+    blaze_shape = np.array([eng.lambda_to_pixel_space(spectra.waveset, blazed_spectrum[i],
+                                                      pix_leftedge[i]) for i in range(nord)])[::-1]
     blaze_shape = np.nan_to_num(blaze_shape)
     blaze_shape /= np.max(blaze_shape)  # normalize max to 1
-    blaze_shape[blaze_shape < 1e-6] = 1  # prevent divide by 0 or close to 0
+    #blaze_shape[blaze_shape < 1e-4] = 1  # prevent divide by 0 or close to 0
 
-    # plot the spectrum with blaze remaining
+    pixels = detector.pixel_indices
+
+    # plot the spectrum with blaze remaining:
     fig1, ax1 = plt.subplots(2, 2, figsize=(15, 15), sharex=True)
     axes1 = ax1.ravel()
     for i in range(nord):
-        axes1[i].plot(detector.pixel_indices, ord_counts[i])
-        axes1[i].set_title(f'Order {4+i}')
-        axes1[i].plot([0, sim.npix-1], [snr2, snr2], '--k', label='Min. SNR')
-    axes1[-1].set_xlabel(r"Phase ($\times \pi /2$)")
-    axes1[-2].set_xlabel(r"Phase ($\times \pi /2$)")
+        axes1[i].grid()
+        axes1[i].plot(pixels, ord_counts[i])
+        axes1[i].set_title(f'Order {7-i}')
+        axes1[i].plot([0, sim.npix - 1], [snr2, snr2], '--k', label='Min. SNR')
+        axes1[i].legend()
+    axes1[-1].set_xlabel("Pixel Index")
+    axes1[-2].set_xlabel("Pixel Index")
     axes1[0].set_ylabel('Photon Count')
     axes1[2].set_ylabel('Photon Count')
-    plt.suptitle('Calibration Spectrum (to be fed to wavecal)')
+    plt.suptitle('Extracted Calibration Spectrum')
     plt.tight_layout()
-    plt.legend()
     plt.show()
 
-    # plot the spectrum unblazed with the error band
+    # plot the spectrum unblazed with the error band:
     fig2, ax2 = plt.subplots(2, 2, figsize=(15, 15), sharex=True)
     axes2 = ax2.ravel()
     for i in range(nord):
-        axes2[i].fill_between(detector.pixel_indices, ord_counts[i]/ blaze_shape[i] - m_err[i]/ blaze_shape[i],
-                         ord_counts[i]/ blaze_shape[i] + p_err[i]/ blaze_shape[i], edgecolor='r', facecolor='r',
-                         linewidth=0.5)
-        axes2[i].plot(detector.pixel_indices, ord_counts[i] / blaze_shape[i])
-        axes2[i].set_title(f'Order {4+i}')
-        #axes2[i].set_yscale('log')
-    axes2[-1].set_xlabel(r"Phase ($\times \pi /2$)")
-    axes2[-2].set_xlabel(r"Phase ($\times \pi /2$)")
+        spec_w_merr = (ord_counts[i] - m_err[i]) / blaze_shape[i]
+        spec_w_perr = (ord_counts[i] + p_err[i]) / blaze_shape[i]
+        spec_w_merr[spec_w_merr < 0] = 0
+        axes2[i].grid()
+        axes2[i].fill_between(pixels, spec_w_merr, spec_w_perr, edgecolor='r', facecolor='r',
+                              linewidth=0.5)
+        axes2[i].plot(pixels, ord_counts[i] / blaze_shape[i])
+        axes2[i].set_title(f'Order {7-i}')
+    axes2[-1].set_xlabel("Pixel Index")
+    axes2[-2].set_xlabel("Pixel Index")
     axes2[0].set_ylabel('Photon Count')
     axes2[2].set_ylabel('Photon Count')
     plt.suptitle('Calibration Spectrum, blazed divided out, with error band')
