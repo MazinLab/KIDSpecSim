@@ -624,6 +624,7 @@ if __name__ == '__main__':
     order_edges = np.zeros([nord + 1, sim.npix])
     order_edges[0, :] = -1
     ord_counts = np.zeros([nord, sim.npix])
+    val_idx = []
 
     # TODO change pixel indices and fitting arguments here
     redchi_val = 5
@@ -773,6 +774,8 @@ if __name__ == '__main__':
         m_err[:, p] = np.array([int(np.sum(covariance[i, :, p] * ord_counts[:, p]) -
                                     covariance[i, i, p] * ord_counts[i, p]) for i in range(nord)])
 
+        val_idx.append(valid_idx)
+
         # plot the individual pixels:
         if red_chi2[p] > redchi_val:
             param_vals = list(opt_params.params.valuesdict().values())
@@ -921,7 +924,8 @@ if __name__ == '__main__':
 
     # assign bin edges, covariance matrices, virtual pix centers, and simulation settings to MSF class and save:
     covariance = np.nan_to_num(covariance)
-    msf = MKIDSpreadFunction(bin_edges=order_edges, cov_matrix=covariance, waves=all_fit_phi, sim_settings=sim)
+    msf = MKIDSpreadFunction(bin_edges=order_edges, cov_matrix=covariance, waves=all_fit_phi, val_idx=val_idx,
+                             sim_settings=sim)
     msf_file = f'{args.output_dir}/msf_R0{sim.designR0}_{sim.pixellim}.npz'
     msf.save(msf_file)
     logging.info(f'\nSaved MSF bin edges and covariance matrix to {msf_file}.')

@@ -8,6 +8,7 @@ class MKIDSpreadFunction:
             bin_edges=None,
             cov_matrix=None,
             waves=None,
+            val_idx=None,
             filename: str = '',
             sim_settings=None
     ):
@@ -27,6 +28,7 @@ class MKIDSpreadFunction:
             self.bin_edges = bin_edges
             self.cov_matrix = cov_matrix
             self.waves = waves
+            self.val_idx = val_idx
             self.sim_settings = sim_settings
             nord = self.sim_settings.m_max - self.sim_settings.m0 + 1
             assert self.waves.shape[0] == nord, 'Wavelengths/phases do not have the correct number of orders.'
@@ -46,6 +48,7 @@ class MKIDSpreadFunction:
                  bin_edges=self.bin_edges,
                  cov_matrix=self.cov_matrix,
                  waves=self.waves,
+                 val_idx=self.val_idx,
                  sim_settings=self.sim_settings)
 
     def _load(self):
@@ -58,6 +61,8 @@ class MKIDSpreadFunction:
         self.sim_settings = msf['sim_settings']
         assert msf['waves'].any(), 'File is missing wavelengths/phases or syntax is incorrect.'
         self.waves = msf['waves']
+        assert msf['val_idx'].any(), 'File is missing valid indices or syntax is incorrect.'
+        self.val_idx = msf['val_idx']
 
     def plot(self, ax=None):
         if ax is None:
