@@ -20,13 +20,11 @@ from mkidpipeline.photontable import Photontable
 
 """
 Extraction of an observation spectrum using the MSF products. The steps are:
--Open the calibration products: order bin edges and covariance matrices.
--Open the observation photon table and bin for orders.
+-Open the MSF products: order bin edges and covariance matrices.
+-Open the observation/emission photon table and bin for orders.
 -Calculate the errors on each point by multiplying the covariance matrices through the spectrum.
 -Divide out the blaze function from the resulting spectrum and +/- errors and save to FITS.
 -Show final spectrum as plot.
-
-Potentially make spectrograph properties a file that is automatically imported from previous simulations?
 """
 
 if __name__ == '__main__':
@@ -42,9 +40,9 @@ if __name__ == '__main__':
     # PARSE ARGUMENTS
     # ==================================================================================================================
     arg_desc = '''
-    Extract the observation spectrum using the MKID Spread Function.
+    Extract a spectrum using the MKID Spread Function.
     --------------------------------------------------------------
-    This program loads the observation photon table and use the MSF bins and covariance matrix to 
+    This program loads the observation photon table and uses the MSF bins and covariance matrix to
     extract the spectrum.
     '''
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=arg_desc)
@@ -139,7 +137,9 @@ if __name__ == '__main__':
     '''
     spec = np.zeros([nord, sim.npix])
     for j in detector.pixel_indices:
-        spec[:, j], _ = np.histogram(photons_pixel[j], bins=msf.bin_edges[:, j])  # binning photons by MSF bins edges
+        spec[msf.val_idx[j], j], _ = np.histogram(
+            photons_pixel[j], bins=msf.bin_edges[np.isfinite(msf.bin_edges[:, j]), j])
+        # binning photons by MSF bins edges
 
     # to plot covariance as errors, must sum the counts "added" from other orders as well as "stolen" by other orders
     # v giving order, > receiving order [g_idx, r_idx, pixel]
@@ -176,26 +176,26 @@ if __name__ == '__main__':
     # ==================================================================================================================
     spectrum = fits.open(fits_file)
 
-    fig, ax = plt.subplots(1, 1)
-    quick_plot(ax,
-               sim_phase,
-               spectrum[1].data,
-               xlabel='Pixel Index',
-               ylabel='Relative Intensity',
-               title=f"Extracted {sim.type_spectra} spectrum (blaze present)",
-               labels=[f'Order {spectro.orders[::-1][i]}' for i in range(nord)],
-               first=True)
+    # plot the spectrum unblazed with the error band:
+    fig2, ax2 = plt.subplots(2, 2, figsize=(15, 15), sharex=True)
+    axes2 = ax2.ravel()
     for i in range(nord):
-        ax.fill_between(sim_phase[i],
-                         np.array(spectrum[1].data[i]) - np.array(spectrum[2].data[i]),
-                         np.array(spectrum[1].data[i]) - np.array(spectrum[3].data[i]),
-                         alpha=0.5,
-                         edgecolor='orange',
-                         facecolor='orange',
-                         linewidth=0.5)
+        spec_w_merr = np.array(spectrum[1].data[i]) - np.array(spectrum[2].data[i])
+        spec_w_perr = np.array(spectrum[1].data[i]) + np.array(spectrum[3].data[i])
+        spec_w_merr[spec_w_merr < 0] = 0
+        axes2[i].grid()
+        axes2[i].fill_between(detector.pixel_indices, spec_w_merr, spec_w_perr, edgecolor='r', facecolor='r',
+                              linewidth=0.5)
+        axes2[i].plot(detector.pixel_indices, spectrum[1].data[i])
+        axes2[i].set_title(f'Order {7 - i}')
+    axes2[-1].set_xlabel("Pixel Index")
+    axes2[-2].set_xlabel("Pixel Index")
+    axes2[0].set_ylabel('Photon Count')
+    axes2[2].set_ylabel('Photon Count')
+    plt.suptitle(f'{sim.type_spectra} Spectrum with error band')
     plt.tight_layout()
     plt.show()
-    
+
     # plot the residual between model and observation:
     model = np.genfromtxt('Ar_flux_integrated.csv', delimiter=',')
     for n, i in enumerate(model[::-1]):
@@ -216,3 +216,4 @@ if __name__ == '__main__':
         plt.xlabel('Pixel Index')
         plt.legend()
         plt.show()
+    pass
