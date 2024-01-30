@@ -228,12 +228,19 @@ def init_params(
     # add amplitudes to params object:
     if missing_ord is None:  # no orders were identified as missing
         for i in range(len(amp_guess)):
-            parameters.add(
-                name=f'O{i}_amp',
-                value=amp_guess[i],
-                # min=amp_guess[i] * (1 - reg_per),
-                max=amp_guess[i] * (1 + reg_per)
-            )
+            if amp_guess[i] == 0:
+                parameters.add(
+                    name=f'O{i}_amp',
+                    value=amp_guess[i],
+                    min=0
+                )
+            else:
+                parameters.add(
+                    name=f'O{i}_amp',
+                    value=amp_guess[i],
+                    min=amp_guess[i] * (1 - reg_per),
+                    max=amp_guess[i] * (1 + reg_per)
+                )
     else:  # at least one order was flagged as missing
         for i in range(len(amp_guess)):
             if i in missing_ord:
@@ -242,7 +249,7 @@ def init_params(
                 parameters.add(
                     name=f'O{i}_amp',
                     value=amp_guess[i],
-                    # min=amp_guess[i] * (1 - reg_per),
+                    min=amp_guess[i] * (1 - reg_per),
                     max=amp_guess[i] * (1 + reg_per)
                 )
 
@@ -612,6 +619,8 @@ if __name__ == '__main__':
 
     # create empty arrays to hold phi values for gaussian model:
     all_fit_phi = np.empty([nord, sim.npix])
+    all_fit_sig = np.empty([nord, sim.npix])
+    fine_phase_grid = np.linspace(-1, 0, 1000)
     gausses = np.zeros([1000, sim.npix])  # the entire n_ord Gaussian model summed
     gausses_i = np.zeros([1000, nord, sim.npix])  # model separated by orders
 
@@ -625,17 +634,21 @@ if __name__ == '__main__':
     order_edges[0, :] = -1
     ord_counts = np.zeros([nord, sim.npix])
     val_idx = []
+    inval_idx = []
+    full_pix = []
+    opt_param_all = []
 
     # TODO change pixel indices and fitting arguments here
-    redchi_val = 5
+    redchi_val = 50
     max_evals = None
-    xtol = None
+    xtol = 1e-4
     method = 'leastsq'
-    #pixels = range(1680, 1750)
+    # pixels = [1770, 1778]
     leg_e = Legendre(coef=(0, 0, 0), domain=np.array(args.bin_range))
     snr2 = 9
     # do the non-linear least squares fit:
     for p in pixels:
+        # print(p)
         leg_s = Legendre(coef=(0, 0, 0), domain=[energy[0, p] / energy[-1, p], 1])
 
         peaks, _ = scipy.signal.find_peaks(bin_counts[:, p], distance=int(0.1 * n_bins), height=snr2)
@@ -672,9 +685,9 @@ if __name__ == '__main__':
                     peaks_sort[2]]
                 )
                 missing_ord = [0]
-            elif 1680 < p < 1750 and len(peaks_sort) == 3:
+            elif 1680 < p < 1800 and len(peaks_sort) == 3:
                 # weird zone with flip flop between order 4 and 5
-                peaks, _ = scipy.signal.find_peaks(bin_counts[:, p], distance=int(0.2 * n_bins), height=snr2)
+                peaks, _ = scipy.signal.find_peaks(bin_counts[:, p], distance=int(0.25 * n_bins), height=snr2)
                 idx = np.argsort(bin_counts[peaks, p])[::-1]
                 peaks_sort = np.sort(peaks[idx])
                 peaks_nord = np.array([
@@ -700,7 +713,7 @@ if __name__ == '__main__':
                     int(peaks_sort[1] + (peaks_sort[1] - peaks_sort[0]) / 2)]
                 )
                 missing_ord = [1, 3]
-            else:
+            else:  # e.g.: only 1 peak was found
                 logging.info(f'Pixel {p} will default to simulation guess.')
                 peaks_nord = [nearest_idx(bin_centers, sim_phase[i, p]) for i in range(nord)]
                 missing_ord = None
@@ -710,7 +723,7 @@ if __name__ == '__main__':
 
         # obtain Parameter object:
         params = init_params(phi_guess=phi_init, e_guess=energy[:, p], s_guess=sigmas[:, p], amp_guess=amp_init,
-                             missing_ord=missing_ord)
+                             missing_ord=None)  # missing_ord)
 
         opt_params = minimize(
             fit_func,
@@ -728,9 +741,10 @@ if __name__ == '__main__':
             nan_policy='omit',
             max_nfev=max_evals,
             method=method,
-            # xtol=xtol
+            xtol=xtol
         )
 
+        opt_param_all.append(opt_params)
         # log which pixels failed to fit:
         if not opt_params.success:
             logging.warning(f'Pixel {p} failed to converge.')
@@ -747,6 +761,10 @@ if __name__ == '__main__':
 
         # get the order bin edges (requires explicit mu, sig, A):
         valid_idx = range(nord) if missing_ord is None else np.delete(range(nord), missing_ord)  # ords with non-0 amp
+        if missing_ord is None:
+            full_pix.append(p)
+        else:
+            inval_idx.append(missing_ord)
         for h, i in enumerate(valid_idx[:-1]):
             order_edges[i + 1, p] = gauss_intersect(fit_phis[[i, valid_idx[h + 1]]], fit_sigs[[i, valid_idx[h + 1]]],
                                                     fit_amps[[i, valid_idx[h + 1]]])
@@ -757,33 +775,29 @@ if __name__ == '__main__':
                                                    bins=order_edges[np.isfinite(order_edges[:, p]), p])
 
         # store model to array:
-        fine_phase_grid = np.linspace(-1, 0, 1000)
         gausses_i[:, :, p] = fit_func(params=opt_params.params, x_phases=fine_phase_grid, orders=spectro.orders,
                                       legendre_e=leg_e, legendre_s=leg_s)
         gausses[:, p] = np.sum(gausses_i[:, :, p], axis=1)
 
-        # find order-bleeding covar:
-        covariance[:, :, p] = cov_from_params(params=opt_params.params, model=gausses[:, p], nord=nord,
-                                              order_edges=order_edges[np.isfinite(order_edges[:, p]), p],
-                                              valid_idx=valid_idx, x_phases=fine_phase_grid, orders=spectro.orders,
-                                              legendre_e=leg_e, legendre_s=leg_s, to_sum=True)
+        if missing_ord is None:
+            # find order-bleeding covar:
+            covariance[:, :, p] = cov_from_params(params=opt_params.params, model=gausses[:, p], nord=nord,
+                                                  order_edges=order_edges[np.isfinite(order_edges[:, p]), p],
+                                                  valid_idx=valid_idx, x_phases=fine_phase_grid, orders=spectro.orders,
+                                                  legendre_e=leg_e, legendre_s=leg_s, to_sum=True)
 
-        # apply the cov to data and extract errors:
-        p_err[:, p] = np.array([int(np.sum(covariance[:, i, p] * ord_counts[:, p]) -
-                                    covariance[i, i, p] * ord_counts[i, p]) for i in range(nord)])
-        m_err[:, p] = np.array([int(np.sum(covariance[i, :, p] * ord_counts[:, p]) -
-                                    covariance[i, i, p] * ord_counts[i, p]) for i in range(nord)])
+            # apply the cov to data and extract errors:
+            p_err[:, p] = np.array([int(np.sum(covariance[:, i, p] * ord_counts[:, p]) -
+                                        covariance[i, i, p] * ord_counts[i, p]) for i in range(nord)])
+            m_err[:, p] = np.array([int(np.sum(covariance[i, :, p] * ord_counts[:, p]) -
+                                        covariance[i, i, p] * ord_counts[i, p]) for i in range(nord)])
 
         val_idx.append(valid_idx)
+        all_fit_phi[:, p] = fit_phis
+        all_fit_sig[:, p] = fit_sigs
 
         # plot the individual pixels:
         if red_chi2[p] > redchi_val:
-            param_vals = list(opt_params.params.valuesdict().values())
-
-            # get the post residuals and weighted reduced chi^2:
-            opt_residual = fit_func(params=opt_params.params, x_phases=bin_centers, y_counts=bin_counts[:, p],
-                                    orders=spectro.orders, legendre_e=leg_e, legendre_s=leg_s)
-
             fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(14, 8))
             axes = axes.ravel()
             ax1 = axes[0]
@@ -815,8 +829,12 @@ if __name__ == '__main__':
             pre_residual = fit_func(params, bin_centers, y_counts=bin_counts[:, p], orders=spectro.orders,
                                     legendre_e=leg_e, legendre_s=leg_s)
             N = len(pre_residual)
-            N_dof2 = N - len(param_vals)
+            N_dof2 = N - opt_params.nvarys
             pre_red_chi2 = np.sum(pre_residual ** 2) / N_dof2
+
+            # get the post residuals:
+            opt_residual = fit_func(params=opt_params.params, x_phases=bin_centers, y_counts=bin_counts[:, p],
+                                    orders=spectro.orders, legendre_e=leg_e, legendre_s=leg_s)
 
             ax1.grid()
             ax1.plot(bin_centers, bin_counts[:, p], 'k', label='Data')
@@ -892,7 +910,38 @@ if __name__ == '__main__':
 
             plt.show()
 
-            all_fit_phi[:, p] = fit_phis
+    # create off-blaze virtual pixels using average sigma to boundary:
+    # order 7 will only have right side
+    # order 4 will only have left side
+    # orders 6 & 5 will have both
+    nsigs = []
+    for i in range(nord):
+        if i != 0:  # nsigs to the left
+            n_sigs_fr_peak = np.abs(all_fit_phi[i, full_pix] - order_edges[i, full_pix]) / all_fit_sig[i, full_pix]
+            nsigs.append(np.average(n_sigs_fr_peak))
+        if i != nord - 1:  # nsigs to the right
+            n_sigs_fr_peak = np.abs(all_fit_phi[i, full_pix] - order_edges[i+1, full_pix]) / all_fit_sig[i, full_pix]
+            nsigs.append(np.average(n_sigs_fr_peak))
+    nsig_avg = np.average(nsigs)
+
+    for p in detector.pixel_indices:
+        if inval_idx[p] is not None:
+            # create new virtual pixel edges:
+            for i in inval_idx[p]:
+                order_edges[i, p] = all_fit_phi[i-1, p]+nsig_avg*all_fit_sig[i-1, p]
+                order_edges[i+1, p] = all_fit_phi[i+1, p]-nsig_avg*all_fit_sig[i+1, p]
+
+            # redo order-bleeding covar:
+            covariance[:, :, p] = cov_from_params(params=opt_param_all[p].params, model=gausses[:, p], nord=nord,
+                                                  order_edges=order_edges[np.isfinite(order_edges[:, p]), p],
+                                                  valid_idx=val_idx[p], x_phases=fine_phase_grid, orders=spectro.orders,
+                                                  legendre_e=leg_e, legendre_s=leg_s, to_sum=True)
+
+            # redo errors:
+            p_err[:, p] = np.array([int(np.sum(covariance[:, i, p] * ord_counts[:, p]) -
+                                        covariance[i, i, p] * ord_counts[i, p]) for i in range(nord)])
+            m_err[:, p] = np.array([int(np.sum(covariance[i, :, p] * ord_counts[:, p]) -
+                                        covariance[i, i, p] * ord_counts[i, p]) for i in range(nord)])
 
     # plot all decent pixel models together:
     idxs = np.where(red_chi2 > redchi_val)
@@ -949,7 +998,7 @@ if __name__ == '__main__':
                                                       pix_leftedge[i]) for i in range(nord)])[::-1]
     blaze_shape = np.nan_to_num(blaze_shape)
     blaze_shape /= np.max(blaze_shape)  # normalize max to 1
-    #blaze_shape[blaze_shape < 1e-4] = 1  # prevent divide by 0 or close to 0
+    # blaze_shape[blaze_shape < 1e-4] = 1  # prevent divide by 0 or close to 0
 
     pixels = detector.pixel_indices
 
@@ -959,7 +1008,7 @@ if __name__ == '__main__':
     for i in range(nord):
         axes1[i].grid()
         axes1[i].plot(pixels, ord_counts[i])
-        axes1[i].set_title(f'Order {7-i}')
+        axes1[i].set_title(f'Order {7 - i}')
         axes1[i].plot([0, sim.npix - 1], [snr2, snr2], '--k', label='Min. SNR')
         axes1[i].legend()
     axes1[-1].set_xlabel("Pixel Index")
@@ -981,7 +1030,7 @@ if __name__ == '__main__':
         axes2[i].fill_between(pixels, spec_w_merr, spec_w_perr, edgecolor='r', facecolor='r',
                               linewidth=0.5)
         axes2[i].plot(pixels, ord_counts[i] / blaze_shape[i])
-        axes2[i].set_title(f'Order {7-i}')
+        axes2[i].set_title(f'Order {7 - i}')
     axes2[-1].set_xlabel("Pixel Index")
     axes2[-2].set_xlabel("Pixel Index")
     axes2[0].set_ylabel('Photon Count')
