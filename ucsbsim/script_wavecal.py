@@ -141,33 +141,33 @@ if __name__ == '__main__':
     # ==================================================================================================================
     # WAVELENGTH CALIBRATION STARTS
     # ==================================================================================================================
-    linelist = LineList()
-    for n, i in enumerate(args.orders):
-        # takes each order and conducts MCMC line matching
-        module_init = WavelengthCalibrationInitialize(
-            degree=args.degree,  # polynomial degree of the wavelength fit
-            plot=True,
-            plot_title=f'Deg. {args.degree} Poly./{10} Walkers/{50000} Steps/{args.resid_max} Max Resid./Element: {args.elem}',
-            wave_delta=10,  # wavelength uncertainty on the initial guess in Angstrom
-            nwalkers=100,  # number of walkers in the MCMC
-            steps=50000,  # number of steps in the MCMC
-            resid_delta=args.resid_max,
-            # residual uncertainty allowed when matching observation with known lines (diff/wave*c)
-            cutoff=10,  # minimum value in the spectrum to be considered a spectral line,
-            # if the value is above (or equal 1) it defines the percentile of the spectrum
-            smoothing=5,  # gaussian smoothing on wavecal spectrum before the MCMC in pixel scale, disable with 0
-            element=args.elem,
-            medium="vac"
-        )
-        ll = module_init.execute(np.array([obs_flux[n]]), [(obs_wave[n][0], obs_wave[n][-1])])
-        ll = ll.data
-        for li in ll:
-            linelist.add_line(li['wlc'], n, li['posc'], li['width'], li['height'], li['flag'])
+    # linelist = LineList()
+    # for n, i in enumerate(args.orders):
+    #     # takes each order and conducts MCMC line matching
+    #     module_init = WavelengthCalibrationInitialize(
+    #         degree=args.degree,  # polynomial degree of the wavelength fit
+    #         plot=True,
+    #         plot_title=f'Deg. {args.degree} Poly./{10} Walkers/{50000} Steps/{args.resid_max} Max Resid./Element: {args.elem}',
+    #         wave_delta=10,  # wavelength uncertainty on the initial guess in Angstrom
+    #         nwalkers=100,  # number of walkers in the MCMC
+    #         steps=50000,  # number of steps in the MCMC
+    #         resid_delta=args.resid_max,
+    #         # residual uncertainty allowed when matching observation with known lines (diff/wave*c)
+    #         cutoff=10,  # minimum value in the spectrum to be considered a spectral line,
+    #         # if the value is above (or equal 1) it defines the percentile of the spectrum
+    #         smoothing=5,  # gaussian smoothing on wavecal spectrum before the MCMC in pixel scale, disable with 0
+    #         element=args.elem,
+    #         medium="vac"
+    #     )
+    #     ll = module_init.execute(np.array([obs_flux[n]]), [(obs_wave[n][0], obs_wave[n][-1])])
+    #     ll = ll.data
+    #     for li in ll:
+    #         linelist.add_line(li['wlc'], n, li['posc'], li['width'], li['height'], li['flag'])
 
-    # on an order by order basis, cut away lines that are too close together or too dim in all but order 5
+    # on an order by order basis, cut away lines that are too close together or too dim
     pixel_interp = [interp.interp1d(obs_wave[n], range(2048), bounds_error=False, fill_value=0) for n, i in
                     enumerate(args.orders)]
-    posc = np.array([pixel_interp[n](new_line_wave) for n, i in enumerate(args.orders)])  # Pixel Position (before fit)
+    posc = np.array([pixel_interp[n](line_wave) for n, i in enumerate(args.orders)])  # Pixel Position (before fit)
 
     # remove 10% of the least intense lines
     sort_idx = np.argsort(line_flux)
