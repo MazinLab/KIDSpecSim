@@ -633,7 +633,6 @@ if __name__ == '__main__':
     order_edges = np.zeros([nord + 1, sim.npix])
     order_edges[0, :] = -1
     ord_counts = np.zeros([nord, sim.npix])
-    val_idx = []
     inval_idx = []
     full_pix = []
     opt_param_all = []
@@ -763,8 +762,7 @@ if __name__ == '__main__':
         valid_idx = range(nord) if missing_ord is None else np.delete(range(nord), missing_ord)  # ords with non-0 amp
         if missing_ord is None:
             full_pix.append(p)
-        else:
-            inval_idx.append(missing_ord)
+        inval_idx.append(missing_ord)
         for h, i in enumerate(valid_idx[:-1]):
             order_edges[i + 1, p] = gauss_intersect(fit_phis[[i, valid_idx[h + 1]]], fit_sigs[[i, valid_idx[h + 1]]],
                                                     fit_amps[[i, valid_idx[h + 1]]])
@@ -792,7 +790,6 @@ if __name__ == '__main__':
             m_err[:, p] = np.array([int(np.sum(covariance[i, :, p] * ord_counts[:, p]) -
                                         covariance[i, i, p] * ord_counts[i, p]) for i in range(nord)])
 
-        val_idx.append(valid_idx)
         all_fit_phi[:, p] = fit_phis
         all_fit_sig[:, p] = fit_sigs
 
@@ -911,30 +908,26 @@ if __name__ == '__main__':
             plt.show()
 
     # create off-blaze virtual pixels using average sigma to boundary:
-    # order 7 will only have right side
-    # order 4 will only have left side
-    # orders 6 & 5 will have both
-    nsigs = []
-    for i in range(nord):
-        if i != 0:  # nsigs to the left
-            n_sigs_fr_peak = np.abs(all_fit_phi[i, full_pix] - order_edges[i, full_pix]) / all_fit_sig[i, full_pix]
-            nsigs.append(np.average(n_sigs_fr_peak))
-        if i != nord - 1:  # nsigs to the right
-            n_sigs_fr_peak = np.abs(all_fit_phi[i, full_pix] - order_edges[i+1, full_pix]) / all_fit_sig[i, full_pix]
-            nsigs.append(np.average(n_sigs_fr_peak))
-    nsig_avg = np.average(nsigs)
+    n_sigs_left = np.abs(all_fit_phi[1:, full_pix] - order_edges[1:-1, full_pix]) / all_fit_sig[1:, full_pix]
+    n_sigs_right = np.abs(all_fit_phi[:-1, full_pix] - order_edges[1:-1, full_pix]) / all_fit_sig[:-1, full_pix]
+    nsig_avg = np.average(np.append(n_sigs_left, n_sigs_right))
 
     for p in detector.pixel_indices:
         if inval_idx[p] is not None:
             # create new virtual pixel edges:
             for i in inval_idx[p]:
-                order_edges[i, p] = all_fit_phi[i-1, p]+nsig_avg*all_fit_sig[i-1, p]
-                order_edges[i+1, p] = all_fit_phi[i+1, p]-nsig_avg*all_fit_sig[i+1, p]
+                if i != 0:
+                    order_edges[i, p] = all_fit_phi[i-1, p]+nsig_avg*all_fit_sig[i-1, p]
+                if i != nord-1:
+                    order_edges[i+1, p] = all_fit_phi[i+1, p]-nsig_avg*all_fit_sig[i+1, p]
+
+            # rerehistogram the photon table using the new virtual pixel edges:
+            ord_counts[:, p], _ = np.histogram(photons_pixel[p], bins=order_edges[:, p])
 
             # redo order-bleeding covar:
             covariance[:, :, p] = cov_from_params(params=opt_param_all[p].params, model=gausses[:, p], nord=nord,
                                                   order_edges=order_edges[np.isfinite(order_edges[:, p]), p],
-                                                  valid_idx=val_idx[p], x_phases=fine_phase_grid, orders=spectro.orders,
+                                                  valid_idx=range(nord), x_phases=fine_phase_grid, orders=spectro.orders,
                                                   legendre_e=leg_e, legendre_s=leg_s, to_sum=True)
 
             # redo errors:
@@ -973,8 +966,7 @@ if __name__ == '__main__':
 
     # assign bin edges, covariance matrices, virtual pix centers, and simulation settings to MSF class and save:
     covariance = np.nan_to_num(covariance)
-    msf = MKIDSpreadFunction(bin_edges=order_edges, cov_matrix=covariance, waves=all_fit_phi, val_idx=val_idx,
-                             sim_settings=sim)
+    msf = MKIDSpreadFunction(bin_edges=order_edges, cov_matrix=covariance, waves=all_fit_phi, sim_settings=sim)
     msf_file = f'{args.output_dir}/msf_R0{sim.designR0}_{sim.pixellim}.npz'
     msf.save(msf_file)
     logging.info(f'\nSaved MSF bin edges and covariance matrix to {msf_file}.')
@@ -987,55 +979,38 @@ if __name__ == '__main__':
     # DEBUGGING PLOTS
     # ==================================================================================================================
     # retrieving the theoretical blazed calibration spectrum shape:
-    spectra = get_spectrum(sim.type_spectra)
-    spectra = apply_bandpass(spectra, bandpass=[FineGrid(sim.minwave, sim.maxwave)])
-    spectra = clip_spectrum(spectra, clip_range=(sim.minwave, sim.maxwave))
+    # spectra = get_spectrum(sim.type_spectra)
+    # spectra = apply_bandpass(spectra, bandpass=[FineGrid(sim.minwave, sim.maxwave)])
+    # spectra = clip_spectrum(spectra, clip_range=(sim.minwave, sim.maxwave))
 
-    blazed_spectrum, _, _ = eng.blaze(spectra.waveset, spectra)
-    blazed_spectrum = np.nan_to_num(blazed_spectrum)
-    pix_leftedge = spectro.pixel_wavelengths(edge='left')
-    blaze_shape = np.array([eng.lambda_to_pixel_space(spectra.waveset, blazed_spectrum[i],
-                                                      pix_leftedge[i]) for i in range(nord)])[::-1]
-    blaze_shape = np.nan_to_num(blaze_shape)
-    blaze_shape /= np.max(blaze_shape)  # normalize max to 1
+    # blazed_spectrum, _, _ = eng.blaze(spectra.waveset, spectra)
+    # blazed_spectrum = np.nan_to_num(blazed_spectrum)
+    # pix_leftedge = spectro.pixel_wavelengths(edge='left')
+    # blaze_shape = np.array([eng.lambda_to_pixel_space(spectra.waveset, blazed_spectrum[i],
+    #                                                   pix_leftedge[i]) for i in range(nord)])[::-1]
+    # blaze_shape = np.nan_to_num(blaze_shape)
+    # blaze_shape /= np.max(blaze_shape)  # normalize max to 1
     # blaze_shape[blaze_shape < 1e-4] = 1  # prevent divide by 0 or close to 0
 
     pixels = detector.pixel_indices
 
-    # plot the spectrum with blaze remaining:
+    # plot the spectrum with error band, blaze left intact:
     fig1, ax1 = plt.subplots(2, 2, figsize=(15, 15), sharex=True)
     axes1 = ax1.ravel()
     for i in range(nord):
         axes1[i].grid()
+        spec_w_merr = (ord_counts[i] - m_err[i])
+        spec_w_perr = (ord_counts[i] + p_err[i])
+        spec_w_merr[spec_w_merr < 0] = 0
+        axes2[i].grid()
+        axes2[i].fill_between(pixels, spec_w_merr, spec_w_perr, edgecolor='r', facecolor='r', linewidth=0.5)
         axes1[i].plot(pixels, ord_counts[i])
         axes1[i].set_title(f'Order {7 - i}')
-        axes1[i].plot([0, sim.npix - 1], [snr2, snr2], '--k', label='Min. SNR')
-        axes1[i].legend()
     axes1[-1].set_xlabel("Pixel Index")
     axes1[-2].set_xlabel("Pixel Index")
     axes1[0].set_ylabel('Photon Count')
     axes1[2].set_ylabel('Photon Count')
     plt.suptitle('Extracted Calibration Spectrum')
-    plt.tight_layout()
-    plt.show()
-
-    # plot the spectrum unblazed with the error band:
-    fig2, ax2 = plt.subplots(2, 2, figsize=(15, 15), sharex=True)
-    axes2 = ax2.ravel()
-    for i in range(nord):
-        spec_w_merr = (ord_counts[i] - m_err[i]) / blaze_shape[i]
-        spec_w_perr = (ord_counts[i] + p_err[i]) / blaze_shape[i]
-        spec_w_merr[spec_w_merr < 0] = 0
-        axes2[i].grid()
-        axes2[i].fill_between(pixels, spec_w_merr, spec_w_perr, edgecolor='r', facecolor='r',
-                              linewidth=0.5)
-        axes2[i].plot(pixels, ord_counts[i] / blaze_shape[i])
-        axes2[i].set_title(f'Order {7 - i}')
-    axes2[-1].set_xlabel("Pixel Index")
-    axes2[-2].set_xlabel("Pixel Index")
-    axes2[0].set_ylabel('Photon Count')
-    axes2[2].set_ylabel('Photon Count')
-    plt.suptitle('Calibration Spectrum, blazed divided out, with error band')
     plt.tight_layout()
     plt.show()
     pass

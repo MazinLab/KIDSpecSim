@@ -19,11 +19,11 @@ from ucsbsim.msf import MKIDSpreadFunction
 from mkidpipeline.photontable import Photontable
 
 """
-Extraction of an observation spectrum using the MSF products. The steps are:
+Application of the virtual pixel boundaries and errors on an spectrum using the MSF products. The steps are:
 -Open the MSF products: order bin edges and covariance matrices.
--Open the observation/emission photon table and bin for orders.
+-Open the observation/emission photon table and bin for virtual pixels/orders.
 -Calculate the errors on each point by multiplying the covariance matrices through the spectrum.
--Divide out the blaze function from the resulting spectrum and +/- errors and save to FITS.
+-Save counts, errors, and estimate of wave range to FITS.
 -Show final spectrum as plot.
 """
 
@@ -136,10 +136,8 @@ if __name__ == '__main__':
     blaze_shape[blaze_shape == 0] = 1  # prevent divide by 0 or very small num. issue
     '''
     spec = np.zeros([nord, sim.npix])
-    for j in detector.pixel_indices:
-        spec[msf.val_idx[j], j], _ = np.histogram(
-            photons_pixel[j], bins=msf.bin_edges[np.isfinite(msf.bin_edges[:, j]), j])
-        # binning photons by MSF bins edges
+    for j in detector.pixel_indices:  # binning photons by MSF bins edges
+        spec[:, j], _ = np.histogram(photons_pixel[j], bins=msf.bin_edges[np.isfinite(msf.bin_edges[:, j]), j])
 
     # to plot covariance as errors, must sum the counts "added" from other orders as well as "stolen" by other orders
     # v giving order, > receiving order [g_idx, r_idx, pixel]
