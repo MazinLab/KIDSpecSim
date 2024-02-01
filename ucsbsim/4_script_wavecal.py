@@ -48,8 +48,8 @@ if __name__ == '__main__':
                         metavar='OUTPUT_DIRECTORY',
                         help='Directory for the output files (str).')
     parser.add_argument('obs_file',
-                        metavar='OBSERVATION_FITS_FILE',
-                        help='Directory/name of the wavecal observation FITS file.')
+                        metavar='FITS_FILE',
+                        help='Directory/name of the FITS file to be used for wavecal.')
 
     # optional wavecal args:
     parser.add_argument('-el', '--elem',
@@ -74,7 +74,7 @@ if __name__ == '__main__':
                         help="If passed, indicates user should click plot to align observation and linelist.")
     parser.add_argument('-rm', '--resid_max',
                         metavar='RESIDUAL_MAX',
-                        default=2e5,
+                        default=85e3,
                         help="Maximum residual allowed between fit wavelength and atlas in m/s. (float)")
     parser.add_argument('-w', '--width',
                         metavar='PEAK_WIDTH',
@@ -211,7 +211,7 @@ if __name__ == '__main__':
     # load wavecal module
     module = WavelengthCalibration(
         threshold=args.resid_max,  # Residual threshold in m/s above which to remove lines (diff/wave*c)
-        degree=(args.degree, len(args.orders)),  # polynomial degree of the wavelength fit in (pixel, order) direction
+        degree=(args.degree, 2),  # polynomial degree of the wavelength fit in (pixel, order) direction
         iterations=args.iterations,  # Number of iterations in the remove residuals, auto id, loop
         dimensionality="2D",  # Whether to use 1d or 2d fit
         shift_window=args.shift_window,
@@ -230,7 +230,8 @@ if __name__ == '__main__':
     print(f'RMS (km/s): {[round(i / 1000, 2) for i in rms]}, Avg: {np.sqrt(np.mean(residuals ** 2)) / 1000:.2f}')
     print(f"{np.sum(fit_lines['flag'])} used out of {len(fit_lines)}")
 
-    np.savez(f'{args.output_dir}/wavecal.npz', wave_result=wave_result, coef=coef, rms=rms, linelist=linelist)
+    np.savez(f'{args.output_dir}/wavecal.npz', wave_result=wave_result, coef=coef, rms=rms, linelist=linelist,
+             orders=args.orders)
     logging.info(f'\nSaved wavecal solution and linelist to {args.output_dir}/wavecal.npz.')
     logging.info(f'\nTotal script runtime: {((time.perf_counter() - tic) / 60):.2f} min.')
     # ==================================================================================================================
@@ -244,7 +245,7 @@ if __name__ == '__main__':
 
     for n, i in enumerate(args.orders):
         plt.grid()
-        plt.ylim([0, 1])
+        plt.ylim(bottom=0)
         use_idx = np.logical_and(fit_lines['wll'] > obs_wave[n][0], fit_lines['wll'] < obs_wave[n][-1])
         lines_use = fit_lines[use_idx]
         max_flux = np.max(lines_use['height'])
@@ -253,11 +254,12 @@ if __name__ == '__main__':
                 plt.axvline(w['wll'], color='black', ymin=0, ymax=w['height'] / max_flux)
             else:
                 plt.axvline(w['wll'], color='red', alpha=0.5, ymin=0, ymax=w['height'] / max_flux)
+        plt.plot(obs_wave[n], obs_flux[n] / np.max(obs_flux[n]), 'gray', label='Guess')
         plt.plot(new_file['wave_result'][n], obs_flux[n] / np.max(obs_flux[n]), 'blue', label=f'Fit Result')
-        plt.xlim([obs_wave[n][0], obs_wave[n][-1]])
-        plt.title(f"Extracted and Wavecal'd Spectrum Order {i}. Used Lines in Red, Unused in Black\n"
-                  f'{args.degree}D Poly./{args.resid_max:.0e} Max Resid./Element: {args.elem.capitalize()}')
+        plt.title(f"Wavecal Order {i}. Used Lines in Red, Unused in Black\n"
+                  f'Order {args.degree} Poly./Element: {args.elem.capitalize()}')
         plt.ylabel('Photon Count')
         plt.xlabel(r'Wavelength ($\AA$)')
         plt.legend()
         plt.show()
+    pass

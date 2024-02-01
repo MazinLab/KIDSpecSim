@@ -29,7 +29,6 @@ Application of the virtual pixel boundaries and errors on an spectrum using the 
 
 if __name__ == '__main__':
     tic = time.time()  # recording start time for script
-    u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # photon flux per wavelength
 
     # ==================================================================================================================
     # CONSTANTS
@@ -155,7 +154,7 @@ if __name__ == '__main__':
                            msf.cov_matrix[i, i, j] * spec[i, j]) for j in detector.pixel_indices] for i in range(nord)])
 
     # saving extracted and unblazed spectrum to file
-    fits_file = f'{args.output_dir}/extracted_R0{sim.designR0}.fits'
+    fits_file = f'{args.output_dir}/binned_R0{sim.designR0}.fits'
     hdu_list = fits.HDUList([fits.PrimaryHDU(),
                              fits.BinTableHDU(Table(spec), name='Spectrum'),
                              fits.BinTableHDU(Table(err_n), name='- Errors'),
@@ -194,24 +193,25 @@ if __name__ == '__main__':
     plt.tight_layout()
     plt.show()
 
-    # plot the residual between model and observation:
-    model = np.genfromtxt('Ar_flux_integrated.csv', delimiter=',')
-    for n, i in enumerate(model[::-1]):
-        plt.grid()
-        model[::-1][n] /= np.max(i)
-        normed = spectrum[1].data[n]/np.max(spectrum[1].data[n])
-        plt.plot(detector.pixel_indices, model[::-1][n]-normed)
-        plt.title(f'Residual between model and observation, Order {spectro.orders[::-1][n]}')
-        plt.ylabel('Residual, both normalized to 1 at peak')
-        plt.xlabel('Pixel Index')
-        plt.show()
+    if sim.type_spectra == 'emission':
+        # plot the residual between model and observation:
+        model = np.genfromtxt('Ar_flux_integrated.csv', delimiter=',')
+        for n, i in enumerate(model[::-1]):
+            plt.grid()
+            model[::-1][n] /= np.max(i)
+            normed = spectrum[1].data[n]/np.max(spectrum[1].data[n])
+            plt.plot(detector.pixel_indices, model[::-1][n]-normed)
+            plt.title(f'Residual between model and observation, Order {spectro.orders[::-1][n]}')
+            plt.ylabel('Residual, both normalized to 1 at peak')
+            plt.xlabel('Pixel Index')
+            plt.show()
 
-        plt.grid()
-        plt.plot(detector.pixel_indices, normed, label='Observation')
-        plt.plot(detector.pixel_indices, model[::-1][n], '--', label='Model')
-        plt.title(f"Side-by-side comparison, Order {spectro.orders[::-1][n]}")
-        plt.ylabel('Normalized Flux')
-        plt.xlabel('Pixel Index')
-        plt.legend()
-        plt.show()
+            plt.grid()
+            plt.plot(detector.pixel_indices, normed, label='Observation')
+            plt.plot(detector.pixel_indices, model[::-1][n], '--', label='Model')
+            plt.title(f"Side-by-side comparison, Order {spectro.orders[::-1][n]}")
+            plt.ylabel('Normalized Flux')
+            plt.xlabel('Pixel Index')
+            plt.legend()
+            plt.show()
     pass
