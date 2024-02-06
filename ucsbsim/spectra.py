@@ -6,8 +6,9 @@ import logging
 import pandas as pd
 
 from astropy import units as u
+from astropy.constants import sigma_sb, h, c
 from specutils import Spectrum1D
-from synphot import SpectralElement, SourceSpectrum
+from synphot import SpectralElement, SourceSpectrum, units
 from synphot.spectrum import BaseSpectrum
 from synphot.models import Box1D, BlackBodyNorm1D, ConstFlux1D
 from .engine import gauss
@@ -73,8 +74,8 @@ def FilterTransmission(min=400 * u.nm, max=800 * u.nm):
     return SpectralElement(Box1D, amplitude=1, x_0=center, width=wid)
 
 
-def FineGrid(min, max):
-    w = np.linspace(min.to(u.nm).value-100, max.to(u.nm).value+100, 100000) * u.nm
+def FineGrid(min, max, npoints=100000):
+    w = np.linspace(min.to(u.nm).value-100, max.to(u.nm).value+100, npoints) * u.nm
     t = np.ones(100000) * u.dimensionless_unscaled
     ones = Spectrum1D(spectral_axis=w, flux=t)
     return SpectralElement.from_spectrum1d(ones)
@@ -102,10 +103,12 @@ def apply_bandpass(spectra, bandpass):
         return spectra
 
 
-def PhoenixModel(teff: float, feh=0, logg=4.8, desired_magnitude=None):
+def PhoenixModel(distance: float, radius: float, teff: float, feh=0, logg=4.8, desired_magnitude=None):
     """
+    :param distance: distance to star
+    :param radius: radius of star
     :param float teff: effective temperature of star
-    :param feh: distance as z value
+    :param feh: metallicity
     :param logg: log of surface gravity
     :param desired_magnitude: magnitude with which to normalize model spectrum, optional
     :return: Phoenix model of star with given properties as SourceSpectrum object
@@ -113,23 +116,38 @@ def PhoenixModel(teff: float, feh=0, logg=4.8, desired_magnitude=None):
     from expecto import get_spectrum
     sp = SourceSpectrum.from_spectrum1d(get_spectrum(T_eff=teff, log_g=logg, Z=feh, cache=True))
     if desired_magnitude is not None:
-        sp.normalize(desired_magnitude, band=S.ObsBandpass('johnson,v'))
-    return sp
+        sp.normalize(desired_magnitude, band=SpectralElement.ObsBandpass('johnson,v'))
+    e_sp = sp.integrate(flux_unit=units.FLAM, integration_type='analytical')
+    default_distance = radius*np.sqrt(sigma_sb*teff**4*u.K**4/e_sp).decompose()
+    return sp/(distance/default_distance).decompose()
 
 
-def BlackbodyModel(teff: float):
+def BlackbodyModel(distance: float, radius: float, teff: float):
     """
+    :param distance: distance to star
+    :param radius: radius of star
     :param float teff: effective temperature of model star
     :return: blackbody model of star as SourceSpectrum object
     """
-    return SourceSpectrum(BlackBodyNorm1D, temperature=teff)*1e16
+    sp = SourceSpectrum(BlackBodyNorm1D, temperature=teff)
+    e_sp = sp.integrate(flux_unit=units.FLAM, integration_type='analytical')
+    default_distance = radius*np.sqrt(sigma_sb*teff**4*u.K**4/e_sp).decompose()
+    return sp/(distance/default_distance).decompose()
 
 
 def FlatModel():
     """
     :return: model which returns the same flux at all wavelengths
     """
-    return SourceSpectrum(ConstFlux1D, amplitude=1e5)
+    sp = SourceSpectrum(ConstFlux1D, amplitude=1e5*units.FLAM)
+
+    # for the typical lab environment
+    watt = 3*u.W  # typical emission lamp wattage
+    dist = 40*u.cm  # approx distance from lamp to camera
+    flux_w = watt/dist**2
+    e_sp = sp.integrate(wavelengths=np.arange(3000, 9000, 0.1), flux_unit=units.FLAM, integration_type='analytical')
+    ratio = (flux_w/e_sp).decompose()
+    return sp*ratio
 
 
 def EmissionModel(filename, minwave, maxwave, target_R=50000):
@@ -172,12 +190,23 @@ def EmissionModel(filename, minwave, maxwave, target_R=50000):
     line_gauss = gauss(wave_grid[None, :].astype(float), wave[:, None].astype(float),
                        uncert[:, None].astype(float) * sigma_factor / 3, flux[:, None].astype(float))
     spectrum = np.sum(line_gauss, axis=1)
-    return SourceSpectrum.from_spectrum1d(Spectrum1D(flux=spectrum * u.photlam, spectral_axis=wave_grid * u.nm))
+    sp = SourceSpectrum.from_spectrum1d(Spectrum1D(flux=spectrum * u.photlam, spectral_axis=wave_grid * u.nm))
+
+    # for the typical lab environment
+    watt = 3*u.W  # typical emission lamp wattage
+    dist = 40*u.cm  # approx distance from lamp to camera
+    flux_w = watt/dist**2
+    e_sp = sp.integrate(flux_unit=units.FLAM, integration_type='analytical')
+    ratio = (flux_w/e_sp).decompose()
+    return sp*ratio
 
 
-def get_spectrum(spectrum_type: str, teff=None, emission_file=None, minwave=None, maxwave=None):
+def get_spectrum(spectrum_type: str, distance=None, radius=None, teff=None, emission_file=None, minwave=None,
+                 maxwave=None):
     """
     :param str spectrum_type: 'blackbody', 'phoenix', 'flat', or 'emission' only
+    :param distance: distance to spectrum.
+    :param radius: radius of star.
     :param teff: effective temperature for blackbody or phoenix model spectrum
     :param emission_file: file name for the desired emission spectrum
     :param minwave: minimum wavelength
@@ -185,13 +214,13 @@ def get_spectrum(spectrum_type: str, teff=None, emission_file=None, minwave=None
     :return: SourceSpectrum object of chosen spectrum
     """
     if spectrum_type == 'blackbody':
-        logging.info(f'\nObtained blackbody model spectrum of {teff} K star.')
-        return BlackbodyModel(teff)
+        logging.info(f'\nObtained blackbody model spectrum.')
+        return BlackbodyModel(distance=distance, radius=radius, teff=teff)
     elif spectrum_type == 'phoenix':
-        logging.info(f'\nObtained Phoenix model spectrum of {teff} K star.')
-        return PhoenixModel(teff)
+        logging.info(f'\nObtained Phoenix model spectrum.')
+        return PhoenixModel(distance=distance, radius=radius, teff=teff)
     elif spectrum_type == 'flat':
-        logging.info(f'\nObtained flat flux model spectrum.')
+        logging.info(f'\nObtained flat-field model spectrum.')
         return FlatModel()
     elif spectrum_type == 'emission':
         logging.info(f'\nObtained {emission_file} emission spectrum.')
