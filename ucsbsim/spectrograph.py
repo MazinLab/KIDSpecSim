@@ -10,6 +10,7 @@ class GratingSetup:
             self,
             alpha: float,
             delta: float,
+            beta_center: float,
             groove_length: u.Quantity,
     ):
         """
@@ -17,16 +18,19 @@ class GratingSetup:
 
         :param float alpha: incident angle in radians
         :param float delta: blaze angle in radians
+        :param float beta_center: reflectance angle in radians
         :param u.Quantity groove_length: d, length/groove in units of wavelength (same as schroeder sigma)
         """
         self.alpha = alpha*u.rad
         self.delta = delta*u.rad
+        self.beta_center = beta_center*u.rad
         self.d = groove_length
         self.empiric_blaze_factor = 1.0
 
     def __str__(self) -> str:
         return (f"alpha={np.rad2deg(self.alpha):.2f}\n"
                 f"delta={np.rad2deg(self.delta):.2f}\n"
+                f"beta={np.rad2deg(self.beta_center):.2f}\n"
                 f"l={self.d.to('mm'):.2f}/l ({1 / self.d.to('mm'):.2f})")
 
     def blaze(self, beta, m):
@@ -102,8 +106,7 @@ class GratingSetup:
 class SpectrographSetup:
     def __init__(
             self,
-            min_order: int,
-            max_order: int,
+            order_range: int,
             final_wave: u.Quantity,
             pixels_per_res_elem: float,
             focal_length: u.Quantity,
@@ -111,25 +114,26 @@ class SpectrographSetup:
             detector: MKIDDetector,
     ):
         """
-        Simulation of a spectrograph.
-        
-        :param int min_order: minimum order of the spectrograph
-        :param int max_order: maximum order of the spectrograph
+        :param tuple order_range: order range of the spectrograph
         :param u.Quantity final_wave: longest wavelength at the edge of detector
         :param float pixels_per_res_elem: number of pixels per resolution element of spectrometer
         :param u.Quantity focal_length: the focal length of the detector
         :param GratingSetup grating: configured grating
         :param MKIDDetector detector: configured detector
+        :return spectrograph simulation object
         """
-        self.m0 = min_order
+        assert len(order_range) == 2, 'order_range must be a tuple of length 2.'
+        if order_range[0] > order_range[1]:
+            order_range = order_range[::-1]
+        self.m0 = order_range[0]
+        self.m_max = order_range[1]
         self.l0 = final_wave
-        self.m_max = max_order
         self.grating = grating
         self.detector = detector
         self.focal_length = focal_length
         self.pixel_scale = np.arctan(self.detector.pixel_size / self.focal_length)
-        self.beta_central_pixel = self.grating.alpha
-        self.nord = int(max_order - min_order + 1)
+        self.beta_central_pixel = self.grating.beta_center
+        self.nord = int(self.m_max - self.m0 + 1)
         self.nominal_pixels_per_res_elem = pixels_per_res_elem
         # We assume that the system is designed to place pixels_per_res_elem pixels across the width of the dispersed
         # slit image at some fiducial wavelength and that the resolution element has some known width there
@@ -140,21 +144,24 @@ class SpectrographSetup:
                      f'\n\tR0: {self.detector.design_R0}'
                      f'\n\tOrders: {self.orders}'
                      f'\n\tFocal length: {self.focal_length}'
-                     f'\n\tIncident/reflectance angle: {np.rad2deg(self.grating.alpha):.3f}'
+                     f'\n\tIncidence angle: {np.rad2deg(self.grating.alpha):.3f}'
+                     f'\n\tReflectance angle: {np.rad2deg(self.beta_central_pixel):.2f}\n'
                      f'\n\tGroove length: {self.grating.d:.2f}'
                      f'\n\t# of pixels: {self.detector.n_pixels}'
                      f'\n\tPixel size: {self.detector.pixel_size}'
                      f'\n\tPixels per res. element: {self.nominal_pixels_per_res_elem}')
 
-    def set_beta_center(self, beta):
+    def set_beta_center(self, beta, littrow: bool = False):
         """
         :param beta: reflectance angle in degrees
-        :return: changes the reflectance angle of the central pixel
+        :param littrow: whether alpha=beta
+        :return: changes the reflectance angle of the central pixel (may change alpha if littrow)
         """
         if not isinstance(beta, u.Quantity):
             beta *= u.deg
         self.beta_central_pixel = beta
-        self.grating.alpha = beta  # Enforce littrow
+        if littrow:
+            self.grating.alpha = beta
 
     @property
     def orders(self):
