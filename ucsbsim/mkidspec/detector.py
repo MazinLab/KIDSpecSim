@@ -4,7 +4,7 @@ import logging
 from scipy.constants import c
 
 from ucsbsim.filterphot import mask_deadtime
-from ucsbsim.engine import draw_photons
+from ucsbsim.mkidspec.engine import draw_photons
 
 
 def wave_to_phase(waves, minwave, maxwave):
@@ -39,7 +39,7 @@ class MKIDDetector:
             pixel_size: u.Quantity,
             design_R0: float,
             l0: u.Quantity,
-            R0s: np.ndarray,
+            R0s: np.ndarray = None,
             phase_offsets: np.ndarray = None,
             resid_map: np.ndarray = None
     ):
@@ -59,8 +59,14 @@ class MKIDDetector:
         self.waveR0 = l0
         self.design_R0 = design_R0
         self.pixel_indices = np.arange(self.n_pixels, dtype=int)
-        self.R0s = R0s
-        self.pixel_phase_offsets = phase_offsets
+        if R0s is None:
+            self.R0s = np.ones(self.n_pixels) * self.design_R0
+        else:
+            self.R0s = R0s
+        if phase_offsets is None:
+            self.pixel_phase_offsets = np.ones(self.n_pixels)
+        else:
+            self.pixel_phase_offsets = phase_offsets
         self.resid_map = resid_map
 
     def R0(self, pixel: int):
@@ -70,13 +76,10 @@ class MKIDDetector:
         """
         if pixel not in self.pixel_indices:
             raise ValueError(f"Pixel {pixel + 1} not in instantiated detector, max of {self.n_pixels}.")
-        if self.R0s is None:
-            self.R0s = np.ones(self.n_pixels) * self.design_R0
-        else:
-            if len(self.R0s) != self.n_pixels:
-                raise ValueError('The number of R0s does not match number of pixels.')
-            elif np.abs(np.average(self.R0s)-self.design_R0) > 1:
-                raise ValueError('The user-supplied array of R0s and design R0 do not match.')
+        if len(self.R0s) != self.n_pixels:
+            raise ValueError('The number of R0s does not match number of pixels.')
+        elif np.abs(np.average(self.R0s)-self.design_R0) > 1:
+            raise ValueError('The user-supplied array of R0s and design R0 do not match.')
         return self.R0s[pixel.astype(int)]
 
     def mkid_constant(self, pixel):

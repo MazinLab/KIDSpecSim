@@ -1,4 +1,5 @@
 import os
+import sys
 import warnings
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,13 +16,13 @@ from specutils import Spectrum1D
 from synphot import SpectralElement
 
 from mkidpipeline.photontable import Photontable
-from ucsbsim.spectra import get_spectrum, apply_bandpass, AtmosphericTransmission, FilterTransmission, \
+from ucsbsim.mkidspec.spectra import get_spectrum, apply_bandpass, AtmosphericTransmission, FilterTransmission, \
     TelescopeTransmission, FineGrid, clip_spectrum
-from ucsbsim.spectrograph import GratingSetup, SpectrographSetup
-from ucsbsim.detector import MKIDDetector, wave_to_phase
-import ucsbsim.engine as engine
-from ucsbsim.plotting import quick_plot
-from ucsbsim.simsettings import SpecSimSettings
+from ucsbsim.mkidspec.spectrograph import GratingSetup, SpectrographSetup
+from ucsbsim.mkidspec.detector import MKIDDetector, wave_to_phase
+import ucsbsim.mkidspec.engine as engine
+from ucsbsim.mkidspec.plotting import quick_plot
+from ucsbsim.mkidspec.simsettings import SpecSimSettings
 
 # TODO this will need work as the pipeline will probably default to MEC HDF headers
 from mkidpipeline.steps.buildhdf import buildfromarray
@@ -156,7 +157,7 @@ if __name__ == '__main__':
                         help='Alpha, the angle of incidence on the grating in degrees. (float)')
     parser.add_argument('-b', '--beta',
                         metavar='REFLECTANCE_ANGLE',
-                        default=34.7,
+                        default=28.3,
                         help='Beta, the reflectance angle at the central pixel in degrees. (float)')
     parser.add_argument('-del', '--delta',
                         metavar='BLAZE_ANGLE',
@@ -168,11 +169,11 @@ if __name__ == '__main__':
                         help='The groove length d, or distance between slits, of the grating in nm. (float)')
     parser.add_argument('-m0', '--m0',
                         metavar='INITIAL_ORDER',
-                        default=4,
+                        default=3,
                         help='The initial order, at the longer wavelength end. (int)')
     parser.add_argument('-mm', '--m_max',
                         metavar='FINAL_ORDER',
-                        default=8,
+                        default=7,
                         help='The final order, at the shorter wavelength end. (int)')
     parser.add_argument('-ppre', '--pixels_per_res_elem',
                         metavar='PIXELS_PER_RESOLUTION_ELEMENT',
@@ -186,17 +187,6 @@ if __name__ == '__main__':
     # get arguments & simulation settings
     args = parser.parse_args()
     sim = SpecSimSettings(
-        R0s_file=args.R0s_file,
-        phaseoffset_file=args.phaseoffset_file,
-        type_spectra=args.type_spectra,
-        emission_file=args.emission_file,
-        exptime_s=args.exptime,
-        telearea_cm2=args.telearea,
-        distance_ps=args.distance,
-        radius_Rsun=args.radius,
-        temp_K=args.temp,
-        sky_emission_lines=args.sky_emission,
-        simpconvol=args.simpconvol,
         minwave_nm=args.minwave,
         maxwave_nm=args.maxwave,
         npix=args.npix,
@@ -210,24 +200,36 @@ if __name__ == '__main__':
         m0=args.m0,
         m_max=args.m_max,
         pixels_per_res_elem=args.pixels_per_res_elem,
-        focallength_mm=args.focallength
+        focallength_mm=args.focallength,
+        R0s_file=args.R0s_file,
+        phaseoffset_file=args.phaseoffset_file,
+        type_spectra=args.type_spectra,
+        emission_file=args.emission_file,
+        exptime_s=args.exptime,
+        telearea_cm2=args.telearea,
+        distance_ps=args.distance,
+        radius_Rsun=args.radius,
+        temp_K=args.temp,
+        sky_emission_lines=args.sky_emission,
+        simpconvol=args.simpconvol
     )
     sigma_frac = norm.cdf(args.nsig)  # convert number of sigma to a fraction
+
+    sys.path.insert(1, '/home/kimc/pycharm/KIDSpecSim/ucsbsim')
 
     # ==================================================================================================================
     # CHECK FOR OR CREATE DIRECTORIES
     # ==================================================================================================================
     now = dt.now()
-    os.makedirs(name=f'{args.output_dir}/{now.strftime("%y%m%d")}_{args.spectro_type}_'
-                                 f'exptime{int(sim.exptime.value)}/logging/', exist_ok=True)
+    os.makedirs(name=f'{args.output_dir}/{now.strftime("%y%m%d")}_{args.spectro_type}/logging/', exist_ok=True)
     os.makedirs(name=os.path.dirname(sim.R0s_file), exist_ok=True)
     os.makedirs(name=os.path.dirname(sim.phaseoffset_file), exist_ok=True)
 
     # ==================================================================================================================
     # START LOGGING TO FILE
     # ==================================================================================================================
-    logging.basicConfig(filename=f'{args.output_dir}/{now.strftime("%y%m%d")}_{args.spectro_type}_'
-                                 f'exptime{int(sim.exptime.value)}/logging/simulate_{sim.type_spectra}.log',
+    logging.basicConfig(filename=f'{args.output_dir}/{now.strftime("%y%m%d")}_{args.spectro_type}'
+                                 f'/logging/simulate_{sim.type_spectra}.log',
                         format='%(levelname)s:%(message)s', level=logging.DEBUG)
     logging.info(msg=f"The simulation of a(n) {sim.type_spectra} spectrum observation is recorded."
                      f"\nThe date and time are: {now.strftime('%Y-%m-%d %H:%M:%S')}.")
@@ -379,8 +381,7 @@ if __name__ == '__main__':
     # logging.info(f'\nSaved noise profiles to {args.output_dir}/{args.output_h5file}_noise.npz')
 
     # saving final photon list to h5 file, store linear phase conversion in header:
-    h5_file = f'{args.output_dir}/{now.strftime("%y%m%d")}_{args.spectro_type}_' \
-              f'exptime{int(sim.exptime.value)}/{sim.type_spectra}.h5'
+    h5_file = f'{args.output_dir}/{now.strftime("%y%m%d")}_{args.spectro_type}/{sim.type_spectra}.h5'
     buildfromarray(array=photons[:observed], user_h5file=h5_file)
     pt = Photontable(file_name=h5_file, mode='write')
     pt.update_header(key='sim_settings', value=sim)
@@ -446,7 +447,7 @@ if __name__ == '__main__':
                xlabel='Wavelength (nm)', title=r"Comparison of Input (integrated to pixel space), "
                                                r"Post-Convolution (integrated), and Observed Photon Count (FSR-binned)")
     fig.tight_layout()
-    plot_file = f'{args.output_dir}/{args.output_h5file}_plots.pdf'
+    plot_file = f'{args.output_dir}/{now.strftime("%y%m%d")}_{args.spectro_type}/{sim.type_spectra}.pdf'
     fig.savefig(plot_file)
     logging.info(msg=f'\nSaved intermediate plots to {plot_file}.')
     plt.show()
@@ -471,7 +472,7 @@ if __name__ == '__main__':
                labels=["Original, Blazed"] + ['_nolegend_' for o in spectro.orders[:-1]],
                xlabel='Wavelength (nm)', ylabel=r"Flux (phot $cm^{-2} s^{-1})$")
     fig2.tight_layout()
-    plot_file = f'{args.output_dir}/{args.output_h5file}_noiseplots.pdf'
+    plot_file = f'{args.output_dir}/{now.strftime("%y%m%d")}_{args.spectro_type}/{sim.type_spectra}_noiseplots.pdf'
     fig2.savefig(plot_file)
     logging.info(msg=f'\nSaved noise plots to {plot_file}.')
     plt.show()

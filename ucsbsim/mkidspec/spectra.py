@@ -1,17 +1,14 @@
-import synphot
-import specutils
 import numpy as np
-from astropy.io import fits
 import logging
 import pandas as pd
+import sys
 
 from astropy import units as u
-from astropy.constants import sigma_sb, h, c
+from astropy.constants import sigma_sb
 from specutils import Spectrum1D
 from synphot import SpectralElement, SourceSpectrum, units
-from synphot.spectrum import BaseSpectrum
 from synphot.models import Box1D, BlackBodyNorm1D, ConstFlux1D
-from .engine import gauss
+from KIDSpecSim.ucsbsim.mkidspec.engine import gauss
 
 _atm = None
 
@@ -29,8 +26,8 @@ def _get_atm():
     global _atm
     if _atm is not None:
         return _atm
-    x = np.genfromtxt('transdata_0.5_1_mic')  # TODO doesn't go below 500nm
-    y = np.genfromtxt('transdata_1_5_mic')
+    x = np.genfromtxt('../transdata_0.5_1_mic')  # TODO doesn't go below 500nm
+    y = np.genfromtxt('../transdata_1_5_mic')
     x = x[x[:, 1] > 0]
     x[:, 0] = 1e4 / x[:, 0]
     y = y[y[:, 1] > 0]
@@ -158,7 +155,7 @@ def EmissionModel(filename, minwave, maxwave, target_R=50000):
     :param target_R: spectral resolution to diffraction limit line spectrum
     :return: full emission spectrum, intensity converted to photlam
     """
-    file = pd.read_csv(filename, delimiter=',')
+    file = pd.read_csv(f'/home/kimc/pycharm/KIDSpecSim/ucsbsim/{filename}', delimiter=',')
     flux = np.array(file['intens'])
     wave = np.array(file['obs_wl_air(nm)'])
     try:

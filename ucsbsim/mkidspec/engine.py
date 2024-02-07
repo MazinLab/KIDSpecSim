@@ -1,20 +1,27 @@
 import numpy as np
 import scipy.interpolate as interp
-import scipy
-from scipy.signal import oaconvolve, find_peaks, gaussian, correlate
+from scipy.signal import oaconvolve, find_peaks, gaussian
 import scipy.ndimage as ndi
 from scipy.constants import h, c
 import astropy.units as u
 import matplotlib.pyplot as plt
 import logging
 
-from . import sortarray
-from .plotting import quick_plot
+from ucsbsim import sortarray
+from ucsbsim.mkidspec.plotting import quick_plot
+from mkidpipeline.photontable import Photontable
 from lmfit import Parameters, minimize
-from mkidpipeline import photontable as pt
 
 u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # photon flux per wavelength
 SIG2WID = 2 * np.sqrt(np.log(2))
+
+
+def sorted_table(table: Photontable, resid_map):
+    # SORT PHOTONS BY RESID:
+    phases = table.query(column='wavelength')
+    resID = table.query(column='resID')
+    idx = [np.where(resID == j) for j in resid_map]
+    return [phases[j].tolist() for j in idx]  # list of photons in each pixel
 
 
 def nearest_index(array, value):

@@ -2,7 +2,7 @@ import numpy as np
 import astropy.units as u
 import logging
 
-from ucsbsim.detector import MKIDDetector
+from ucsbsim.mkidspec.detector import MKIDDetector
 
 
 class GratingSetup:
