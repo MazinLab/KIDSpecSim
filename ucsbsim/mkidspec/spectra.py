@@ -4,11 +4,11 @@ import pandas as pd
 import sys
 
 from astropy import units as u
-from astropy.constants import sigma_sb
+from astropy.constants import sigma_sb, h, c
 from specutils import Spectrum1D
 from synphot import SpectralElement, SourceSpectrum, units
 from synphot.models import Box1D, BlackBodyNorm1D, ConstFlux1D
-from KIDSpecSim.ucsbsim.mkidspec.engine import gauss
+from KIDSpecSim.ucsbsim.mkidspec.utils.general import gauss
 
 _atm = None
 
@@ -26,8 +26,8 @@ def _get_atm():
     global _atm
     if _atm is not None:
         return _atm
-    x = np.genfromtxt('../transdata_0.5_1_mic')  # TODO doesn't go below 500nm
-    y = np.genfromtxt('../transdata_1_5_mic')
+    x = np.genfromtxt('/home/kimc/pycharm/KIDSpecSim/ucsbsim/mkidspec/simfiles/transdata_0.5_1_mic')  # TODO doesn't go below 500nm
+    y = np.genfromtxt('/home/kimc/pycharm/KIDSpecSim/ucsbsim/mkidspec/simfiles/transdata_1_5_mic')
     x = x[x[:, 1] > 0]
     x[:, 0] = 1e4 / x[:, 0]
     y = y[y[:, 1] > 0]
@@ -100,7 +100,26 @@ def apply_bandpass(spectra, bandpass):
         return spectra
 
 
-def PhoenixModel(distance: float, radius: float, teff: float, feh=0, logg=4.8, desired_magnitude=None):
+def SkyEmission():
+    # TODO import files and compile them into spectrum, this is just copied from Emission
+    file = pd.read_csv(f'/home/kimc/pycharm/KIDSpecSim/ucsbsim/mkidspec/simfiles/sky_emission/sky_emission.dat',
+                       header=None, sep=' ', skipinitialspace=True, dtype=float)
+    flux = np.array(file[3])*1e-18*u.W/u.m**2/u.nm  # 10-18W/m2/nm
+    wave = np.array(file[1])/10  # Angstrom to nm
+    fwhm = np.array(file[2])/10  # Angstrom to nm
+
+    wave_e = h*c/(wave*u.nm)  # nm to erg
+    flux /= wave_e/u.ph  # flam to photlam
+    flux = flux.decompose().to(u.photlam).value
+
+    wave_grid = np.arange(wave[0], wave[-1], fwhm.min())
+    line_gauss = gauss(wave_grid[None, :].astype(float), wave[:, None].astype(float),
+                       fwhm[:, None].astype(float) / (2*np.sqrt(2*np.log(2))), flux[:, None].astype(float))
+    spectrum = np.sum(line_gauss, axis=1)
+    return SourceSpectrum.from_spectrum1d(Spectrum1D(flux=spectrum * u.photlam, spectral_axis=wave_grid * u.nm))
+
+
+def PhoenixModel(distance: float, radius: float, teff: float, feh=0, logg=4.8, desired_magnitude=None, on_sky=False):
     """
     :param distance: distance to star
     :param radius: radius of star
@@ -108,6 +127,7 @@ def PhoenixModel(distance: float, radius: float, teff: float, feh=0, logg=4.8, d
     :param feh: metallicity
     :param logg: log of surface gravity
     :param desired_magnitude: magnitude with which to normalize model spectrum, optional
+    :param bool on_sky: True if on sky observation with sky emission lines
     :return: Phoenix model of star with given properties as SourceSpectrum object
     """
     from expecto import get_spectrum
@@ -116,20 +136,28 @@ def PhoenixModel(distance: float, radius: float, teff: float, feh=0, logg=4.8, d
         sp.normalize(desired_magnitude, band=SpectralElement.ObsBandpass('johnson,v'))
     e_sp = sp.integrate(flux_unit=units.FLAM, integration_type='analytical')
     default_distance = radius*np.sqrt(sigma_sb*teff**4*u.K**4/e_sp).decompose()
-    return sp/(distance/default_distance).decompose()
+    sp /= (distance/default_distance).decompose()
+    if on_sky:
+        return sp + SkyEmission()
+    return sp
 
 
-def BlackbodyModel(distance: float, radius: float, teff: float):
+def BlackbodyModel(distance: float, radius: float, teff: float, on_sky: bool):
     """
     :param distance: distance to star
     :param radius: radius of star
     :param float teff: effective temperature of model star
+    :param bool on_sky: True if simulation ob sky observation with sky emission lines
     :return: blackbody model of star as SourceSpectrum object
     """
     sp = SourceSpectrum(BlackBodyNorm1D, temperature=teff)
     e_sp = sp.integrate(flux_unit=units.FLAM, integration_type='analytical')
     default_distance = radius*np.sqrt(sigma_sb*teff**4*u.K**4/e_sp).decompose()
-    return sp/(distance/default_distance).decompose()
+    sp /= (distance / default_distance).decompose()
+
+    if on_sky:
+        return sp + SkyEmission()
+    return sp
 
 
 def FlatModel():
@@ -199,7 +227,7 @@ def EmissionModel(filename, minwave, maxwave, target_R=50000):
 
 
 def get_spectrum(spectrum_type: str, distance=None, radius=None, teff=None, emission_file=None, minwave=None,
-                 maxwave=None):
+                 maxwave=None, on_sky=False):
     """
     :param str spectrum_type: 'blackbody', 'phoenix', 'flat', or 'emission' only
     :param distance: distance to spectrum.
@@ -208,14 +236,16 @@ def get_spectrum(spectrum_type: str, distance=None, radius=None, teff=None, emis
     :param emission_file: file name for the desired emission spectrum
     :param minwave: minimum wavelength
     :param maxwave: maximum wavelength
+    :param bool on_sky: True if observation is on sky and has atmospheric attenuation/sky emission/etc.
+                        will always be ignored for flat and emission type spectra.
     :return: SourceSpectrum object of chosen spectrum
     """
     if spectrum_type == 'blackbody':
         logging.info(f'\nObtained blackbody model spectrum.')
-        return BlackbodyModel(distance=distance, radius=radius, teff=teff)
+        return BlackbodyModel(distance=distance, radius=radius, teff=teff, on_sky=on_sky)
     elif spectrum_type == 'phoenix':
         logging.info(f'\nObtained Phoenix model spectrum.')
-        return PhoenixModel(distance=distance, radius=radius, teff=teff)
+        return PhoenixModel(distance=distance, radius=radius, teff=teff, on_sky=on_sky)
     elif spectrum_type == 'flat':
         logging.info(f'\nObtained flat-field model spectrum.')
         return FlatModel()
