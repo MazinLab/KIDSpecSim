@@ -30,7 +30,7 @@ class SpecSimSettings:
             distance_ps: float = None,
             radius_Rsun: float = None,
             temp_K: float = None,
-            sky_emission_lines: bool = None,
+            on_sky: bool = None,
             simpconvol: bool = None
     ):
         """
@@ -57,7 +57,7 @@ class SpecSimSettings:
         :param distance_ps: The distance to target in parsecs.
         :param radius_Rsun: The radius of the target in units of R_sun.
         :param float temp_K: The temperature of the spectrum in K.
-        :param sky_emission_lines: True if night sky emission lines should be added.
+        :param on_sky: True if the observation is simulated on sky (atmosphere, sky emission, etc.).
         :param bool simpconvol: True if conducting a simplified convolution with MKIDs.
         """
         self.minwave = float(minwave_nm) * u.nm if not isinstance(minwave_nm, u.Quantity) else minwave_nm
@@ -71,7 +71,10 @@ class SpecSimSettings:
             self.l0 = float(l0_nm)*u.nm if not isinstance(l0_nm, u.Quantity) else l0_nm
         self.alpha = np.deg2rad(float(alpha_deg))
         self.delta = np.deg2rad(float(delta_deg))
-        self.beta = np.deg2rad(float(beta_deg))
+        if beta_deg == 'littrow':
+            self.beta = self.alpha
+        else:
+            self.beta = np.deg2rad(float(beta_deg))
         self.groove_length = float(groove_length_nm)*u.nm if not isinstance(groove_length_nm,
                                                                             u.Quantity) else groove_length_nm
         self.order_range = (int(m0), int(m_max))
@@ -86,7 +89,7 @@ class SpecSimSettings:
         self.distance = float(distance_ps) * u.parsec if not isinstance(distance_ps, u.Quantity) else distance_ps
         self.radius = float(radius_Rsun) * R_sun
         self.temp = float(temp_K)
-        self.sky_emission_lines = sky_emission_lines
+        self.on_sky = on_sky
         self.simpconvol = simpconvol
 
     def __eq__(self, other):
