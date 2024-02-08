@@ -48,150 +48,77 @@ if __name__ == '__main__':
     # ==================================================================================================================
     # PARSE COMMAND LINE ARGUMENTS
     # ==================================================================================================================
-    arg_desc = '''
-               Simulate an MKID Spectrograph observation run.
-               ---------------------------------------------------------
-               This program loads, filters, blazes, convolves, and converts a synphot spectrum to a photon table.
-               '''
-    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=arg_desc)
+    parser = argparse.ArgumentParser(description='MKID Spectrograph Simulation')
 
     # required simulation args:
-    parser.add_argument('output_dir',
-                        metavar='OUTPUT_DIRECTORY',
-                        help='Directory for the output files. (str)')
-    parser.add_argument('R0s_file',
-                        metavar='R0S_FILE_NAME',
-                        help="Directory/filename of the R0s file, will be created if it doesn't exist. (str)")
-    parser.add_argument('phaseoffset_file',
-                        metavar='PHASE_OFFSET_FILE_NAME',
-                        help="Directory/filename of the phase offset file, will be created if it doesn't exist. (str)")
-    parser.add_argument('type_spectra',
-                        metavar='TYPE_SPECTRA',
-                        help='The type of spectra: can be "blackbody", "phoenix", "flat", or "emission". (str)')
+    parser.add_argument('type_spectra', type=str,
+                        help='The type of spectra: can be "blackbody", "phoenix", "flat", or "emission".')
 
     # optional simulation args:
-    parser.add_argument('-st', '--spectro_type',
-                        metavar='SPECTROGRAPH_TYPE',
-                        default='default',
-                        help='Type of spectrograph settings, in general. E.g.: "default", "FWHMlimit", etc.')
-    parser.add_argument('-ef', '--emission_file',
-                        metavar='EMISSION_FILE_NAME',
-                        default=None,
+    parser.add_argument('--outdir', default='../mkidspec/testfiles', type=str, help='Directory for output files.')
+    parser.add_argument('--R0s_file', default='../mkidspec/simfiles/R0s.csv', type=str,
+                        help="Directory/filename of the R0s file, will be created if it doesn't exist.")
+    parser.add_argument('--phaseoffset_file', default='../mkidspec/simfiles/phase_offsets.csv', type=str,
+                        help="Directory/filename of the phase offset file, will be created if it doesn't exist.")
+    parser.add_argument('--spectro_type', default='default', type=str,
+                        help='Type of spectrograph settings, in general. E.g.: "default", "FWHMlimit", etc.'
+                             'Will only be used for folder naming convention.')
+    parser.add_argument('-ef', '--emission_file', default=None,
                         help='Directory/filename of NIST emission line spectrum, REQUIRED if spectra is "emission".')
-    parser.add_argument('-dist', '--distance',
-                        metavar='DISTANCE_PS',
-                        default=2.64,  # default is based on Sirius A, brightest star in the night sky
-                        help='Distance to target star in parsecs, REQUIRED if spectra is "phoenix". (float)')
-    parser.add_argument('-rad', '--radius',
-                        metavar='RADIUS_RSUN',
-                        default=1.711,  # default is based on Sirius A, brightest star in the night sky
-                        help='Radius of target star in R_sun, REQUIRED if spectra is "phoenix". (float)')
-    parser.add_argument('-T', '--temp',
-                        metavar='TEMP_K',
-                        default=9940,  # default is based on Sirius A, brightest star in the night sky
-                        help='Temperature of target in K, REQUIRED if spectra is "blackbody" or "phoenix". (float)')
-    parser.add_argument('-se', '--sky_emission',
-                        metavar='NIGHT_SKY_EMISSION_LINES',
-                        default=False,
-                        help='Whether to add night sky emission lines to the spectrum.'
-                             'Always "False" for laboratory simulations. (bool)')
-    parser.add_argument('-et', '--exptime',
-                        metavar='EXPOSURE_TIME_S',
-                        default=50,
-                        help='The total exposure time of the observation in seconds. (float)')
-    parser.add_argument('-ta', '--telearea',
-                        metavar='TELESCOPE_AREA_CM2',
-                        default=np.pi * 4 ** 2,
-                        help='The telescope area in cm2. (float)')
-    parser.add_argument('-sc', '--simpconvol',
-                        action='store_true',
-                        default=False,
+    parser.add_argument('-dist', type=float, default=2.64,  # Sirius A, brightest star in the night sky
+                        help='Distance to target star in parsecs, REQUIRED if spectra is "phoenix".')
+    parser.add_argument('-rad', default=1.711, type=float,  # Sirius A, brightest star in the night sky
+                        help='Radius of target star in R_sun, REQUIRED if spectra is "phoenix".')
+    parser.add_argument('-T', default=9940, type=float,  # Sirius A, brightest star in the night sky
+                        help='Temperature of target in K, REQUIRED if spectra is "blackbody" or "phoenix".')
+    parser.add_argument('-et', '--exptime', default=50, type=float,
+                        help='The total exposure time of the observation in seconds.')
+    parser.add_argument('--telearea', default=np.pi * 4 ** 2, type=float, help='The telescope area in cm2.')
+    parser.add_argument('--simpconvol', action='store_true', default=False,
                         help='If passed, indicates that a faster, simplified convolution should be conducted.')
-    parser.add_argument('-sky', '--on_sky',
-                        action='store_true',
-                        default=False,
+    parser.add_argument('--on_sky', action='store_true', default=False,
                         help='If passed, the observation is conducted "on-sky" instead of in the laboratory and'
-                             'indicates the spectrum will be multiplied with atmospheric/telescopic attenuation.')
-    parser.add_argument('-ref', '--reflect',
-                        metavar='TELESCOPE_REFLECTIVITY',
-                        default=0.9,
+                             'indicates the spectrum will be have atmospheric/telescopic attenuation and have'
+                             'night sky emission lines added in.')
+    parser.add_argument('--reflect', default=0.9, type=float,
                         help='Factor to attenuate spectrum due to telescope reflectivity, between 0 and 1.'
-                             'REQUIRED if "on_sky" is True. (float)')
-    parser.add_argument('-minw', '--minwave',
-                        metavar='MINIMUM_WAVELENGTH_NM',
-                        default=400,
-                        help='The minimum wavelength of the spectrograph in nm. (float)')
-    parser.add_argument('-maxw', '--maxwave',
-                        metavar='MAXIMUM_WAVELENGTH_NM',
-                        default=800,
-                        help='The maximum wavelength of the spectrograph in nm. (float)')
+                             'REQUIRED if "on_sky" is True.')
+    parser.add_argument('--minw', default=400, type=float, help='The minimum wavelength of the spectrograph in nm.')
+    parser.add_argument('--maxw', default=800, type=float, help='The maximum wavelength of the spectrograph in nm.')
 
     # optional spectrograph args:
-    parser.add_argument('-np', '--npix',
-                        metavar='NUMBER_OF_PIXELS',
-                        default=2048,
-                        help='The number of pixels in the MKID detector. (int)')
-    parser.add_argument('-ps', '--pixelsize',
-                        metavar='PIXEL_SIZE_UM',
-                        default=20,
-                        help='The length of the MKID pixel in the dispersion direction in um. (float)')
-    parser.add_argument('-R0', '--designR0',
-                        metavar='DESIGN_R0',
-                        default=15,
-                        help='The spectral resolution at the maximum wavelength. (float)')
-    parser.add_argument('-l0', '--l0',
-                        metavar='LAMBDA_0_NM',
-                        default=800,
-                        help="The longest wavelength in nm. Can be float or 'same' to be equal to 'maxwave' arg.")
-    parser.add_argument('-os', '--osamp',
-                        metavar='OVERSAMPLING',
-                        default=10,
-                        help='The number of samples to use for the smallest pixel dlambda during convolution. (int)')
-    parser.add_argument('-ns', '--nsig',
-                        metavar='NUMBER_OF_SIGMA',
-                        default=3,
-                        help='The number of sigma to use for Gaussian during convolution. (int)')
-    parser.add_argument('-a', '--alpha',
-                        metavar='INCIDENCE_ANGLE',
-                        default=28.3,
-                        help='Alpha, the angle of incidence on the grating in degrees. (float)')
-    parser.add_argument('-b', '--beta',
-                        metavar='REFLECTANCE_ANGLE',
-                        default=28.3,
-                        help='Beta, the reflectance angle at the central pixel in degrees. (float)')
-    parser.add_argument('-del', '--delta',
-                        metavar='BLAZE_ANGLE',
-                        default=63,
-                        help='Delta, the grating blaze angle in degrees. (float)')
-    parser.add_argument('-d', '--groove_length',
-                        metavar='GROOVE_LENGTH',
-                        default=((1 / 316) * u.mm).to(u.nm).value,
-                        help='The groove length d, or distance between slits, of the grating in nm. (float)')
-    parser.add_argument('-m0', '--m0',
-                        metavar='INITIAL_ORDER',
-                        default=3,
-                        help='The initial order, at the longer wavelength end. (int)')
-    parser.add_argument('-mm', '--m_max',
-                        metavar='FINAL_ORDER',
-                        default=7,
-                        help='The final order, at the shorter wavelength end. (int)')
-    parser.add_argument('-ppre', '--pixels_per_res_elem',
-                        metavar='PIXELS_PER_RESOLUTION_ELEMENT',
-                        default=2.5,
-                        help='Number of pixels per spectral resolution element for the spectrograph. (float)')
-    parser.add_argument('-fl', '--focallength',
-                        metavar='FOCAL_LENGTH_MM',
-                        default=300,
-                        help='The focal length of the detector in mm. (float)')
+    parser.add_argument('--npix', default=2048, type=int, help='The number of pixels in the MKID detector.')
+    parser.add_argument('--pixsize', default=20, type=float,
+                        help='The length of the MKID pixel in the dispersion direction in um.')
+    parser.add_argument('-R0', default=15, type=float, help='The spectral resolution at the maximum wavelength.')
+    parser.add_argument('-l0', default='same',
+                        help="The longest wavelength in nm. Can be float or 'same' to be equal to 'maxw' arg.")
+    parser.add_argument('--osamp', default=10, type=int,
+                        help='The number of samples to use for the smallest pixel dlambda during convolution.')
+    parser.add_argument('--nsig', default=3, type=float,
+                        help='The number of sigma to use for Gaussian during convolution.')
+    parser.add_argument('--alpha', default=28.3, type=float, help='Angle of incidence on the grating in degrees.')
+    parser.add_argument('--beta', default='littrow',
+                        help='Reflectance angle at the central pixel in degrees.'
+                             'Can be a number or "littrow" to be equal to alpha.')
+    parser.add_argument('--delta', default=63, type=float, help='Blaze angle in degrees.')
+    parser.add_argument('-d', '--groove_length', default=((1 / 316) * u.mm).to(u.nm).value, type=float,
+                        help='The groove length d, or distance between slits, of the grating in nm.')
+    parser.add_argument('--m0', default=4, type=int, help='The initial order, at the longer wavelength end.')
+    parser.add_argument('--m_max', default=7, type=int, help='The final order, at the shorter wavelength end.')
+    parser.add_argument('-ppre', '--pixels_per_res_elem', default=2.5, type=float,
+                        help='Number of pixels per spectral resolution element for the spectrograph.')
+    parser.add_argument('--focallength', default=300, type=float, help='The focal length of the detector in mm.')
+    parser.add_argument('--plot', action='store_true', default=False, help='If passed, shows final plots.')
 
     # get arguments & simulation settings
     args = parser.parse_args()
     sim = SpecSimSettings(
-        minwave_nm=args.minwave,
-        maxwave_nm=args.maxwave,
+        minwave_nm=args.minw,
+        maxwave_nm=args.maxw,
         npix=args.npix,
-        pixelsize_um=args.pixelsize,
-        designR0=args.designR0,
+        pixelsize_um=args.pixsize,
+        designR0=args.R0,
         l0_nm=args.l0,
         alpha_deg=args.alpha,
         delta_deg=args.delta,
@@ -207,28 +134,26 @@ if __name__ == '__main__':
         emission_file=args.emission_file,
         exptime_s=args.exptime,
         telearea_cm2=args.telearea,
-        distance_ps=args.distance,
-        radius_Rsun=args.radius,
-        temp_K=args.temp,
-        sky_emission_lines=args.sky_emission,
+        distance_ps=args.dist,
+        radius_Rsun=args.rad,
+        temp_K=args.T,
+        on_sky=args.on_sky,
         simpconvol=args.simpconvol
     )
     sigma_frac = norm.cdf(args.nsig)  # convert number of sigma to a fraction
-
-    sys.path.insert(1, '/home/kimc/pycharm/KIDSpecSim/ucsbsim')
 
     # ==================================================================================================================
     # CHECK FOR OR CREATE DIRECTORIES
     # ==================================================================================================================
     now = dt.now()
-    os.makedirs(name=f'{args.output_dir}/{now.strftime("%y%m%d")}_{args.spectro_type}/logging/', exist_ok=True)
+    os.makedirs(name=f'{args.outdir}/{now.strftime("%y%m%d")}_{args.spectro_type}/logging/', exist_ok=True)
     os.makedirs(name=os.path.dirname(sim.R0s_file), exist_ok=True)
     os.makedirs(name=os.path.dirname(sim.phaseoffset_file), exist_ok=True)
 
     # ==================================================================================================================
     # START LOGGING TO FILE
     # ==================================================================================================================
-    logging.basicConfig(filename=f'{args.output_dir}/{now.strftime("%y%m%d")}_{args.spectro_type}'
+    logging.basicConfig(filename=f'{args.outdir}/{now.strftime("%y%m%d")}_{args.spectro_type}'
                                  f'/logging/simulate_{sim.type_spectra}.log',
                         format='%(levelname)s:%(message)s', level=logging.DEBUG)
     logging.info(msg=f"The simulation of a(n) {sim.type_spectra} spectrum observation is recorded."
@@ -255,7 +180,6 @@ if __name__ == '__main__':
         np.savetxt(fname=sim.phaseoffset_file, X=phase_offsets, delimiter=',')
         logging.info(msg=f'The pixel phase offsets were generated randomly and saved to {sim.phaseoffset_file}.')
 
-    # TODO: replace resonator IDs once known
     resid_map = np.arange(sim.npix, dtype=int) * 10 + 100
 
     detector = MKIDDetector(n_pix=sim.npix, pixel_size=sim.pixelsize, design_R0=sim.designR0, l0=sim.l0, R0s=R0s,
@@ -276,23 +200,25 @@ if __name__ == '__main__':
     # ==================================================================================================================
 
     # obtaining spectra:
-    spectrum = get_spectrum(spectrum_type=sim.type_spectra, distance=sim.distance, radius=sim.radius, teff=sim.temp,
-                            emission_file=sim.emission_file, minwave=sim.minwave, maxwave=sim.maxwave)
+    spectrum = get_spectrum(
+        spectrum_type=sim.type_spectra,
+        distance=sim.distance,
+        radius=sim.radius,
+        teff=sim.temp,
+        emission_file=sim.emission_file,
+        minwave=sim.minwave,
+        maxwave=sim.maxwave,
+        on_sky=sim.on_sky
+    )
 
     # populate bandpasses based on on-sky or lab:
     # always have finer grid spacing and min/max filter:
-    bandpasses = [FineGrid(min=sim.minwave, max=sim.maxwave)]
-    if args.on_sky:
+    bandpasses = [FineGrid(min=sim.minwave, max=sim.maxwave), FilterTransmission(min=sim.minwave, max=sim.maxwave)]
+    if sim.on_sky:
         bandpasses.append(AtmosphericTransmission())
-        if sim.sky_emission_lines:
-            spectrum = apply_bandpass(spectra=spectrum,
-                                      bandpass=bandpasses)  # apply bandpasses prior to night sky emission
-            # TODO add the night sky emission line option
-            pass
         bandpasses.append(TelescopeTransmission(reflectivity=args.reflect))
 
-    # apply bandpasses and obtain associated noise:
-    bandpasses.append(FilterTransmission(min=sim.minwave, max=sim.maxwave))
+    # apply bandpasses:
     bandpass_spectrum = apply_bandpass(spectra=spectrum, bandpass=bandpasses)
 
     # clip spectrum in order to blaze within limits
@@ -372,16 +298,16 @@ if __name__ == '__main__':
 
     # save noise to file:
     # np.savez(
-    #     file=f'{args.output_dir}/{args.output_h5file}_noise.npz',
+    #     file=f'{args.outdir}/{args.output_h5file}_noise.npz',
     #     original=blazed_int_spec,
     #     broad_noise=broad_noise,
     #     convol_noise=convol_noise,
     #     observe_noise=observe_noise
     # )
-    # logging.info(f'\nSaved noise profiles to {args.output_dir}/{args.output_h5file}_noise.npz')
+    # logging.info(f'\nSaved noise profiles to {args.outdir}/{args.output_h5file}_noise.npz')
 
     # saving final photon list to h5 file, store linear phase conversion in header:
-    h5_file = f'{args.output_dir}/{now.strftime("%y%m%d")}_{args.spectro_type}/{sim.type_spectra}.h5'
+    h5_file = f'{args.outdir}/{now.strftime("%y%m%d")}_{args.spectro_type}/{sim.type_spectra}.h5'
     buildfromarray(array=photons[:observed], user_h5file=h5_file)
     pt = Photontable(file_name=h5_file, mode='write')
     pt.update_header(key='sim_settings', value=sim)
@@ -398,81 +324,84 @@ if __name__ == '__main__':
     # ==================================================================================================================
     # DEBUGGING PLOTS:
     # ==================================================================================================================
-    warnings.filterwarnings(action="ignore")  # ignore tight_layout warnings
+    if args.plot:
+        warnings.filterwarnings(action="ignore")  # ignore tight_layout warnings
 
-    # phase/pixel space plot to verify that phases are within proper values and orders are more-or-less visible
-    bin_edges = np.linspace(-1, -0.1, 100)
-    centers = bin_edges[:-1] + np.diff(bin_edges) / 2
-    hist_array = np.zeros([sim.npix, len(bin_edges) - 1])
-    for j in detector.pixel_indices:
-        if photons_realign[j]:
-            counts, edges = np.histogram(a=photons_realign[j], bins=bin_edges)
-            hist_array[j, :] = np.array([float(x) for x in counts])
-    plt.imshow(hist_array[:, ::-1].T, extent=[1, sim.npix, -1, -0.1], aspect='auto', norm=LogNorm())
-    cbar = plt.colorbar()
-    cbar.ax.set_ylabel('Photon Count')
-    plt.title("Phase & Pixel Binning of Observed Photons")
-    plt.xlabel("Pixel Index")
-    plt.ylabel(r"Phase ($\times \pi /2$)")
-    plt.tight_layout()
-    plt.show()
+        # phase/pixel space plot to verify that phases are within proper values and orders are more-or-less visible
+        bin_edges = np.linspace(-1, -0.1, 100)
+        centers = bin_edges[:-1] + np.diff(bin_edges) / 2
+        hist_array = np.zeros([sim.npix, len(bin_edges) - 1])
+        for j in detector.pixel_indices:
+            if photons_realign[j]:
+                counts, edges = np.histogram(a=photons_realign[j], bins=bin_edges)
+                hist_array[j, :] = np.array([float(x) for x in counts])
+        plt.imshow(hist_array[:, ::-1].T, extent=[1, sim.npix, -1, -0.1], aspect='auto', norm=LogNorm())
+        cbar = plt.colorbar()
+        cbar.ax.set_ylabel('Photon Count')
+        plt.title("Phase & Pixel Binning of Observed Photons")
+        plt.xlabel("Pixel Index")
+        plt.ylabel(r"Phase ($\times \pi /2$)")
+        plt.tight_layout()
+        plt.show()
 
-    """Calculations for intermediate plotting"""
-    masked_broad = [eng.optically_broaden(wave=masked_waves[i], flux=masked_blaze[i], axis=0) for i in range(nord)]
+        """Calculations for intermediate plotting"""
+        masked_broad = [eng.optically_broaden(wave=masked_waves[i], flux=masked_blaze[i], axis=0) for i in range(nord)]
 
-    """Plotting stuff only below"""
-    fig, axes = plt.subplots(2, 1, figsize=(11, 8.5))
-    axes = axes.ravel()
-    plt.suptitle(f"Intermediate plots for MKIDSpec {sim.type_spectra} simulation", fontweight='bold')
+        """Plotting stuff only below"""
+        fig, axes = plt.subplots(2, 1, figsize=(11, 8.5))
+        axes = axes.ravel()
+        plt.suptitle(f"Intermediate plots for MKIDSpec {sim.type_spectra} simulation", fontweight='bold')
 
-    # plotting bandpassed and blazed/broadened spectrum:
-    quick_plot(ax=axes[0], x=[bandpass_spectrum.waveset.to(u.nm)],
-               y=[bandpass_spectrum(bandpass_spectrum.waveset) / np.max(bandpass_spectrum(bandpass_spectrum.waveset))],
-               labels=['Incident, R~50,000'], color='r', first=True, xlim=[400, 800])
-    broad_max = np.max([np.max(masked_broad[i].value) for i in range(nord)])
-    quick_plot(ax=axes[0], x=masked_waves,
-               y=[masked_broad[i] / broad_max for i in range(nord)], color='g',
-               labels=['Blazed+Broadened, R~3500'] + ['_nolegend_' for o in spectro.orders[:-1]],
-               title="Comparison of Input (Instrument-incident) and Blazed/Opt.-Broadened Spectra (not relative)",
-               ylabel=r"Normalized Flux Density")
+        # plotting bandpassed and blazed/broadened spectrum:
+        quick_plot(ax=axes[0], x=[bandpass_spectrum.waveset.to(u.nm)],
+                   y=[bandpass_spectrum(bandpass_spectrum.waveset) / np.max(
+                       bandpass_spectrum(bandpass_spectrum.waveset))],
+                   labels=['Incident, R~50,000'], color='r', first=True, xlim=[400, 800])
+        broad_max = np.max([np.max(masked_broad[i].value) for i in range(nord)])
+        quick_plot(ax=axes[0], x=masked_waves,
+                   y=[masked_broad[i] / broad_max for i in range(nord)], color='g',
+                   labels=['Blazed+Broadened, R~3500'] + ['_nolegend_' for o in spectro.orders[:-1]],
+                   title="Comparison of Input (Instrument-incident) and Blazed/Opt.-Broadened Spectra (not relative)",
+                   ylabel=r"Normalized Flux Density")
 
-    # plotting comparison between flux-integrated spectrum and integrated/convolved spectrum, must be same,
-    # also plotting final counts FSR-binned
-    quick_plot(ax=axes[1], x=lambda_pixel, y=photons_binned[::-1], color='k', linewidth=1, linestyle='--',
-               labels=['Obs. Count to Flux'] + ['_nolegend_' for o in spectro.orders[:-1]], first=True, xlim=[400, 800])
-    quick_plot(ax=axes[1], x=lambda_pixel, y=convol_int, color='red', linewidth=1.5, alpha=0.4,
-               labels=["Post-Convol"] + ['_nolegend_' for o in range(nord - 1)], xlim=[400, 800])
-    quick_plot(ax=axes[1], x=lambda_pixel, y=blazed_int_spec, color='b', ylabel=r"Flux (phot $cm^{-2} s^{-1})$",
-               labels=["Input-integrated"] + ['_nolegend_' for o in range(nord - 1)], alpha=0.4, linewidth=1.5,
-               xlabel='Wavelength (nm)', title=r"Comparison of Input (integrated to pixel space), "
-                                               r"Post-Convolution (integrated), and Observed Photon Count (FSR-binned)")
-    fig.tight_layout()
-    plot_file = f'{args.output_dir}/{now.strftime("%y%m%d")}_{args.spectro_type}/{sim.type_spectra}.pdf'
-    fig.savefig(plot_file)
-    logging.info(msg=f'\nSaved intermediate plots to {plot_file}.')
-    plt.show()
+        # plotting comparison between flux-integrated spectrum and integrated/convolved spectrum, must be same,
+        # also plotting final counts FSR-binned
+        quick_plot(ax=axes[1], x=lambda_pixel, y=photons_binned[::-1], color='k', linewidth=1, linestyle='--',
+                   labels=['Obs. Count to Flux'] + ['_nolegend_' for o in spectro.orders[:-1]], first=True,
+                   xlim=[400, 800])
+        quick_plot(ax=axes[1], x=lambda_pixel, y=convol_int, color='red', linewidth=1.5, alpha=0.4,
+                   labels=["Post-Convol"] + ['_nolegend_' for o in range(nord - 1)], xlim=[400, 800])
+        quick_plot(ax=axes[1], x=lambda_pixel, y=blazed_int_spec, color='b', ylabel=r"Flux (phot $cm^{-2} s^{-1})$",
+                   labels=["Input-integrated"] + ['_nolegend_' for o in range(nord - 1)], alpha=0.4, linewidth=1.5,
+                   xlabel='Wavelength (nm)', title=r"Comparison of Input (integrated to pixel space), "
+                                                   r"Post-Convolution (integrated), and Observed Photon Count (FSR-binned)")
+        fig.tight_layout()
+        plot_file = f'{args.outdir}/{now.strftime("%y%m%d")}_{args.spectro_type}/{sim.type_spectra}.pdf'
+        fig.savefig(plot_file)
+        logging.info(msg=f'\nSaved intermediate plots to {plot_file}.')
+        plt.show()
 
-    # plot noise from various sources only
-    fig2, ax = plt.subplots(1, 1, figsize=(8, 4))
-    plt.suptitle(f"Noise plot for MKIDSpec {sim.type_spectra} simulation", fontweight='bold')
+        # plot noise from various sources only
+        fig2, ax = plt.subplots(1, 1, figsize=(8, 4))
+        plt.suptitle(f"Noise plot for MKIDSpec {sim.type_spectra} simulation", fontweight='bold')
 
-    quick_plot(ax=ax, x=lambda_pixel, y=broad_noise + convol_noise + observe_noise, color='b', first=True,
-               labels=["Opt.-Broadening Noise"] + ['_nolegend_' for o in spectro.orders[:-1]])
-    for i in range(nord):
-        ax.fill_between(lambda_pixel[i].value, 0, (broad_noise + convol_noise + observe_noise)[i], color='b')
-    quick_plot(ax=ax, x=lambda_pixel, y=convol_noise, color='g',
-               labels=["Convol. Noise"] + ['_nolegend_' for o in spectro.orders[:-1]])
-    for i in range(nord):
-        ax.fill_between(lambda_pixel[i].value, 0, (convol_noise + observe_noise)[i], color='g')
-    quick_plot(ax=ax, x=lambda_pixel, y=observe_noise, color='pink',
-               labels=["Observing Noise"] + ['_nolegend_' for o in spectro.orders[:-1]])
-    for i in range(nord):
-        ax.fill_between(lambda_pixel[i].value, 0, observe_noise[i], color='pink')
-    quick_plot(ax=ax, x=lambda_pixel, y=blazed_int_spec, color='k', linestyle='--', linewidth=0.5,
-               labels=["Original, Blazed"] + ['_nolegend_' for o in spectro.orders[:-1]],
-               xlabel='Wavelength (nm)', ylabel=r"Flux (phot $cm^{-2} s^{-1})$")
-    fig2.tight_layout()
-    plot_file = f'{args.output_dir}/{now.strftime("%y%m%d")}_{args.spectro_type}/{sim.type_spectra}_noiseplots.pdf'
-    fig2.savefig(plot_file)
-    logging.info(msg=f'\nSaved noise plots to {plot_file}.')
-    plt.show()
+        quick_plot(ax=ax, x=lambda_pixel, y=broad_noise + convol_noise + observe_noise, color='b', first=True,
+                   labels=["Opt.-Broadening Noise"] + ['_nolegend_' for o in spectro.orders[:-1]])
+        for i in range(nord):
+            ax.fill_between(lambda_pixel[i].value, 0, (broad_noise + convol_noise + observe_noise)[i], color='b')
+        quick_plot(ax=ax, x=lambda_pixel, y=convol_noise, color='g',
+                   labels=["Convol. Noise"] + ['_nolegend_' for o in spectro.orders[:-1]])
+        for i in range(nord):
+            ax.fill_between(lambda_pixel[i].value, 0, (convol_noise + observe_noise)[i], color='g')
+        quick_plot(ax=ax, x=lambda_pixel, y=observe_noise, color='pink',
+                   labels=["Observing Noise"] + ['_nolegend_' for o in spectro.orders[:-1]])
+        for i in range(nord):
+            ax.fill_between(lambda_pixel[i].value, 0, observe_noise[i], color='pink')
+        quick_plot(ax=ax, x=lambda_pixel, y=blazed_int_spec, color='k', linestyle='--', linewidth=0.5,
+                   labels=["Original, Blazed"] + ['_nolegend_' for o in spectro.orders[:-1]],
+                   xlabel='Wavelength (nm)', ylabel=r"Flux (phot $cm^{-2} s^{-1})$")
+        fig2.tight_layout()
+        plot_file = f'{args.outdir}/{now.strftime("%y%m%d")}_{args.spectro_type}/{sim.type_spectra}_noiseplots.pdf'
+        fig2.savefig(plot_file)
+        logging.info(msg=f'\nSaved noise plots to {plot_file}.')
+        plt.show()
