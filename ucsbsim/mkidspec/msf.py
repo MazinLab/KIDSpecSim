@@ -28,7 +28,7 @@ class MKIDSpreadFunction:
             self.cov_matrix = cov_matrix
             self.waves = waves
             self.sim_settings = sim_settings
-            nord = self.sim_settings.m_max - self.sim_settings.m0 + 1
+            nord = self.sim_settings.order_range[1] - self.sim_settings.order_range[0] + 1
             assert self.waves.shape[0] == nord, 'Wavelengths/phases do not have the correct number of orders.'
             assert self.cov_matrix.shape[0] == nord, \
                 "Covariance matrix doesn't have the correct number of orders."
