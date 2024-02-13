@@ -65,13 +65,13 @@ if __name__ == '__main__':
                              'Will only be used for folder naming convention.')
     parser.add_argument('-ef', '--emission_file', default=None,
                         help='Directory/filename of NIST emission line spectrum, REQUIRED if spectra is "emission".')
-    parser.add_argument('-dist', type=float, default=2.64,  # Sirius A, brightest star in the night sky
+    parser.add_argument('-dist', type=float, default=5,  # Sirius A, brightest star in the night sky
                         help='Distance to target star in parsecs, REQUIRED if spectra is "phoenix".')
-    parser.add_argument('-rad', default=1.711, type=float,  # Sirius A, brightest star in the night sky
+    parser.add_argument('-rad', default=1, type=float,
                         help='Radius of target star in R_sun, REQUIRED if spectra is "phoenix".')
-    parser.add_argument('-T', default=9940, type=float,  # Sirius A, brightest star in the night sky
+    parser.add_argument('-T', default=4000, type=float,
                         help='Temperature of target in K, REQUIRED if spectra is "blackbody" or "phoenix".')
-    parser.add_argument('-et', '--exptime', default=50, type=float,
+    parser.add_argument('-et', '--exptime', default=250, type=float,
                         help='The total exposure time of the observation in seconds.')
     parser.add_argument('--telearea', default=np.pi * 4 ** 2, type=float, help='The telescope area in cm2.')
     parser.add_argument('--simpconvol', action='store_true', default=False,
