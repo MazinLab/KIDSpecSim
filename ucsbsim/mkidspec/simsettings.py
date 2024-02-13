@@ -84,11 +84,16 @@ class SpecSimSettings:
         self.phaseoffset_file = phaseoffset_file
         self.type_spectra = type_spectra
         self.emission_file = emission_file
-        self.exptime = float(exptime_s)*u.s if not isinstance(exptime_s, u.Quantity) else exptime_s
-        self.telearea = float(telearea_cm2)*u.cm**2 if not isinstance(telearea_cm2, u.Quantity) else telearea_cm2
-        self.distance = float(distance_ps) * u.parsec if not isinstance(distance_ps, u.Quantity) else distance_ps
-        self.radius = float(radius_Rsun) * R_sun
-        self.temp = float(temp_K)
+        if exptime_s is not None:
+            self.exptime = float(exptime_s)*u.s if not isinstance(exptime_s, u.Quantity) else exptime_s
+        if telearea_cm2 is not None:
+            self.telearea = float(telearea_cm2)*u.cm**2 if not isinstance(telearea_cm2, u.Quantity) else telearea_cm2
+        if distance_ps is not None:
+            self.distance = float(distance_ps) * u.parsec if not isinstance(distance_ps, u.Quantity) else distance_ps
+        if radius_Rsun is not None:
+            self.radius = float(radius_Rsun) * R_sun
+        if temp_K is not None:
+            self.temp = float(temp_K)
         self.on_sky = on_sky
         self.simpconvol = simpconvol
 
