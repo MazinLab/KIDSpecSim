@@ -426,7 +426,7 @@ class SpectrographSetup:
 # TODO following needs to be updated
 def plot_echellogram(spec, center_orders=True, title='', blaze=False):
     import matplotlib.pyplot as plt
-    w = spec.pixel_center_wavelengths()
+    w = spec.pixel_wavelengths()
     b = spec.blaze(w)
 
     fig, axes = plt.subplots(2 + int(blaze), 1, figsize=(6, 10 + 4 * int(blaze)))
@@ -458,3 +458,12 @@ def plot_echellogram(spec, center_orders=True, title='', blaze=False):
         plt.ylabel('Blaze')
     plt.tight_layout()
     plt.show()
+
+
+GRATING_CATALOG = np.loadtxt('newport_masters.txt', delimiter=',',
+                             dtype=[('name', 'U10'), ('l', 'f4'), ('blaze', 'f4'),
+                                    ('width', 'f4'), ('height', 'f4'), ('stock', 'U10')])
+GRATING_CATALOG['l'] = 1e6/GRATING_CATALOG['l']
+
+NEWPORT_GRATINGS = {x['name']: GratingSetup(None, x['blaze']*u.deg, x['l']* u.nm) for x in GRATING_CATALOG}
+
