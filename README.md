@@ -1,21 +1,19 @@
-# The MKID Spectrometer Simulation Series
-
+# The MKID Spectrometer Simulation and Pipeline
 ### Introduction
 
-**New changes in code are not reflected in this guide at the moment.**
-
-This package comprises three main scripts (and their supporting modules) that may act in series or separately:
-1) script_simulate.py reduces a model spectrum to a photon table similar to how the MKID spectrometer will.
-In the command line arguments, essentially all spectrograph properties may be tailored.
-The option to generate a calibration spectrum is much like an on-sky source minus the atmospheric and telescopic
-bandpasses.
-2) script_msf.py loads either a real or simulated calibration photon table (specific file syntax is used) and extracts
-the MKID Spread Function (MSF) from it via non-linear least-squares fitting. The intersections between these fitted
-Gaussian functions defines the bin edges for the orders. The covariance matrix defines what fraction of each 
-order Gaussian may be part of another order, and thus will be used to generate the error band on an extracted spectrum.
-4) script_extract.py loads either a real or simulated observation photon table and applies
-the MSF products to it to extract an output spectrum which has been order-sorted, unblazed, and has an error band
-on the counts.
+This package comprises 2 scripts:
+1) simulate.py reduces a model spectrum to a photon table in a simulated optical path.
+In the command line arguments, essentially all spectrograph and observation properties may be tailored.
+2) mkidspec.py loads 3 photon tables, one each of a flat-field or known blackbody, emission lamp,
+   and observed star.
+     a. MSF: The flat-field or known blackbody photon table is separated into pixels and is formatted
+        as histograms. Gaussian models are fit to the orders. The virtual pixel boundaries are extracted
+        from these. The covariance among orders is calculated. These various properties make up the
+        MKID Spread Function.
+     b. Order-sorting: The other 2 photon tables (emission lamp and observed star) are sorted using the
+        MSF from the previous step.
+     c. Wavecal: The sorted emission lamp spectrum is compared to its atlas to determine the wavecal solution.
+     d. Extraction: The observed star is updated with the wavecal solution and extraction is complete.
 
 ### Tutorial on running a sample simulation to extraction sequence:
 
@@ -35,40 +33,26 @@ In a command line terminal in the folder where KIDSpecSim lives, run the followi
 This sets up the Cython files needed to use some of the modules. 
 
 #### Spectrum simulation steps:
-Now that everything is ready, run the following calibration settings with desired path and R0s file name:
+Now that everything is ready, run the following to obtain a flat-field photon table:
 
-`python script_simulate.py 'path/to/cal_outdir' 'path/to/R0s_file.csv' 'blackbody' -fb`
+`python simulate.py flat -et 20`
 
-Note: If there is no R0s_file, one will be created mid-script with the given file name 
-(it's not a problem to not have one), so ensure proper syntax is used if you have one.
-This creates a blackbody calibration spectrum. A plot will show and save to file so you can 
-verify that the simulation is functioning properly.
+Run the following to obtain a HgAr lamp photon table:
 
-Now, run the following observation settings with desired path and R0s file name:
+`python scripts/simulate.py emission -ef mkidspec/linelists/hgar.csv`
 
-`python script_simulate.py 'path/to/obs_outdir' 'path/to/R0s_file.csv' 'phoenix' -ab -fb -tb`
+Run the following to obtain a Phoenix star model photon table:
 
-This creates a Phoenix model observation spectrum.
+`python simulate.py phoenix --on_sky -et 20`
 
-#### MKID Spread Function steps:
-Run the following MSF extraction settings, making sure to use the **calibration** file generated above:
+Move all generated .h5 files into ucsbsim/mkidspec/testfiles.
+(These test files are too large to be uploaded to Git and be ready to use.)
 
-`python script_msf.py 'path/to/msf_outdir' 'path/to/cal_outdir/calibration_photontable.h5'`
+Now to recover the Phoenix star spectrum, run:
 
-This generates the MSF products for use in spectrum extraction.
-A few comprehensive plots will show and save so you can verify the goodness of fit.
+`python scripts/mkidspec.py --plot`
 
-#### Spectrum extraction steps:
-Run the following extraction settings:
+You may omit the '--plot' if you do not wish to view intermediate plots.
 
-`python script_extract.py 'path/to/some_outdir' 'path/to/msf_outdir/msf_file.npz' 'path/to/obs_outdir/observation_photontable.h5'`
-
-Save and run file. This generates the extracted spectrum with error band.
-
-### Changing settings according to preference:
-
-Different types of spectra can be simulated, but functional support for anything other than a blackbody or phoenix spectrum is missing.
-Spectrograph properties may be easily changed by supplying arguments in the command line. 
-Type `python script_simulate.py --help` in the same directory for descriptions.
-The key is to ensure all files are created/present before running next steps. 
-Some generated files have naming schemes and directories that should be followed strictly.
+View the documentation for the script arguments to see the different configurations and
+how to skip certain steps.
