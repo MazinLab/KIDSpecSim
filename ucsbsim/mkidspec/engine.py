@@ -130,11 +130,11 @@ def draw_photons(convol_wave,
     total_photons = cdf[-1, :]
 
     # putting Poisson draw after limiting because MKID saturation rate
-    if total_photons.value.max() / exptime.value > 4000:  # max 5000 counts per pixel per second
-        total_photons_ltd = (total_photons.value / total_photons.value.max() * 4000 * exptime.value).astype(int)
+    if total_photons.value.max() / exptime.value > 1000:  # max 1000 counts per pixel per second
+        total_photons_ltd = (total_photons.value / total_photons.value.max() * 1000 * exptime.value).astype(int)
         N = np.random.poisson(total_photons_ltd)
         # Now assume that you want N photons as a Poisson random number for each pixel
-        logging.info(f'\tLimited to 4000 photons per pixel per second. Consider reducing flux somehow.')
+        logging.info(f'\tLimited to 1000 photons per pixel per second.')
     else:
         N = np.random.poisson(total_photons.value.astype(int))
         total_photons_ltd = total_photons.value
