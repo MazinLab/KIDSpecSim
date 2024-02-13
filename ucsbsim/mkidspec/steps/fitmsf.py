@@ -17,13 +17,13 @@ import os
 from lmfit import Parameters, minimize
 
 from mkidpipeline.photontable import Photontable
-from ucsbsim.spectra import get_spectrum, apply_bandpass, clip_spectrum, FineGrid
-import ucsbsim.engine as engine
-from ucsbsim.mkid import MKIDSpreadFunction
-from ucsbsim.spectrograph import GratingSetup, SpectrographSetup
-from ucsbsim.detector import MKIDDetector, wave_to_phase
-from ucsbsim.plotting import quick_plot
-import ucsbsim.mkidspec.general as gen
+from ucsbsim.mkidspec.spectra import get_spectrum, apply_bandpass, clip_spectrum, FineGrid
+import ucsbsim.mkidspec.engine as engine
+from ucsbsim.mkidspec.msf import MKIDSpreadFunction
+from ucsbsim.mkidspec.spectrograph import GratingSetup, SpectrographSetup
+from ucsbsim.mkidspec.detector import MKIDDetector, wave_to_phase
+from ucsbsim.mkidspec.plotting import quick_plot
+import ucsbsim.mkidspec.utils.general as gen
 
 """
 Development of the MKID Spread Function (MSF) from a calibration (flat-field or known blackbody) spectrum.
@@ -350,17 +350,17 @@ def fit_func(
         return residual
 
 
-def extract_params(params, n_ord, degree=2):
+def extract_params(params, nord, degree=2):
     """
     :param params: Parameter object
-    :param n_ord: number of orders
+    :param nord: number of orders
     :param degree: the polynomial degree
     :return: the extracted parameters
     """
     phi_0 = params[f'phi_0'].value
     e_coefs = np.array([params[f'e{c}'].value for c in range(1, degree + 1)])
     s_coefs = np.array([params[f's{c}'].value for c in range(degree + 1)])
-    amps = np.array([params[f'O{i}_amp'].value for i in range(n_ord)])
+    amps = np.array([params[f'O{i}_amp'].value for i in range(nord)])
 
     return phi_0, e_coefs, s_coefs, amps
 
@@ -446,7 +446,7 @@ def fitmsf(
     )
     grating = GratingSetup(alpha=sim.alpha, delta=sim.delta, beta_center=sim.beta, groove_length=sim.groove_length)
     spectro = SpectrographSetup(
-        order_range=(sim.m0, sim.m_max),
+        order_range=sim.order_range,
         final_wave=sim.l0,
         pixels_per_res_elem=sim.pixels_per_res_elem,
         focal_length=sim.focallength,
@@ -504,8 +504,10 @@ def fitmsf(
     full_pix = []
     opt_param_all = []
 
-    redchi_val = 10  # TODO remove after debug
+    redchi_val = 0  # TODO remove after debug
     snr = 3
+    xtol = 1e-4
+    pixels = range(100,200)
 
     leg_e = Legendre(coef=(0, 0, 0), domain=np.array(bin_range))
 
@@ -551,7 +553,7 @@ def fitmsf(
                 missing_ord = [0]
             elif 1680 < p < 1800 and len(peaks_sort) == 3:
                 # weird zone with flip flop between order 4 and 5
-                peaks, _ = scipy.signal.find_peaks(bin_counts[:, p], distance=int(0.25 * n_bins), height=snr2)
+                peaks, _ = scipy.signal.find_peaks(bin_counts[:, p], distance=int(0.25 * n_bins), height=snr**2)
                 idx = np.argsort(bin_counts[peaks, p])[::-1]
                 peaks_sort = np.sort(peaks[idx])
                 peaks_nord = np.array([
@@ -602,7 +604,8 @@ def fitmsf(
                 2,  # degree
                 False,  # plot
             ),
-            nan_policy='omit'
+            nan_policy='omit',
+            xtol=xtol
         )
 
         opt_param_all.append(opt_params)
