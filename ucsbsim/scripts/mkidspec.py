@@ -29,8 +29,8 @@ def parse():
     parser = argparse.ArgumentParser(description='MKID Spectrograph Data Reduction')
 
     # optional script args:
-    parser.add_argument('--outdir', default='../testfiles/outdir', type=str, help='Directory for the output files.')
-    parser.add_argument('--plot', action='store_true', default=False, type=bool,
+    parser.add_argument('--outdir', default='../mkidspec/testfiles/outdir', type=str, help='Directory for the output files.')
+    parser.add_argument('--plot', action='store_true', default=False,
                         help='If passed, indicates that intermediate plots will be shown.')
     parser.add_argument('--resid_map', default=np.arange(2048, dtype=int) * 10 + 100,
                         help='Resonator IDs for the array.')
@@ -49,8 +49,7 @@ def parse():
     parser.add_argument('--nsig', default=3, type=float,
                         help='The number of sigma to use for Gaussian during convolution.')
     parser.add_argument('--alpha', default=28.3, type=float, help='Angle of incidence on the grating in degrees.')
-    parser.add_argument('--beta', default='littrow', type=float,
-                        help='Reflectance angle at the central pixel in degrees.'
+    parser.add_argument('--beta', default='littrow', help='Reflectance angle at the central pixel in degrees.'
                              'Can be a number or "littrow" to be equal to alpha.')
     parser.add_argument('--delta', default=63, type=float, help='Blaze angle in degrees.')
     parser.add_argument('-d', '--groove_length', default=((1 / 316) * u.mm).to(u.nm).value, type=float,
@@ -62,7 +61,7 @@ def parse():
     parser.add_argument('--focallength', default=300, type=float, help='The focal length of the detector in mm.')
 
     # optional MSF args:
-    parser.add_argument('--msf', default='../testfiles/flat.h5', type=str,
+    parser.add_argument('--msf', default='../mkidspec/testfiles/flat.h5', type=str,
                         help='Directory/name of the flat/blackbody spectrum photon table .h5 file OR'
                              'Directory/name of the complete MKID Spread Function .npz file.'
                              'Pass "False" to disable this step.')
@@ -70,7 +69,7 @@ def parse():
                         help='Start and stop of range for phase histogram.')
 
     # optional wavecal args:
-    parser.add_argument('--wavecal', default='../testfiles/emission.h5', type=str,
+    parser.add_argument('--wavecal', default='../mkidspec/testfiles/emission.h5', type=str,
                         help='Directory/name of the emission lamp spectrum photon table .h5 file OR'
                              'Directory/name of the order-sorted emission lamp spectrum FITS file OR'
                              'Directory/name of the complete wavelength calibration solution .npz file.'
@@ -82,7 +81,7 @@ def parse():
     parser.add_argument('--degree', default=4, type=int, help="Polynomial degree to use in wavecal.")
     parser.add_argument('--iters', default=5, type=int,
                         help="Number of iterations to loop through for identifying and discarding lines.")
-    parser.add_argument('--manual_fit', action='store_true', default=False, type=bool,
+    parser.add_argument('--manual_fit', action='store_true', default=False,
                         help="If passed, indicates user should click plot to align observation and linelist.")
     parser.add_argument('--resid_max', default=85e3, type=float,
                         help="Maximum residual allowed between fit wavelength and atlas in m/s. (float)")
@@ -93,7 +92,7 @@ def parse():
                         help="Return a '1D' (pixel direction) or '2D' (pixel+order directions) fitting solution.")
 
     # optional observation args:
-    parser.add_argument('--extract', default='../testfiles/phoenix.h5', type=str,
+    parser.add_argument('--extract', default='../mkidspec/testfiles/phoenix.h5', type=str,
                         help='Directory/name of the on-sky observation spectrum photon table .h5 file OR'
                              'Directory/name of the order-sorted observation spectrum FITS file.'
                              'Pass "False" to disable this step.')
@@ -107,9 +106,9 @@ if __name__ == "__main__":
 
     args = parse()
 
-    os.makedirs(name=f'{args.outdir}', exist_ok=True)
+    os.makedirs(name=f'{args.outdir}/logging', exist_ok=True)
 
-    logging.basicConfig(filename=f'{args.outdir}/mkidspec_{now.strftime("%Y%m%d_%H%M%S")}.log',
+    logging.basicConfig(filename=f'{args.outdir}/logging/mkidspec_{now.strftime("%Y%m%d_%H%M%S")}.log',
                         format='%(levelname)s:%(message)s', level=logging.INFO)
 
     # packing up the simulation values into a class
@@ -117,7 +116,7 @@ if __name__ == "__main__":
         minwave_nm=args.minw,
         maxwave_nm=args.maxw,
         npix=args.npix,
-        pixelsize_um=args.pixelsize,
+        pixelsize_um=args.pixsize,
         designR0=args.R0,
         l0_nm=args.l0,
         alpha_deg=args.alpha,
@@ -125,7 +124,7 @@ if __name__ == "__main__":
         beta_deg=args.beta,
         groove_length_nm=args.groove_length,
         m0=args.m0,
-        m_max=args.mmax,
+        m_max=args.m_max,
         pixels_per_res_elem=args.pixels_per_res_elem,
         focallength_mm=args.focallength
     )
@@ -211,3 +210,5 @@ if __name__ == "__main__":
                 wavecal_file=wavecal_file,
                 plot=args.plot
             )
+
+    print('')
