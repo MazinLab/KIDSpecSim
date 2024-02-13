@@ -9,13 +9,13 @@ from astropy.io import fits
 from astropy.table import Table
 import os
 
-from ucsbsim.spectrograph import GratingSetup, SpectrographSetup
-from ucsbsim.detector import MKIDDetector, wave_to_phase
-import ucsbsim.engine as engine
-from ucsbsim.plotting import quick_plot
+from ucsbsim.mkidspec.spectrograph import GratingSetup, SpectrographSetup
+from ucsbsim.mkidspec.detector import MKIDDetector, wave_to_phase
+import ucsbsim.mkidspec.engine as engine
+from ucsbsim.mkidspec.plotting import quick_plot
 from synphot.models import BlackBodyNorm1D, ConstFlux1D
 from synphot import SourceSpectrum
-from ucsbsim.msf import MKIDSpreadFunction
+from ucsbsim.mkidspec.msf import MKIDSpreadFunction
 from mkidpipeline.photontable import Photontable
 
 """
@@ -40,7 +40,7 @@ def ordersort(
 
     msf = MKIDSpreadFunction(filename=msf_file)
     sim = msf.sim_settings.item()
-    logging.info(f'Obtained MKID Spread Function from {args.msf_file}.')
+    logging.info(f'Obtained MKID Spread Function from {msf_file}.')
 
     # INSTANTIATE SPECTROGRAPH & DETECTOR:
     detector = MKIDDetector(
@@ -52,7 +52,7 @@ def ordersort(
     )
     grating = GratingSetup(alpha=sim.alpha, delta=sim.delta, beta_center=sim.beta, groove_length=sim.groove_length)
     spectro = SpectrographSetup(
-        order_range=(sim.m0, sim.m_max),
+        order_range=sim.order_range,
         final_wave=sim.l0,
         pixels_per_res_elem=sim.pixels_per_res_elem,
         focal_length=sim.focallength,
