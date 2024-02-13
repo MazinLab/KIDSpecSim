@@ -1,20 +1,27 @@
 import numpy as np
 import scipy.interpolate as interp
-import scipy
-from scipy.signal import oaconvolve, find_peaks, gaussian, correlate
+from scipy.signal import oaconvolve, find_peaks, gaussian
 import scipy.ndimage as ndi
 from scipy.constants import h, c
 import astropy.units as u
 import matplotlib.pyplot as plt
 import logging
 
-from . import sortarray
-from .plotting import quick_plot
+from ucsbsim import sortarray
+from ucsbsim.mkidspec.plotting import quick_plot
+from mkidpipeline.photontable import Photontable
 from lmfit import Parameters, minimize
-from mkidpipeline import photontable as pt
 
 u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # photon flux per wavelength
 SIG2WID = 2 * np.sqrt(np.log(2))
+
+
+def sorted_table(table: Photontable, resid_map):
+    # SORT PHOTONS BY RESID:
+    phases = table.query(column='wavelength')
+    resID = table.query(column='resID')
+    idx = [np.where(resID == j) for j in resid_map]
+    return [phases[j].tolist() for j in idx]  # list of photons in each pixel
 
 
 def nearest_index(array, value):
@@ -97,7 +104,6 @@ def _determine_apodization(x, pixel_samples_frac, pixel_max_npoints):
 
 def draw_photons(convol_wave,
                  convol_result,
-                 limit_to: int = 1000,
                  area: u.Quantity = np.pi * (4 * u.cm) ** 2,
                  exptime: u.Quantity = 1 * u.s
                  ):
@@ -106,7 +112,6 @@ def draw_photons(convol_wave,
     :param convol_result: convolution array
     :param area: surface area of the telescope
     :param exptime: exposure time of the observation
-    :param limit_to: photons-per-pixel limit to prevent time-consuming simulation
     :return: the arrival times and randomly chosen wavelengths from CDF
     """
     # Now, compute the CDF from dNdE and set up an interpolating function
@@ -124,16 +129,16 @@ def draw_photons(convol_wave,
     cdf = cdf.decompose()  # todo this is a slopy copy, decomposes units into photons
     total_photons = cdf[-1, :]
 
-    # putting Poisson draw after limiting because time-consuming
-    if total_photons.value.max() / exptime.value > limit_to:
-        total_photons_ltd = (total_photons.value / total_photons.value.max() * limit_to * exptime.value).astype(int)
+    # putting Poisson draw after limiting because MKID saturation rate
+    if total_photons.value.max() / exptime.value > 1000:  # max 1000 counts per pixel per second
+        total_photons_ltd = (total_photons.value / total_photons.value.max() * 1000 * exptime.value).astype(int)
         N = np.random.poisson(total_photons_ltd)
         # Now assume that you want N photons as a Poisson random number for each pixel
-        logging.info(f'\tLimited to {limit_to} photons per pixel per second.')
+        logging.info(f'\tLimited to 1000 photons per pixel per second.')
     else:
         N = np.random.poisson(total_photons.value.astype(int))
         total_photons_ltd = total_photons.value
-        logging.info(f'\tMax # of photons per second in any pixel: {N.max() / exptime.value}.')
+        logging.info(f'\tMax photons per pixel per second: {N.max() / exptime.value}.')
 
     reduce_factor = total_photons.value / total_photons_ltd
     cdf /= total_photons
@@ -157,7 +162,7 @@ def n_bins(n_data: int, method: str = 'rice'):
     :return: best number of bins based on various algorithms
     """
     if method == 'rice':
-        return int(4 * n_data ** (1 / 3))
+        return int(4 * n_data ** (1 / 3))  # multiplied by 2 because sparsest pixel likely only has 2 peaks (need 4)
     else:
         raise ValueError(f'Method {method} not supported.')
 
@@ -429,7 +434,7 @@ class Engine:
             leftedge = np.nan_to_num(leftedge)
         flux_int = interp.InterpolatedUnivariateSpline(array_wave, array, k=1, ext=1)
         integrated = [flux_int.integral(leftedge[j], leftedge[j + 1])
-                      for j in range(self.spectrograph.detector.n_pixels - 1)]
+                      for j in self.spectrograph.detector.pixel_indices[:-1]]
         last = [flux_int.integral(leftedge[-1], leftedge[-1] + (leftedge[-1] - leftedge[-2]))]
         return integrated + last
 
