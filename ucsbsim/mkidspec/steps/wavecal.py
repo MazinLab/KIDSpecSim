@@ -13,8 +13,8 @@ import argparse
 from astropy import units as u
 import scipy.interpolate as interp
 
-from ucsbsim.spectrograph import SpectrographSetup
-from ucsbsim.spectra import EmissionModel
+from ucsbsim.mkidspec.spectrograph import SpectrographSetup
+from ucsbsim.mkidspec.spectra import EmissionModel
 
 sys.path.insert(1, '/home/kimc/pycharm/PyReduce/pyreduce')
 from wavelength_calibration import WavelengthCalibration, WavelengthCalibrationInitialize, LineList
@@ -24,8 +24,6 @@ Emission line wavelength calibration. The steps are:
 -Load the emission line photon table
 -
 """  # TODO
-
-sys.path.insert(1, '/home/kimc/pycharm/KIDSpecSim/ucsbsim')
 
 def wavecal(
         wavecal_fits,
@@ -54,14 +52,15 @@ def wavecal(
     obs_flux = np.array([np.array(spectrum[1].data[n]) for n, i in enumerate(orders)])
     obs_wave = np.array([np.array(spectrum[4].data[n]) for n, i in enumerate(orders)])
 
-    if not os.path.exists(f'/home/kimc/pycharm/PyReduce/pyreduce/wavecal/atlas/{elem}_list.txt'):
-        # open entire line list:
-        file = pd.read_csv(f'/mkidspec/linelists/{elem}.csv', delimiter=',')
-        line_wave = np.array([float(i[2:-1]) * 10 for i in file['obs_wl_air(nm)']])  # nm to Angstrom
-        line_flux = np.array([float(i[2:-1]) for i in file['intens']])
+    # open entire line list:
+    file = pd.read_csv(f'/home/kimc/pycharm/KIDSpecSim/ucsbsim/mkidspec/linelists/{elem}.csv', delimiter=',')
+    line_wave = np.array([float(i[2:-1]) * 10 for i in file['obs_wl_air(nm)']])  # nm to Angstrom
+    line_flux = np.array([float(i[2:-1]) for i in file['intens']])
 
+    if not os.path.exists(f'/home/kimc/pycharm/PyReduce/pyreduce/wavecal/atlas/{elem}_list.txt'):
         # this is the theoretical reference line spectrum:
-        theo_lines = EmissionModel(f'/mkidspec/linelists/{elem}.csv', minwave=minw, maxwave=maxw ,target_R=1000000)
+        theo_lines = EmissionModel(f'mkidspec/linelists/{elem}.csv',
+                                   minwave=minw, maxwave=maxw, target_R=1000000)
         col1 = fits.Column(name='wave', format='E', array=theo_lines.waveset.value)
         col2 = fits.Column(name='spec', format='E', array=theo_lines(theo_lines.waveset).value)
         cols = fits.ColDefs([col1, col2])
@@ -132,7 +131,7 @@ def wavecal(
         element=elem,
         medium="vac",  # use vac if the linelist provided is in 'air' already, air will convert
         plot=plot,
-        plot_title=f'{degree}D Poly./{args.resid_max:.0e} Max Resid./Element: {args.elem.capitalize()}'
+        plot_title=f'{degree}D Poly./{resid_max:.0e} Max Resid./Element: {elem.capitalize()}'
     )
     # combines the orders and returns 2D solution
     wave_result, coef, residuals, fit_lines = module.execute(obs_flux, linelist)
