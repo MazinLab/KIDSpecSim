@@ -27,7 +27,7 @@ def extract(
     wavecal = wavecal_file['wave_result']
     orders = wavecal_file['orders']
 
-    spectrum = fits.open(f'/home/kimc/pycharm/KIDSpecSim/ucsbsim/{obs_fits}', mode='update')
+    spectrum = fits.open(f'{obs_fits}', mode='update')
     obs_flux = np.array([np.array(spectrum[1].data[n]) for n, i in enumerate(orders)])
     guess_wave = np.array([np.array(spectrum[4].data[n]) for n, i in enumerate(orders)])
     hdu_list = fits.HDUList([spectrum[0],
