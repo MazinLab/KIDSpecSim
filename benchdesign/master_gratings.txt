@@ -1,0 +1,282 @@
+Grating 454E
+  a=20.0 deg m=12-24
+     % coverage: 1.00
+     R800 18.7
+     System R: 4375
+     Blaze %: 0.00 O(%)=-3.6
+Grating 408E
+  a=20.0 deg m=11-22
+     % coverage: 1.00
+     R800 17.2
+     System R: 4375
+     Blaze %: 0.00 O(%)=-3.6
+Grating 401E
+  a=20.0 deg m=11-22
+     % coverage: 1.00
+     R800 17.2
+     System R: 4375
+     Blaze %: 0.00 O(%)=-3.6
+Grating 402E
+  a=20.0 deg m=11-22
+     % coverage: 1.00
+     R800 17.2
+     System R: 4375
+     Blaze %: 0.00 O(%)=-3.3
+Grating 406E
+  a=20.0 deg m=10-20
+     % coverage: 1.00
+     R800 15.9
+     System R: 4375
+     Blaze %: 0.00 O(%)=-3.1
+Grating 127E
+  a=20.0 deg m=10-20
+     % coverage: 1.00
+     R800 15.7
+     System R: 4375
+     Blaze %: 0.00 O(%)=-3.5
+Grating 291E
+  a=20.0 deg m=9-19
+     % coverage: 1.00
+     R800 15.1
+     System R: 4375
+     Blaze %: 0.00 O(%)=-3.5
+Grating 488E
+  a=20.0 deg m=9-18
+     % coverage: 1.00
+     R800 14.6
+     System R: 4375
+     Blaze %: 0.00 O(%)=-3.4
+  a=26.0 deg m=12-23
+     % coverage: 1.00
+     R800 17.8
+     System R: 5862
+     Blaze %: 0.00 O(%)=-3.1
+Grating 304E
+  a=20.0 deg m=9-18
+     % coverage: 1.00
+     R800 14.2
+     System R: 4375
+     Blaze %: 0.00 O(%)=-3.5
+  a=29.0 deg m=12-25
+     % coverage: 1.00
+     R800 19.1
+     System R: 6663
+     Blaze %: 0.00 O(%)=-3.2
+Grating 403E
+  a=20.0 deg m=9-17
+     % coverage: 1.00
+     R800 14.0
+     System R: 4375
+     Blaze %: 0.00 O(%)=-3.4
+  a=30.8 deg m=13-26
+     % coverage: 1.00
+     R800 19.6
+     System R: 7151
+     Blaze %: 0.00 O(%)=-3.2
+Grating 002E
+  a=20.0 deg m=8-17
+     % coverage: 1.00
+     R800 13.7
+     System R: 4375
+     Blaze %: 0.00 O(%)=-3.3
+  a=26.2 deg m=11-22
+     % coverage: 1.00
+     R800 16.8
+     System R: 5928
+     Blaze %: 0.00 O(%)=-3.1
+  a=32.5 deg m=13-26
+     % coverage: 1.00
+     R800 19.9
+     System R: 7657
+     Blaze %: 0.00 O(%)=-2.7
+Grating 121E
+  a=20.0 deg m=8-16
+     % coverage: 1.00
+     R800 12.7
+     System R: 4375
+     Blaze %: 0.00 O(%)=-3.3
+  a=31.0 deg m=12-23
+     % coverage: 1.00
+     R800 17.8
+     System R: 7222
+     Blaze %: 0.00 O(%)=-3.1
+Grating 071E
+  a=20.0 deg m=8-15
+     % coverage: 1.00
+     R800 12.4
+     System R: 4375
+     Blaze %: 0.00 O(%)=-2.7
+  a=34.8 deg m=13-25
+     % coverage: 1.00
+     R800 18.9
+     System R: 8338
+     Blaze %: 0.00 O(%)=-2.6
+Grating 084E
+  a=20.0 deg m=7-14
+     % coverage: 1.00
+     R800 12.0
+     System R: 4375
+     Blaze %: 0.00 O(%)=-2.6
+  a=34.8 deg m=12-24
+     % coverage: 1.00
+     R800 18.2
+     System R: 8338
+     Blaze %: 0.00 O(%)=-2.5
+Grating 187E
+  a=20.0 deg m=7-14
+     % coverage: 1.00
+     R800 11.4
+     System R: 4375
+     Blaze %: 0.00 O(%)=-3.1
+  a=31.5 deg m=10-21
+     % coverage: 1.00
+     R800 16.1
+     System R: 7366
+     Blaze %: 0.00 O(%)=-2.9
+Grating 141E
+  a=20.0 deg m=5-11
+     % coverage: 0.97
+     R800 9.6
+     System R: 4375
+     Blaze %: 0.00 O(%)=-2.6
+  a=34.0 deg m=9-18
+     % coverage: 0.98
+     R800 14.0
+     System R: 8107
+     Blaze %: 0.00 O(%)=-2.4
+  a=48.0 deg m=12-24
+     % coverage: 0.90
+     R800 17.8
+     System R: 13349
+     Blaze %: 0.01 O(%)=-2.2
+Grating 404E
+  a=20.0 deg m=5-11
+     % coverage: 0.97
+     R800 9.4
+     System R: 4375
+     Blaze %: 0.00 O(%)=-3.0
+  a=30.8 deg m=8-16
+     % coverage: 0.98
+     R800 12.8
+     System R: 7151
+     Blaze %: 0.00 O(%)=-2.7
+  a=41.5 deg m=10-21
+     % coverage: 0.91
+     R800 15.9
+     System R: 10634
+     Blaze %: 0.00 O(%)=-2.4
+  a=52.2 deg m=12-25
+     % coverage: 0.80
+     R800 18.5
+     System R: 15524
+     Blaze %: 0.02 O(%)=-1.8
+Grating 405E
+  a=20.0 deg m=5-11
+     % coverage: 0.97
+     R800 9.4
+     System R: 4375
+     Blaze %: 0.00 O(%)=-2.8
+  a=32.5 deg m=8-17
+     % coverage: 0.95
+     R800 13.4
+     System R: 7657
+     Blaze %: 0.00 O(%)=-2.6
+  a=45.0 deg m=11-22
+     % coverage: 0.90
+     R800 16.8
+     System R: 12020
+     Blaze %: 0.01 O(%)=-2.3
+  a=57.5 deg m=13-27
+     % coverage: 0.73
+     R800 19.5
+     System R: 18867
+     Blaze %: 0.02 O(%)=-1.7
+Grating 420E
+  a=20.0 deg m=5-10
+     % coverage: 0.97
+     R800 8.7
+     System R: 4375
+     Blaze %: 0.00 O(%)=-2.4
+  a=34.5 deg m=8-16
+     % coverage: 0.92
+     R800 12.9
+     System R: 8261
+     Blaze %: 0.01 O(%)=-2.3
+  a=49.0 deg m=11-22
+     % coverage: 0.83
+     R800 16.4
+     System R: 13827
+     Blaze %: 0.01 O(%)=-1.9
+  a=63.5 deg m=13-26
+     % coverage: 0.56
+     R800 19.0
+     System R: 24108
+     Blaze %: 0.03 O(%)=-1.5
+Grating 149E
+  a=20.0 deg m=5-9
+     % coverage: 0.98
+     R800 8.3
+     System R: 4375
+     Blaze %: 0.00 O(%)=-2.7
+  a=25.4 deg m=6-12
+     % coverage: 0.95
+     R800 9.9
+     System R: 5720
+     Blaze %: 0.00 O(%)=-2.5
+  a=30.9 deg m=7-14
+     % coverage: 0.92
+     R800 11.4
+     System R: 7194
+     Blaze %: 0.01 O(%)=-2.2
+  a=36.3 deg m=8-16
+     % coverage: 0.89
+     R800 12.9
+     System R: 8846
+     Blaze %: 0.03 O(%)=-1.6
+  a=41.8 deg m=9-19
+     % coverage: 0.85
+     R800 14.2
+     System R: 10747
+     Blaze %: 0.79 O(%)=-0.1
+Grating 451E
+  a=20.0 deg m=3-5
+     % coverage: 0.64
+     R800 5.2
+     System R: 4375
+     Blaze %: 0.00 O(%)=-2.3
+  a=30.8 deg m=4-8
+     % coverage: 0.47
+     R800 7.1
+     System R: 7151
+     Blaze %: 0.01 O(%)=-2.2
+  a=41.5 deg m=5-10
+     % coverage: 0.36
+     R800 8.7
+     System R: 10634
+     Blaze %: 0.02 O(%)=-1.7
+  a=52.2 deg m=6-12
+     % coverage: 0.27
+     R800 10.0
+     System R: 15524
+     Blaze %: 0.06 O(%)=-1.2
+Grating 452E
+  a=20.0 deg m=3-5
+     % coverage: 0.64
+     R800 5.2
+     System R: 4375
+     Blaze %: 0.01 O(%)=-2.2
+  a=32.5 deg m=4-8
+     % coverage: 0.39
+     R800 7.4
+     System R: 7657
+     Blaze %: 0.01 O(%)=-1.9
+  a=45.0 deg m=6-11
+     % coverage: 0.50
+     R800 9.0
+     System R: 12020
+     Blaze %: 0.02 O(%)=-1.7
+  a=57.5 deg m=7-13
+     % coverage: 0.36
+     R800 10.4
+     System R: 18867
+     Blaze %: 0.07 O(%)=-1.2

@@ -3,3 +3,5 @@ scratch/
 build/
 dist/
 ucsbsim/synphot/
+ucsbsim/filterphot.c
+ucsbsim/filterphot.cpython-310-darwin.so
