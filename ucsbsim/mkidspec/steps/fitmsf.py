@@ -473,7 +473,7 @@ def fitmsf(
     # generating # of bins and building initial histogram for every pixel:
     num_pixel = [len(photons_pixel[j]) for j in detector.pixel_indices]  # number of photons in all pixels
     sparse_pixel = int(np.min(num_pixel))  # number of photons in sparsest pixel
-    n_bins = engine.n_bins(n_data=sparse_pixel, method="rice")  # bins the same for all, based on pixel with fewest photons
+    n_bins = gen.n_bins(n_data=sparse_pixel, method="rice")  # bins the same for all, based on pixel with fewest photons
 
     bin_edges = np.linspace(bin_range[0], bin_range[1], n_bins + 1, endpoint=True)
     bin_centers = bin_edges[:-1] + np.diff(bin_edges) / 2
@@ -504,10 +504,10 @@ def fitmsf(
     full_pix = []
     opt_param_all = []
 
-    redchi_val = 0  # TODO remove after debug
+    redchi_val = 10  # TODO remove after debug
     snr = 3
     xtol = 1e-4
-    pixels = range(100,200)
+    #pixels = range(100,200)
 
     leg_e = Legendre(coef=(0, 0, 0), domain=np.array(bin_range))
 
@@ -841,21 +841,20 @@ def fitmsf(
         plt.show()
 
         # plot the spectrum with error band, blaze left intact:
-        fig1, ax1 = plt.subplots(2, 2, figsize=(15, 15), sharex=True)
-        axes1 = ax1.ravel()
+        fig, ax = plt.subplots(2, 2, figsize=(15, 15), sharex=True)
+        axes = ax.ravel()
         for i in range(nord):
-            axes1[i].grid()
             spec_w_merr = (ord_counts[i] - m_err[i])
             spec_w_perr = (ord_counts[i] + p_err[i])
             spec_w_merr[spec_w_merr < 0] = 0
-            axes2[i].grid()
-            axes2[i].fill_between(pixels, spec_w_merr, spec_w_perr, edgecolor='r', facecolor='r', linewidth=0.5)
-            axes1[i].plot(pixels, ord_counts[i])
-            axes1[i].set_title(f'Order {7 - i}')
-        axes1[-1].set_xlabel("Pixel Index")
-        axes1[-2].set_xlabel("Pixel Index")
-        axes1[0].set_ylabel('Photon Count')
-        axes1[2].set_ylabel('Photon Count')
+            axes[i].grid()
+            axes[i].fill_between(pixels, spec_w_merr, spec_w_perr, edgecolor='r', facecolor='r', linewidth=0.5)
+            axes[i].plot(pixels, ord_counts[i])
+            axes[i].set_title(f'Order {7 - i}')
+        axes[-1].set_xlabel("Pixel Index")
+        axes[-2].set_xlabel("Pixel Index")
+        axes[0].set_ylabel('Photon Count')
+        axes[2].set_ylabel('Photon Count')
         plt.suptitle('Extracted Calibration Spectrum')
         plt.tight_layout()
         plt.show()
