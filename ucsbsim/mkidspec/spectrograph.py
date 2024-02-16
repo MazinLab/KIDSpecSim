@@ -106,7 +106,7 @@ class GratingSetup:
 class SpectrographSetup:
     def __init__(
             self,
-            order_range: int,
+            order_range: tuple,
             final_wave: u.Quantity,
             pixels_per_res_elem: float,
             focal_length: u.Quantity,
@@ -423,47 +423,50 @@ class SpectrographSetup:
         return (w.mean(1) / (np.diff(w, axis=1).T / self.detector.n_pixels * self.nominal_pixels_per_res_elem)).ravel()
 
 
-# TODO following needs to be updated
-def plot_echellogram(spec, center_orders=True, title='', blaze=False):
-    import matplotlib.pyplot as plt
-    w = spec.pixel_wavelengths()
-    b = spec.blaze(w)
+    def plot_echellogram(self, center_orders=True, title='', blaze=False):
+        import matplotlib.pyplot as plt
+        w = self.pixel_wavelengths()
+        b = self.blaze(w)
 
-    fig, axes = plt.subplots(2 + int(blaze), 1, figsize=(6, 10 + 4 * int(blaze)))
-    if title:
-        plt.suptitle(title)
-    plt.sca(axes[0])
-    plt.title(f'a={spec.beta_central_pixel:.1f} m={spec.m0}-{spec.m_max}')
-    fsr_edges = spec.edge_wave(fsr=True)
-    for ii, i in enumerate(spec.orders):
-        waves = w[ii, [0, spec.detector.n_pixels // 2, -1]]
-        plt.plot(spec.wavelength_to_pixel(waves, i), [i] * 3, '*', color=f'C{ii}')
-        plt.plot(spec.wavelength_to_pixel(fsr_edges[ii], i), [i] * 2, '.', color=f'C{ii}')
-    plt.xlabel('Pixel')
-    plt.ylabel('Order')
-    plt.sca(axes[1])
-    for ii, i in enumerate(spec.orders):
-        waves = w[ii, [0, spec.detector.n_pixels // 2, -1]]
-        oset = waves[1] if center_orders else 0
-        plt.plot(waves - oset, [i] * 3, '*', color=f'C{ii}')
-        plt.plot(fsr_edges[ii] - oset, [i] * 2, '.', color=f'C{ii}',
-                 label=f'$\lambda=${waves[1]:.0f}')
-    plt.legend()
-    plt.xlabel('Center relative wavelength (nm)')
-    plt.ylabel('Order')
-    if blaze:
-        plt.sca(axes[2])
-        plt.plot(w.T, b.T)
-        plt.xlabel('Wavelength (nm)')
-        plt.ylabel('Blaze')
-    plt.tight_layout()
-    plt.show()
+        fig, axes = plt.subplots(2 + int(blaze), 1, figsize=(6, 10 + 4 * int(blaze)))
+        if title:
+            plt.suptitle(title)
+        plt.sca(axes[0])
+        plt.title(f'a={self.beta_central_pixel:.1f} m={self.m0}-{self.m_max}')
+        fsr_edges = self.edge_wave(fsr=True)
+        for ii, i in enumerate(self.orders):
+            waves = w[ii, [0, self.detector.n_pixels // 2, -1]]
+            plt.plot(self.wavelength_to_pixel(waves, i), [i] * 3, '*', color=f'C{ii}')
+            plt.plot(self.wavelength_to_pixel(fsr_edges[ii], i), [i] * 2, '.', color=f'C{ii}')
+        plt.xlabel('Pixel')
+        plt.ylabel('Order')
+        plt.sca(axes[1])
+        for ii, i in enumerate(self.orders):
+            waves = w[ii, [0, self.detector.n_pixels // 2, -1]]
+            oset = waves[1] if center_orders else 0
+            plt.plot(waves - oset, [i] * 3, '*', color=f'C{ii}')
+            plt.plot(fsr_edges[ii] - oset, [i] * 2, '.', color=f'C{ii}',
+                     label=f'$\lambda=${waves[1]:.0f}')
+        plt.legend()
+        plt.xlabel('Center relative wavelength (nm)')
+        plt.ylabel('Order')
+        if blaze:
+            plt.sca(axes[2])
+            plt.plot(w.T, b.T)
+            plt.xlabel('Wavelength (nm)')
+            plt.ylabel('Blaze')
+        plt.tight_layout()
+        plt.show()
 
 
-GRATING_CATALOG = np.loadtxt('newport_masters.txt', delimiter=',',
+GRATING_CATALOG = np.loadtxt('/home/kimc/pycharm/KIDSpecSim/benchdesign/newport_masters.txt', delimiter=',',
                              dtype=[('name', 'U10'), ('l', 'f4'), ('blaze', 'f4'),
                                     ('width', 'f4'), ('height', 'f4'), ('stock', 'U10')])
 GRATING_CATALOG['l'] = 1e6/GRATING_CATALOG['l']
 
-NEWPORT_GRATINGS = {x['name']: GratingSetup(None, x['blaze']*u.deg, x['l']* u.nm) for x in GRATING_CATALOG}
+NEWPORT_GRATINGS = {x['name']: GratingSetup(
+    0,
+    (x['blaze']*u.deg).to(u.rad).value,
+    0,
+    x['l'] * u.nm) for x in GRATING_CATALOG}
 
