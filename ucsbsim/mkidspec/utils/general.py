@@ -67,3 +67,17 @@ def sig_to_R(sig, lam):
     dlam = sig * 2 * np.sqrt(2 * np.log(2))
     R = lam / dlam
     return np.abs(R)
+
+
+def n_bins(n_data: int, method: str = 'rice'):
+    # TODO include more algorithms based on number of data points
+    """
+    :param int n_data: number of data points
+    :param str method: # of bin method to use, only Rice available currently
+    :return: best number of bins based on various algorithms
+    """
+    if method == 'rice':
+        return int(4 * n_data ** (1 / 3))  # multiplied by 2 because sparsest pixel likely only has 2 gauss (need 4)
+    else:
+        raise ValueError(f'Method {method} not supported.')
+
