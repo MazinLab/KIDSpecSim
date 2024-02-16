@@ -135,7 +135,7 @@ class MKIDDetector:
                      f"\n\tDeadtime: {DEADTIME}")
         logging.warning(f'Simulated dataset may take up to {total_photons * 16 / 1024 ** 3:.2} GB of RAM.')
 
-        if self.resid_map is None:  # TODO check if shape of resid matches npix
+        if self.resid_map is None:
             self.resid_map = np.arange(pixel_count.size, dtype=int) * 10 + 100  # something arbitrary
 
         photons = np.recarray(total_photons, dtype=PhotonNumpyType)
@@ -202,10 +202,7 @@ class MKIDDetector:
             # linear equation: y = (y2-y1)/(x2-x1)*(x-x1) + y1 = 0.6/(freq_maxw-freq_minw)*(x-freq_minw) - 0.8
             photons.wavelength = wave_to_phase(photons.wavelength, minwave, maxwave)
             for j in self.pixel_indices:  # sorting photons by resID (i.e. pixel) and multiplying phase center offsets
-                try:
-                    photons.wavelength[np.where(photons.resID == self.resid_map[j])] *= self.pixel_phase_offsets[j]
-                except TypeError:
-                    print("Phases were not offset because offset values were not provided.")
+                photons.wavelength[np.where(photons.resID == self.resid_map[j])] *= self.pixel_phase_offsets[j]
             if photons.wavelength.size:
                 for n, j in enumerate(photons.wavelength):
                     while photons.wavelength[n] < -1:
@@ -213,8 +210,8 @@ class MKIDDetector:
                     while photons.wavelength[n] > 1:
                         photons.wavelength[n] -= 2
 
-        logging.info(f'Completed detector observation sequence. '
-                     f'{total_merged} photons had their energies merged, '
-                     f'{np.sum(total_missed)} photons were missed due to deadtime,'
-                     f'and {observed} photons were observed.')
+        logging.info(f'Completed detector observation sequence.\n'
+                     f'Merged: {total_merged}\n'
+                     f'Deadtime miss: {np.sum(total_missed)}\n'
+                     f'Observed: {observed}')
         return photons, observed, reduce_factor
