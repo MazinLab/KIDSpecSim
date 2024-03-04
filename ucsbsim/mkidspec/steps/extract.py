@@ -12,7 +12,7 @@ import os
 Bringing it all together. This is the stage where we load and bring together:
 - The observation spectrum separated into virtual pixels and the errors on each
 - The wavecal solution from the emission spectrum
-to recover a final spectrum.
+to subtract order-bleeding and recover a final spectrum.
 This script may also:
 - fit an empiric blaze function to be divided out
 """
@@ -29,6 +29,8 @@ def extract(
 
     spectrum = fits.open(f'{obs_fits}', mode='update')
     obs_flux = np.array([np.array(spectrum[1].data[n]) for n, i in enumerate(orders)])
+    err_n = np.array([np.array(spectrum[2].data[n]) for n, i in enumerate(orders)])
+    err_p = np.array([np.array(spectrum[3].data[n]) for n, i in enumerate(orders)])
     guess_wave = np.array([np.array(spectrum[4].data[n]) for n, i in enumerate(orders)])
     hdu_list = fits.HDUList([spectrum[0],
                              spectrum[1],
@@ -41,14 +43,51 @@ def extract(
     if plot:
         # comparing the wavecal solution to the simulation wavelengths
         plt.grid()
-        for n, i in enumerate(orders):
-            plt.plot(guess_wave[n] / 10, obs_flux[n], 'r')
-            plt.plot(wavecal[n] / 10, obs_flux[n], 'b', alpha=0.5)
-        plt.title('Comparison between simulation (red) and wavecal (blue)')
+        for n, i in enumerate(orders[:-1]):
+            plt.plot(guess_wave[n] / 10, obs_flux[n], 'r', linewidth=0.5)
+            plt.plot(wavecal[n] / 10, obs_flux[n], 'b', linewidth=0.5)
+        plt.plot(guess_wave[-1] / 10, obs_flux[-1], 'r', linewidth=0.5, label='Initial Guess')
+        plt.plot(wavecal[-1] / 10, obs_flux[-1], 'b', linewidth=0.5, label='Wavecal')
+        plt.title('Comparison between guess and calibration')
         plt.xlabel('Wavelength (nm)')
         plt.ylabel('Photon Count')
+        plt.legend()
+        plt.tight_layout()
         plt.show()
 
+        # plot with errors
+        obs_flux_corr = obs_flux + (err_p - err_n)
+        obs_flux_corr[obs_flux_corr < 0] = 0
+        fig, ax = plt.subplots(1, 2, sharey=True, figsize=(10, 5))
+        axes = ax.ravel()
+
+        axes[0].grid()
+        for n, i in enumerate(orders):
+            specerr_p = obs_flux[n]+err_p[n]
+            specerr_p[specerr_p < 0] = 0
+            specerr_n = obs_flux[n]-err_n[n]
+            specerr_n[specerr_n < 0] = 0
+            axes[0].fill_between(wavecal[n] / 10, specerr_n, specerr_p, edgecolor='r', facecolor='r',
+                                  linewidth=0.5)
+            axes[0].plot(wavecal[n] / 10, obs_flux[n], 'k', linewidth=0.5)
+        axes[0].set_title('Uncorrected Spectrum')
+        axes[0].set_xlabel('Wavelength (nm)')
+        axes[0].set_ylabel('Photon Count')
+
+        axes[1].grid()
+        for n, i in enumerate(orders):
+            specerr_pcorr = obs_flux_corr[n]+err_p[n]
+            specerr_pcorr[specerr_pcorr < 0] = 0
+            specerr_ncorr = obs_flux_corr[n]-err_n[n]
+            specerr_ncorr[specerr_ncorr < 0] = 0
+            axes[0].fill_between(wavecal[n] / 10, specerr_ncorr, specerr_pcorr, edgecolor='r',
+                                 facecolor='r',
+                                 linewidth=0.5)
+            axes[0].plot(wavecal[n] / 10, obs_flux_corr[n], 'k', linewidth=0.5)
+        axes[1].set_title('Order-Bleed Subtraction-Corrected')
+        axes[1].set_xlabel('Wavelength (nm)')
+        plt.tight_layout()
+        plt.show()
 
 if __name__ == '__main__':
 
