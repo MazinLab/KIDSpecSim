@@ -1,7 +1,7 @@
 import numpy as np
 from numpy.polynomial.legendre import Legendre
 import matplotlib.pyplot as plt
-import scipy.signal
+import scipy.signal as sig
 import scipy
 import scipy.interpolate as interp
 from matplotlib.colors import LogNorm
@@ -55,7 +55,7 @@ def init_params_new(
 ):
     parameters = Parameters()
 
-    peaks_idx, _ = scipy.signal.find_peaks(y_counts, distance=int(0.1 * n_bins), height=snr ** 2)
+    peaks_idx, _ = sig.find_peaks(y_counts, distance=int(0.1 * n_bins), height=snr ** 2)
     sort_idx = np.argsort(y_counts[peaks_idx])[::-1][:nord]  # get rid of smallest peaks, if more than nord
     peaks_sort_idx = np.sort(peaks_idx[sort_idx])  # sorting the indices by phase
     peaks_phi = y_counts[peaks_sort_idx]  # the phases of the retrieved peaks
@@ -207,14 +207,14 @@ def init_params(
     # add the sigma coefs to params object:
     parameters.add(name=f's0', value=s_coefs[0])
     parameters.add(name=f's1', value=s_coefs[1])
-    parameters.add(name=f's2', value=s_coefs[2])
+    parameters.add(name=f's2', value=s_coefs[2], min=-1e-2, max=1e-2)
 
     # add phi_0s to params object:
     parameters.add(name=f'phi_0', value=phi_guess[-1], min=phi_guess[-1] - 0.1, max=phi_guess[-1] + 0.1)
 
     # add energy coefs to params object:
-    parameters.add(name=f'e1', value=e_coefs[1])
-    parameters.add(name=f'e2', value=e_coefs[2])
+    parameters.add(name=f'e1', value=e_coefs[1], max=0.01)
+    parameters.add(name=f'e2', value=e_coefs[2])#, min=-1e-2, max=1e-2)
 
     # add amplitudes to params object:
     if missing_ord is None:  # no orders were identified as missing
@@ -394,7 +394,7 @@ def phis_from_grating_eq(orders, phi_0, leg, coefs=None):
         elif ~np.isfinite(roots).all():  # if both roots are invalid, raise error
             raise ValueError("All calculated roots are not valid, check equation.")
         else:  # if there are 2 valid roots, use the one in the proper range
-            phis.append(roots[(-1 < roots) & (roots < phi_0)][0])
+            phis.append(roots[(-1.5 < roots) & (roots < phi_0)][0])
 
     return np.append(np.array(phis), phi_0)
 
@@ -411,6 +411,15 @@ def cov_from_params(params, model, nord, order_edges, valid_idx, x_phases, **fit
     :return: the covariance between orders as nord x nord array, diagonal should be near 1
     """
 
+    # v giving order, > receiving order [g_idx, r_idx, pixel]
+    #      9   8   7   6   5
+    # 9 [  1   #   #   #   #  ]  < multiply counts*cov in Order 9 to add to other orders
+    # 8 [  #   1   #   #   #  ]
+    # 7 [  #   #   1   #   #  ]
+    # 6 [  #   #   #   1   #  ]
+    # 5 [  #   #   #   #   1  ]
+    #      ^ multiply counts*cov in other orders to add to Order 9
+
     model = interp.InterpolatedUnivariateSpline(x=x_phases, y=model, k=1, ext=1)
     model_sum = np.array([model.integral(order_edges[i], order_edges[i + 1]) for i in range(len(order_edges) - 1)])
     cov = np.zeros([nord, nord])
@@ -421,7 +430,10 @@ def cov_from_params(params, model, nord, order_edges, valid_idx, x_phases, **fit
         suppress_model = interp.InterpolatedUnivariateSpline(x=x_phases, y=suppress_model, k=1, ext=1)
         suppress_model_sum = np.array([
             suppress_model.integral(order_edges[i], order_edges[i + 1]) for i in range(len(order_edges) - 1)])
-        cov[valid_idx, k] = (model_sum - suppress_model_sum) / model_sum
+        cov[valid_idx, k] = np.nan_to_num((model_sum - suppress_model_sum) / model_sum)
+        if np.array_equal(cov[valid_idx, k], np.zeros([nord])):
+            cov[k, k] = 1
+    cov[cov < 0] = 0
     return cov
 
 
@@ -431,9 +443,12 @@ def fitmsf(
         outdir: str,
         resid_map=np.arange(2048, dtype=int) * 10 + 100,
         bin_range: tuple = (-1, 0),
+        bins=50,  # hardcode since 1 peak ~ 0.1 phase, 10 points across peak
+        missing_order_pix=[[(0, 346), [2]], [(0, 1300), [0, 2]], [(346, 1300), [0]], [(1300, 2047), [1]], [(1300, 2047), [1, 3]]],
+        # each item is (pix start, pix end), [list of missing orders]
+        snr=3,
         plot: bool = False
 ):
-
     photons_pixel = engine.sorted_table(table=msf_table, resid_map=resid_map)
 
     # INSTANTIATE SPECTROGRAPH & DETECTOR:
@@ -473,11 +488,11 @@ def fitmsf(
     # generating # of bins and building initial histogram for every pixel:
     num_pixel = [len(photons_pixel[j]) for j in detector.pixel_indices]  # number of photons in all pixels
     sparse_pixel = int(np.min(num_pixel))  # number of photons in sparsest pixel
-    n_bins = gen.n_bins(n_data=sparse_pixel, method="rice")  # bins the same for all, based on pixel with fewest photons
+    #n_bins = gen.n_bins(n_data=sparse_pixel, method="rice")  # bins the same for all, based on pixel with fewest photons
 
-    bin_edges = np.linspace(bin_range[0], bin_range[1], n_bins + 1, endpoint=True)
+    bin_edges = np.linspace(bin_range[0], bin_range[1], bins + 1, endpoint=True)
     bin_centers = bin_edges[:-1] + np.diff(bin_edges) / 2
-    bin_counts = np.zeros([n_bins, sim.npix])
+    bin_counts = np.zeros([bins, sim.npix])
     for j in pixels:
         bin_counts[:, j], _ = np.histogram(photons_pixel[j], bins=bin_edges)
 
@@ -498,88 +513,106 @@ def fitmsf(
 
     # create empty array for order bin edges and virtual pixel counts:
     order_edges = np.zeros([nord + 1, sim.npix])
-    order_edges[0, :] = -1
+    order_edges[0, :] = -1.5
     ord_counts = np.zeros([nord, sim.npix])
     inval_idx = []
     full_pix = []
     opt_param_all = []
 
-    redchi_val = 10  # TODO remove after debug
-    snr = 3
+    redchi_val = 0  # TODO remove after debug
     xtol = 1e-4
-    #pixels = range(100,200)
+    #pixels = [1499]
 
     leg_e = Legendre(coef=(0, 0, 0), domain=np.array(bin_range))
 
     # do the non-linear least squares fit:
     for p in pixels:
-        # print(p)
+        #print(p)
         leg_s = Legendre(coef=(0, 0, 0), domain=[energy[0, p] / energy[-1, p], 1])
 
-        peaks, _ = scipy.signal.find_peaks(x=bin_counts[:, p], distance=int(0.1 * n_bins), height=snr**2)
+        peaks, _ = sig.find_peaks(x=bin_counts[:, p], distance=int(0.095 * bins), height=snr**2)
+        missing_ord = None
 
         # use find peaks to get phi/amplitude guesses:
         # TODO make into method by ruling out different cases based on peaks, use avg distance from 0 + avg peak sep
-        if len(peaks) >= nord:  # all four peaks are present
+        if len(peaks) >= nord:  # all peaks are present
             idx = np.argsort(bin_counts[peaks, p])[::-1][:nord]
             peaks_nord = np.sort(peaks[idx])
-            missing_ord = None
         else:
             idx = np.argsort(bin_counts[peaks, p])[::-1]
             peaks_sort = np.sort(peaks[idx])
-            if p <= 346 and len(peaks_sort) == 3:  # 1 order missing
-                peaks_nord = np.array([
-                    peaks_sort[0],
-                    peaks_sort[1],
-                    int((peaks_sort[1] + peaks_sort[2]) / 2),
-                    peaks_sort[2]]
-                )
-                missing_ord = [2]
-            elif p <= 1300 and len(peaks_sort) == 2:  # 2 orders missing
-                peaks_nord = np.array([
-                    int(peaks_sort[0] - (peaks_sort[1] - peaks_sort[0]) / 2),
-                    peaks_sort[0],
-                    int((peaks_sort[0] + peaks_sort[1]) / 2),
-                    peaks_sort[1]]
-                )
-                missing_ord = [0, 2]
-            elif 346 < p <= 1300 and len(peaks_sort) == 3:  # 1 order missing
-                peaks_nord = np.array([
-                    int(peaks_sort[0] - (peaks_sort[1] - peaks_sort[0]) / 2),
-                    peaks_sort[0],
-                    peaks_sort[1],
-                    peaks_sort[2]]
-                )
-                missing_ord = [0]
-            elif 1680 < p < 1800 and len(peaks_sort) == 3:
-                # weird zone with flip flop between order 4 and 5
-                peaks, _ = scipy.signal.find_peaks(bin_counts[:, p], distance=int(0.25 * n_bins), height=snr**2)
-                idx = np.argsort(bin_counts[peaks, p])[::-1]
-                peaks_sort = np.sort(peaks[idx])
-                peaks_nord = np.array([
-                    peaks_sort[0],
-                    int((peaks_sort[0] + peaks_sort[1]) / 2),
-                    peaks_sort[1],
-                    int(peaks_sort[1] + (peaks_sort[1] - peaks_sort[0]) / 2)]
-                )
-                missing_ord = [1, 3]
-            elif p > 1300 and len(peaks_sort) == 3:  # 1 order missing
-                peaks_nord = np.array([
-                    peaks_sort[0],
-                    int((peaks_sort[0] + peaks_sort[1]) / 2),
-                    peaks_sort[1],
-                    peaks_sort[2]]
-                )
-                missing_ord = [1]
-            elif p > 1300 and len(peaks_sort) == 2:  # 2 orders missing
-                peaks_nord = np.array([
-                    peaks_sort[0],
-                    int((peaks_sort[0] + peaks_sort[1]) / 2),
-                    peaks_sort[1],
-                    int(peaks_sort[1] + (peaks_sort[1] - peaks_sort[0]) / 2)]
-                )
-                missing_ord = [1, 3]
-            else:  # e.g.: only 1 peak was found
+            for item in missing_order_pix:
+                if item[0][0] <= p <= item[0][1] and len(peaks_sort) == (nord - len(item[1])):
+                    peaks_nord = peaks_sort
+                    for o in item[1]:
+                        if o == 0:
+                            idx = int(peaks_sort[0] - (peaks_sort[1] - peaks_sort[0]) / 2)
+                            if idx >= 0:
+                                peaks_nord = np.insert(peaks_nord, o, idx)
+                            else:
+                                peaks_nord = np.insert(peaks_nord, o, 0)
+                        elif o == nord-1:
+                            idx = int(peaks_sort[-1] + (peaks_sort[-1] - peaks_sort[-2]) / 2)
+                            if idx >= bins-1:
+                                peaks_nord = np.insert(peaks_nord, o, bins-1)
+                            else:
+                                peaks_nord = np.insert(peaks_nord, o, idx)
+                        else:
+                            peaks_nord = np.insert(peaks_nord, o, int((peaks_sort[o-1] + peaks_sort[o])/2))
+                    missing_ord = item[1]
+                    # if p <= 346 and len(peaks_sort) == 3:  # 1 order missing
+                    #     peaks_nord = np.array([
+                    #         peaks_sort[0],
+                    #         peaks_sort[1],
+                    #         int((peaks_sort[1] + peaks_sort[2]) / 2),
+                    #         peaks_sort[2]]
+                    #     )
+                    #     missing_ord = [2]
+                    # elif p <= 1300 and len(peaks_sort) == 2:  # 2 orders missing
+                    #     peaks_nord = np.array([
+                    #         int(peaks_sort[0] - (peaks_sort[1] - peaks_sort[0]) / 2),
+                    #         peaks_sort[0],
+                    #         int((peaks_sort[0] + peaks_sort[1]) / 2),
+                    #         peaks_sort[1]]
+                    #     )
+                    #     missing_ord = [0, 2]
+                    # elif 346 < p <= 1300 and len(peaks_sort) == 3:  # 1 order missing
+                    #     peaks_nord = np.array([
+                    #         int(peaks_sort[0] - (peaks_sort[1] - peaks_sort[0]) / 2),
+                    #         peaks_sort[0],
+                    #         peaks_sort[1],
+                    #         peaks_sort[2]]
+                    #     )
+                    #     missing_ord = [0]
+                    # elif 1680 < p < 1800 and len(peaks_sort) == 3:
+                    #     # weird zone with flip flop between order 4 and 5
+                    #     peaks, _ = sig.find_peaks(bin_counts[:, p], distance=int(0.25 * n_bins), height=snr**2)
+                    #     idx = np.argsort(bin_counts[peaks, p])[::-1]
+                    #     peaks_sort = np.sort(peaks[idx])
+                    #     peaks_nord = np.array([
+                    #         peaks_sort[0],
+                    #         int((peaks_sort[0] + peaks_sort[1]) / 2),
+                    #         peaks_sort[1],
+                    #         int(peaks_sort[1] + (peaks_sort[1] - peaks_sort[0]) / 2)]
+                    #     )
+                    #     missing_ord = [1, 3]
+                    # elif p > 1300 and len(peaks_sort) == 3:  # 1 order missing
+                    #     peaks_nord = np.array([
+                    #         peaks_sort[0],
+                    #         int((peaks_sort[0] + peaks_sort[1]) / 2),
+                    #         peaks_sort[1],
+                    #         peaks_sort[2]]
+                    #     )
+                    #     missing_ord = [1]
+                    # elif p > 1300 and len(peaks_sort) == 2:  # 2 orders missing
+                    #     peaks_nord = np.array([
+                    #         peaks_sort[0],
+                    #         int((peaks_sort[0] + peaks_sort[1]) / 2),
+                    #         peaks_sort[1],
+                    #         int(peaks_sort[1] + (peaks_sort[1] - peaks_sort[0]) / 2)]
+                    #     )
+                    #     missing_ord = [1, 3]
+            if missing_ord is None:  # e.g.: only 1 peak was found
                 logging.info(f'Pixel {p} will default to simulation guess.')
                 peaks_nord = [gen.nearest_idx(bin_centers, sim_phase[i, p]) for i in range(nord)]
                 missing_ord = None
@@ -611,7 +644,7 @@ def fitmsf(
         opt_param_all.append(opt_params)
         # log which pixels failed to fit:
         if not opt_params.success:
-            logging.warning(f'Pixel {p} failed to converge.')
+            logging.warning(f'Pixel {p} failed to converge/fit.')
         red_chi2[p] = opt_params.redchi
 
         # extract the successfully fit parameters:
@@ -671,7 +704,7 @@ def fitmsf(
         all_fit_phi[:, p] = fit_phis
         all_fit_sig[:, p] = fit_sigs
 
-        # plot the individual pixels aka chaos:
+        # plot the individual pixels:
         if red_chi2[p] > redchi_val:
             fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(14, 8))
             axes = axes.ravel()
@@ -717,6 +750,7 @@ def fitmsf(
             quick_plot(ax1, [fine_phase_grid for i in range(nord)], gausses_i[:, :, p].T,
                        labels=[f'Order {i}' for i in spectro.orders[::-1]],
                        title=f'Least-Squares Fit', xlabel=r'Phase $\times 2\pi$', ylabel='Photon Count')
+            ax1.plot(fine_phase_grid, gausses[:, p], 'y')
             for b in order_edges[:-1, p]:
                 ax1.axvline(b, linestyle='--', color='black')
             ax1.axvline(order_edges[-1, p], linestyle='--', color='black', label='Order Edges')
@@ -783,6 +817,7 @@ def fitmsf(
             res1.set_xticks([])
 
             plt.show()
+            pass
 
     # create off-blaze virtual pixels using average sigma to boundary:
     n_sigs_left = np.abs(all_fit_phi[1:, full_pix] - order_edges[1:-1, full_pix]) / all_fit_sig[1:, full_pix]
@@ -803,9 +838,8 @@ def fitmsf(
 
             # redo order-bleeding covar:
             covariance[:, :, p] = cov_from_params(params=opt_param_all[p].params, model=gausses[:, p], nord=nord,
-                                                  order_edges=order_edges[np.isfinite(order_edges[:, p]), p],
-                                                  valid_idx=range(nord), x_phases=fine_phase_grid,
-                                                  orders=spectro.orders,
+                                                  order_edges=order_edges[:, p], valid_idx=range(nord),
+                                                  x_phases=fine_phase_grid, orders=spectro.orders,
                                                   legendre_e=leg_e, legendre_s=leg_s, to_sum=True)
 
             # redo errors:
@@ -841,7 +875,7 @@ def fitmsf(
         plt.show()
 
         # plot the spectrum with error band, blaze left intact:
-        fig, ax = plt.subplots(2, 2, figsize=(15, 15), sharex=True)
+        fig, ax = plt.subplots(int(np.ceil(nord/2)), 2, figsize=(30, int(10*nord)), sharex=True)
         axes = ax.ravel()
         for i in range(nord):
             spec_w_merr = (ord_counts[i] - m_err[i])
@@ -850,7 +884,7 @@ def fitmsf(
             axes[i].grid()
             axes[i].fill_between(pixels, spec_w_merr, spec_w_perr, edgecolor='r', facecolor='r', linewidth=0.5)
             axes[i].plot(pixels, ord_counts[i])
-            axes[i].set_title(f'Order {7 - i}')
+            axes[i].set_title(f'Order {spectro.orders[::-1][i]}')
         axes[-1].set_xlabel("Pixel Index")
         axes[-2].set_xlabel("Pixel Index")
         axes[0].set_ylabel('Photon Count')
