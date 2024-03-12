@@ -67,6 +67,7 @@ def ordersort(
     for j in detector.pixel_indices:  # binning photons by MSF bins edges
         spec[:, j], _ = np.histogram(photons_pixel[j], bins=msf.bin_edges[:, j])
 
+    # uncorrected errors
     err_p = np.array([[int(np.sum(msf.cov_matrix[:, i, j] * spec[:, j])) -
                        msf.cov_matrix[i, i, j] * spec[i, j] for j in detector.pixel_indices] for i in range(nord)])
     err_n = np.array([[int(np.sum(msf.cov_matrix[i, :, j] * spec[:, j]) -
@@ -86,7 +87,7 @@ def ordersort(
         spectrum = fits.open(fits_file)
 
         # plot the spectrum unblazed with the error band:
-        fig2, ax2 = plt.subplots(2, 2, figsize=(15, 15), sharex=True)
+        fig2, ax2 = plt.subplots(int(np.ceil(nord/2)), 2, figsize=(30, int(10*nord)), sharex=True)
         axes2 = ax2.ravel()
         for i in range(nord):
             spec_w_merr = np.array(spectrum[1].data[i]) - np.array(spectrum[2].data[i])

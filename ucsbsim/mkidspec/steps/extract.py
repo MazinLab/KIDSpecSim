@@ -63,12 +63,12 @@ def extract(
 
         axes[0].grid()
         for n, i in enumerate(orders):
-            specerr_p = obs_flux[n]+err_p[n]
+            specerr_p = obs_flux[n] + err_p[n]
             specerr_p[specerr_p < 0] = 0
-            specerr_n = obs_flux[n]-err_n[n]
+            specerr_n = obs_flux[n] - err_n[n]
             specerr_n[specerr_n < 0] = 0
             axes[0].fill_between(wavecal[n] / 10, specerr_n, specerr_p, edgecolor='r', facecolor='r',
-                                  linewidth=0.5)
+                                 linewidth=0.5)
             axes[0].plot(wavecal[n] / 10, obs_flux[n], 'k', linewidth=0.5)
         axes[0].set_title('Uncorrected Spectrum')
         axes[0].set_xlabel('Wavelength (nm)')
@@ -76,21 +76,22 @@ def extract(
 
         axes[1].grid()
         for n, i in enumerate(orders):
-            specerr_pcorr = obs_flux_corr[n]+err_p[n]
+            specerr_pcorr = obs_flux_corr[n] + err_p[n]
             specerr_pcorr[specerr_pcorr < 0] = 0
-            specerr_ncorr = obs_flux_corr[n]-err_n[n]
+            specerr_ncorr = obs_flux_corr[n] - err_n[n]
             specerr_ncorr[specerr_ncorr < 0] = 0
-            axes[0].fill_between(wavecal[n] / 10, specerr_ncorr, specerr_pcorr, edgecolor='r',
+            axes[1].fill_between(wavecal[n] / 10, specerr_ncorr, specerr_pcorr, edgecolor='r',
                                  facecolor='r',
                                  linewidth=0.5)
-            axes[0].plot(wavecal[n] / 10, obs_flux_corr[n], 'k', linewidth=0.5)
+            axes[1].plot(wavecal[n] / 10, obs_flux_corr[n], 'k', linewidth=0.5)
         axes[1].set_title('Order-Bleed Subtraction-Corrected')
         axes[1].set_xlabel('Wavelength (nm)')
         plt.tight_layout()
         plt.show()
+        pass
+
 
 if __name__ == '__main__':
-
     arg_desc = '''
     Extract a spectrum using the uncalibrated spectrum and wavecal.
     --------------------------------------------------------------
@@ -112,5 +113,3 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     extract(obs_fits=args.obs_fits, wavecal_file=args.wavecal_file, plot=args.plot)
-
-
