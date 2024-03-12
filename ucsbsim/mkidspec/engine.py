@@ -199,7 +199,7 @@ class Engine:
         For now though just treat it as constant and define at the middle of the wavelength range.
         """
         sample_width = wave.mean() * self.spectrograph.nondimensional_lsf_width / np.diff(wave).mean()
-        return ndi.gaussian_filter1d(flux, sample_width, axis=axis) * flux.unit
+        return ndi.gaussian_filter1d(flux, sample_width/(2*np.sqrt(2*np.log(2))), axis=axis) * flux.unit
 
     def build_mkid_kernel(self, n_sigma: float, sampling):
         """
