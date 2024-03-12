@@ -52,7 +52,7 @@ if __name__ == '__main__':
 
     # required simulation args:
     parser.add_argument('type_spectra', type=str,
-                        help='The type of spectra: can be "blackbody", "phoenix", "flat", or "emission".')
+                        help='The type of spectra: can be "blackbody", "phoenix", "flat", "emission", or "sky_emission".')
 
     # optional simulation args:
     parser.add_argument('--outdir', default='../mkidspec/testfiles', type=str, help='Directory for output files.')
@@ -74,6 +74,7 @@ if __name__ == '__main__':
     parser.add_argument('-et', '--exptime', default=250, type=float,
                         help='The total exposure time of the observation in seconds.')
     parser.add_argument('--telearea', default=np.pi * 4 ** 2, type=float, help='The telescope area in cm2.')
+    parser.add_argument('--fov', default=1, type=float, help='Field of view in arcsec2.')
     parser.add_argument('--simpconvol', action='store_true', default=False,
                         help='If passed, indicates that a faster, simplified convolution should be conducted.')
     parser.add_argument('--on_sky', action='store_true', default=False,
@@ -208,7 +209,8 @@ if __name__ == '__main__':
         emission_file=sim.emission_file,
         minwave=sim.minwave,
         maxwave=sim.maxwave,
-        on_sky=sim.on_sky
+        on_sky=sim.on_sky,
+        fov=args.fov
     )
 
     # populate bandpasses based on on-sky or lab:
@@ -350,7 +352,7 @@ if __name__ == '__main__':
         """Plotting stuff only below"""
         fig, axes = plt.subplots(2, 1, figsize=(11, 8.5))
         axes = axes.ravel()
-        plt.suptitle(f"Intermediate plots for MKIDSpec {sim.type_spectra} simulation", fontweight='bold')
+        plt.suptitle(f"Intermediate plots for MKIDSpec {sim.type_spectra} spectrum simulation", fontweight='bold')
 
         # plotting bandpassed and blazed/broadened spectrum:
         quick_plot(ax=axes[0], x=[bandpass_spectrum.waveset.to(u.nm)],
@@ -399,7 +401,7 @@ if __name__ == '__main__':
             ax.fill_between(lambda_pixel[i].value, 0, observe_noise[i], color='pink')
         quick_plot(ax=ax, x=lambda_pixel, y=blazed_int_spec, color='k', linestyle='--', linewidth=0.5,
                    labels=["Original, Blazed"] + ['_nolegend_' for o in spectro.orders[:-1]],
-                   xlabel='Wavelength (nm)', ylabel=r"Flux (phot $cm^{-2} s^{-1})$")
+                   xlabel='Wavelength (nm)', ylabel=r"Flux (phot $cm^{-2} s^{-1}$)")
         fig2.tight_layout()
         plot_file = f'{args.outdir}/{now.strftime("%y%m%d")}_{args.spectro_type}/{sim.type_spectra}_noiseplots.pdf'
         fig2.savefig(plot_file)

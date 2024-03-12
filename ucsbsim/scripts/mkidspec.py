@@ -1,20 +1,9 @@
 import numpy as np
-from numpy.polynomial.legendre import Legendre
-import matplotlib.pyplot as plt
-import scipy.signal
-import scipy
-import scipy.interpolate as interp
-from matplotlib.colors import LogNorm
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-import copy
-
 import astropy.units as u
-import time
 from datetime import datetime as dt
 import argparse
 import logging
 import os
-from lmfit import Parameters, minimize
 
 from mkidpipeline.photontable import Photontable
 from ucsbsim.mkidspec.steps.fitmsf import fitmsf
@@ -65,8 +54,13 @@ def parse():
                         help='Directory/name of the flat/blackbody spectrum photon table .h5 file OR'
                              'Directory/name of the complete MKID Spread Function .npz file.'
                              'Pass "False" to disable this step.')
-    parser.add_argument('--bin_range', default=(-1, 0), type=tuple,
-                        help='Start and stop of range for phase histogram.')
+    parser.add_argument('--bin_range', default=(-1, 0), type=tuple, help='Start and stop of range for phase histogram.')
+    parser.add_argument('--bins', default=50, type=int, help='Number of bins for phase histogram.')
+    parser.add_argument('--missing_order_pix', nargs='*',
+                        default=[0, 346, 1, 0, 1300, 12, 346, 1300, 1, 1300, 2047, 2, 1300, 2047, 24],
+                        help='Array of [start1, stop1, missing orders as single number indexed from 1],'
+                             'e.g.: [0, 1000, 123, 1000, 2000, 23].')
+    parser.add_argument('--snr', default=5, type=tuple, help='Minimum SNR for peak-finding.')
 
     # optional wavecal args:
     parser.add_argument('--wavecal', default='../mkidspec/testfiles/emission.h5', type=str,
@@ -76,8 +70,10 @@ def parse():
                              'Pass "False" to disable this step.')
     parser.add_argument('--elem', default='hgar', type=str,
                         help="Emission lamp element in use, i.e., 'hgar' for Mercury-Argon.")
-    parser.add_argument('--orders', default=[7, 6, 5, 4], type=list,
-                        help="Orders to be used. Useful if you only want to 1, 2, 3 orders, etc.")
+    parser.add_argument('--orders', nargs='*', default=[7, 6, 5, 4], type=list,
+                        help="Orders to be used. Useful if you only want to use 1, 2, 3 orders, etc."
+                             "Space-delimited.")
+    # TODO have order numbers mean something not just the number of them
     parser.add_argument('--degree', default=4, type=int, help="Polynomial degree to use in wavecal.")
     parser.add_argument('--iters', default=5, type=int,
                         help="Number of iterations to loop through for identifying and discarding lines.")
@@ -150,65 +146,70 @@ if __name__ == "__main__":
         wavecal_file = args.wavecal
 
     # extract
-    if args.extract.lower().endswith('.h5'):  # the table is not order-sorted or extracted
-        obs_table = Photontable(file_name=args.extract)
-        steps.append('ot_sort')
-        steps.append('extract')
-    elif args.extract.lower().endswith('.fits'):  # the observation is awaiting extraction
-        obs_fits = args.extract
-        steps.append('extract')
+    if args.wavecal:
+        if args.extract.lower().endswith('.h5'):  # the table is not order-sorted or extracted
+            obs_table = Photontable(file_name=args.extract)
+            steps.append('ot_sort')
+            steps.append('extract')
+        elif args.extract.lower().endswith('.fits'):  # the observation is awaiting extraction
+            obs_fits = args.extract
+            steps.append('extract')
 
     # execute the steps:
-    for step in steps:
-        if step == 'msf':
-            msf_file = fitmsf(
-                msf_table=msf_table,
-                sim=sim,
-                resid_map=args.resid_map,
-                outdir=args.outdir,
-                bin_range=args.bin_range,
-                plot=args.plot
-            )
-        if step == 'wt_sort':
-            wavecal_fits = ordersort(
-                table=wavecal_table,
-                filename='emission',
-                msf_file=msf_file,
-                resid_map=args.resid_map,
-                outdir=args.outdir,
-                plot=args.plot
-            )
-        if step == 'wavecal':
-            wavecal_file = wavecal(
-                wavecal_fits=wavecal_fits,
-                orders=args.orders,
-                elem=args.elem,
-                minw=args.minw,
-                maxw=args.maxw,
-                resid_max=args.resid_max,
-                degree=args.degree,
-                iters=args.iters,
-                dim=args.dim,
-                shift_window=args.shift_window,
-                manual_fit=args.manual_fit,
-                width=args.width,
-                outdir=args.outdir,
-                plot=args.plot
-            )
-        if step == 'ot_sort':
-            obs_fits = ordersort(
-                table=obs_table,
-                filename='observation',
-                msf_file=msf_file,
-                resid_map=args.resid_map,
-                outdir=args.outdir,
-                plot=args.plot
-            )
-        if step == 'extract':
-            extract(
-                obs_fits=obs_fits,
-                wavecal_file=wavecal_file,
-                plot=args.plot
-            )
+    if 'msf' in steps:
+        missing_order_pix = np.reshape(list(map(int, args.missing_order_pix)), (-1, 3))
+        missing_order_pix = [[(missing_order_pix[i, 0], missing_order_pix[i, 1]),
+                              [int(o)-1 for o in str(missing_order_pix[i, 2])]] for i in range(missing_order_pix.shape[0])]
+        msf_file = fitmsf(
+            msf_table=msf_table,
+            sim=sim,
+            resid_map=args.resid_map,
+            outdir=args.outdir,
+            bin_range=args.bin_range,
+            bins=args.bins,
+            missing_order_pix=missing_order_pix,
+            snr=args.snr,
+            plot=args.plot
+        )
+    if 'wt_sort' in steps:
+        wavecal_fits = ordersort(
+            table=wavecal_table,
+            filename='emission',
+            msf_file=msf_file,
+            resid_map=args.resid_map,
+            outdir=args.outdir,
+            plot=args.plot
+        )
+    if 'wavecal' in steps:
+        wavecal_file = wavecal(
+            wavecal_fits=wavecal_fits,
+            orders=args.orders,
+            elem=args.elem,
+            minw=args.minw,
+            maxw=args.maxw,
+            resid_max=args.resid_max,
+            degree=args.degree,
+            iters=args.iters,
+            dim=args.dim,
+            shift_window=args.shift_window,
+            manual_fit=args.manual_fit,
+            width=args.width,
+            outdir=args.outdir,
+            plot=args.plot
+        )
+    if 'ot_sort' in steps:
+        obs_fits = ordersort(
+            table=obs_table,
+            filename='observation',
+            msf_file=msf_file,
+            resid_map=args.resid_map,
+            outdir=args.outdir,
+            plot=args.plot
+        )
+    if 'extract' in steps:
+        extract(
+            obs_fits=obs_fits,
+            wavecal_file=wavecal_file,
+            plot=args.plot
+        )
 
-    print('')
