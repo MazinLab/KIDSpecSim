@@ -205,8 +205,8 @@ def init_params(
     s_coefs = Legendre.fit(x=e_guess / e_guess[-1], y=s_guess, deg=degree, domain=[e_guess[0] / e_guess[-1], 1]).coef
 
     # add the sigma coefs to params object:
-    parameters.add(name=f's0', value=s_coefs[0])
-    parameters.add(name=f's1', value=s_coefs[1])
+    parameters.add(name=f's0', value=s_coefs[0], min=1e-5)
+    parameters.add(name=f's1', value=s_coefs[1], max=0)
     parameters.add(name=f's2', value=s_coefs[2], min=-1e-2, max=1e-2)
 
     # add phi_0s to params object:
@@ -413,12 +413,12 @@ def cov_from_params(params, model, nord, order_edges, valid_idx, x_phases, **fit
 
     # v giving order, > receiving order [g_idx, r_idx, pixel]
     #      9   8   7   6   5
-    # 9 [  1   #   #   #   #  ]  < multiply counts*cov in Order 9 to add to other orders
+    # 9 [  1   #   #   #   #  ]  < how much of order 9 is in every other other as a fraction of order 9
     # 8 [  #   1   #   #   #  ]
     # 7 [  #   #   1   #   #  ]
     # 6 [  #   #   #   1   #  ]
     # 5 [  #   #   #   #   1  ]
-    #      ^ multiply counts*cov in other orders to add to Order 9
+    #      ^ how much of other orders is in order 9, every column must be a fraction of every orders
 
     model = interp.InterpolatedUnivariateSpline(x=x_phases, y=model, k=1, ext=1)
     model_sum = np.array([model.integral(order_edges[i], order_edges[i + 1]) for i in range(len(order_edges) - 1)])
@@ -519,7 +519,7 @@ def fitmsf(
     full_pix = []
     opt_param_all = []
 
-    redchi_val = 0  # TODO remove after debug
+    redchi_val = 30  # TODO remove after debug
     xtol = 1e-4
     #pixels = [1499]
 
@@ -843,7 +843,7 @@ def fitmsf(
                                                   legendre_e=leg_e, legendre_s=leg_s, to_sum=True)
 
             # redo errors:
-            p_err[:, p] = np.array([int(np.sum(covariance[:, i, p] * ord_counts[:, p]) -
+            p_err[:, p] = np.array([int(np.sum(covariance[:, i, p] * ord_counts[i, p]) -
                                         covariance[i, i, p] * ord_counts[i, p]) for i in range(nord)])
             m_err[:, p] = np.array([int(np.sum(covariance[i, :, p] * ord_counts[:, p]) -
                                         covariance[i, i, p] * ord_counts[i, p]) for i in range(nord)])
