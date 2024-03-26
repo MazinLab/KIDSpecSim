@@ -68,9 +68,9 @@ def ordersort(
         spec[:, j], _ = np.histogram(photons_pixel[j], bins=msf.bin_edges[:, j])
 
     # uncorrected errors
-    err_p = np.array([[int(np.sum(msf.cov_matrix[:, i, j] * spec[:, j])) -
-                       msf.cov_matrix[i, i, j] * spec[i, j] for j in detector.pixel_indices] for i in range(nord)])
-    err_n = np.array([[int(np.sum(msf.cov_matrix[i, :, j] * spec[:, j]) -
+    err_p = np.array([[int(np.sum(msf.cov_matrix[i, :, j] * spec[i, j]) -
+                       msf.cov_matrix[i, i, j] * spec[i, j]) for j in detector.pixel_indices] for i in range(nord)])
+    err_n = np.array([[int(np.sum(msf.cov_matrix[:, i, j] * spec[:, j]) -
                            msf.cov_matrix[i, i, j] * spec[i, j]) for j in detector.pixel_indices] for i in range(nord)])
 
     # saving extracted and unblazed spectrum to file
@@ -105,29 +105,6 @@ def ordersort(
         plt.suptitle(f'Sorted spectrum with error band')
         plt.tight_layout()
         plt.show()
-
-        # if filename == 'emission':
-        #     # plot the residual between model and observation:
-        #     model = np.genfromtxt('../../Ar_flux_integrated.csv', delimiter=',')
-        #     for n, i in enumerate(model[::-1]):
-        #         plt.grid()
-        #         model[::-1][n] /= np.max(i)
-        #         normed = spectrum[1].data[n] / np.max(spectrum[1].data[n])
-        #         plt.plot(detector.pixel_indices, model[::-1][n] - normed)
-        #         plt.title(f'Residual between model and observation, Order {spectro.orders[::-1][n]}')
-        #         plt.ylabel('Residual, both normalized to 1 at peak')
-        #         plt.xlabel('Pixel Index')
-        #         plt.show()
-        # 
-        #         plt.grid()
-        #         plt.plot(detector.pixel_indices, normed, label='Observation')
-        #         plt.plot(detector.pixel_indices, model[::-1][n], '--', label='Model')
-        #         plt.title(f"Side-by-side comparison, Order {spectro.orders[::-1][n]}")
-        #         plt.ylabel('Normalized Flux')
-        #         plt.xlabel('Pixel Index')
-        #         plt.legend()
-        #         plt.show()
-
     return fits_file
 
 
