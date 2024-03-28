@@ -26,7 +26,7 @@ def _get_atm():
     global _atm
     if _atm is not None:
         return _atm
-    # x = np.genfromtxt('/home/kimc/pycharm/KIDSpecSim/ucsbsim/mkidspec/simfiles/transdata_0.5_1_mic')  # TODO doesn't go below 500nm
+    # x = np.genfromtxt('/home/kimc/pycharm/KIDSpecSim/ucsbsim/mkidspec/simfiles/transdata_05_1_mic')  # TODO doesn't go below 500nm
     # y = np.genfromtxt('/home/kimc/pycharm/KIDSpecSim/ucsbsim/mkidspec/simfiles/transdata_1_5_mic')
     # x = x[x[:, 1] > 0]
     # x[:, 0] = 1e4 / x[:, 0]
