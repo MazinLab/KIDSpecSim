@@ -51,6 +51,7 @@ def ordersort(
         l0=sim.l0,
         resid_map=resid_map
     )
+    pixels = detector.pixel_indices
     grating = GratingSetup(alpha=sim.alpha, delta=sim.delta, beta_center=sim.beta, groove_length=sim.groove_length)
     spectro = SpectrographSetup(
         order_range=sim.order_range,
@@ -65,7 +66,7 @@ def ordersort(
     lambda_pixel = spectro.pixel_wavelengths().to(u.nm)[::-1]
 
     spec = np.zeros([nord, sim.npix])
-    for j in detector.pixel_indices:  # binning photons by MSF bins edges
+    for j in pixels:  # binning photons by MSF bins edges
         spec[:, j], _ = np.histogram(photons_pixel[j], bins=msf.bin_edges[:, j])
 
     spec_unfixed = deepcopy(spec)
@@ -73,13 +74,15 @@ def ordersort(
     err_p = np.zeros([nord, sim.npix])
     err_n = np.zeros([nord, sim.npix])
     count_order = np.argsort(spec, axis=0)
-    for j in detector.pixel_indices:
-        for i in count_order[::-1][:, j]:
-            err_indv = np.delete(msf.cov_matrix[i, :, j] * spec[i, j], i)
-            err_n[:, j] += np.insert(err_indv, i, 0)
-            err_p[i, j] = np.sum(err_indv)
-            spec[:, j] = np.around(np.insert(np.delete(spec[:, j], i) - err_indv, i, spec[i, j] + err_p[i, j])).astype(int)
+    for i in count_order[::-1]:
+        err_indiv = msf.cov_matrix[i, :, pixels] * spec[i, pixels][:, None]  # getting counts that should be contained in the ith order
+        err_indiv[pixels, i] = 0  # setting the ith order error to 0 since these will be added to the ith counts
+        err_p += err_indiv.T  # removed counts propagated through as the positive (upper limit) error for other orders
+        err_n[i, pixels] = np.sum(err_indiv, axis=1)  # all errors added up and made into the negative ith error
+        spec -= err_indiv.T  # removing the counts from the other orders
+        spec[i, pixels] += err_n[i, pixels]  # adding the counts to the ith order
     spec[spec < 0] = 0
+    spec = np.around(spec).astype(int)
     err_p = np.around(err_p).astype(int)
     err_n = np.around(err_n).astype(int)
 
