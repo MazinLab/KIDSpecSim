@@ -28,14 +28,16 @@ def extract(
     orders = wavecal_file['orders']
 
     spectrum = fits.open(f'{obs_fits}', mode='update')
-    obs_flux = np.array([np.array(spectrum[1].data[n]) for n, i in enumerate(orders)])
+    obs_flux_corr = np.array([np.array(spectrum[1].data[n]) for n, i in enumerate(orders)])
     err_n = np.array([np.array(spectrum[2].data[n]) for n, i in enumerate(orders)])
     err_p = np.array([np.array(spectrum[3].data[n]) for n, i in enumerate(orders)])
     guess_wave = np.array([np.array(spectrum[4].data[n]) for n, i in enumerate(orders)])
+    obs_flux = np.array([np.array(spectrum[5].data[n]) for n, i in enumerate(orders)])
     hdu_list = fits.HDUList([spectrum[0],
                              spectrum[1],
                              spectrum[2],
                              spectrum[3],
+                             spectrum[5],
                              fits.BinTableHDU(Table(wavecal), name='Wavecal')])
     hdu_list.writeto(obs_fits, output_verify='ignore', overwrite=True)
     logging.info(f'The FITS file has been updated with the wavecal: {obs_fits}.')
@@ -56,8 +58,6 @@ def extract(
         plt.show()
 
         # plot with errors
-        obs_flux_corr = obs_flux + (err_p - err_n)
-        obs_flux_corr[obs_flux_corr < 0] = 0
         fig, ax = plt.subplots(1, 2, sharey=True, figsize=(10, 5))
         axes = ax.ravel()
 

@@ -430,8 +430,8 @@ def cov_from_params(params, model, nord, order_edges, valid_idx, x_phases, **fit
         suppress_model = interp.InterpolatedUnivariateSpline(x=x_phases, y=suppress_model, k=1, ext=1)
         suppress_model_sum = np.array([
             suppress_model.integral(order_edges[i], order_edges[i + 1]) for i in range(len(order_edges) - 1)])
-        cov[valid_idx, k] = np.nan_to_num((model_sum - suppress_model_sum) / model_sum)
-        if np.array_equal(cov[valid_idx, k], np.zeros([nord])):
+        cov[k, valid_idx] = np.nan_to_num((model_sum - suppress_model_sum) / model_sum)
+        if np.array_equal(cov[k, valid_idx], np.zeros([nord])):
             cov[k, k] = 1
     cov[cov < 0] = 0
     return cov
@@ -519,15 +519,15 @@ def fitmsf(
     full_pix = []
     opt_param_all = []
 
-    redchi_val = 30  # TODO remove after debug
+    redchi_val = 50  # TODO remove after debug
     xtol = 1e-4
-    #pixels = [1499]
+    #pixels = range(900, 921)
 
     leg_e = Legendre(coef=(0, 0, 0), domain=np.array(bin_range))
 
     # do the non-linear least squares fit:
     for p in pixels:
-        #print(p)
+        # print(p)
         leg_s = Legendre(coef=(0, 0, 0), domain=[energy[0, p] / energy[-1, p], 1])
 
         peaks, _ = sig.find_peaks(x=bin_counts[:, p], distance=int(0.095 * bins), height=snr**2)
@@ -560,58 +560,6 @@ def fitmsf(
                         else:
                             peaks_nord = np.insert(peaks_nord, o, int((peaks_sort[o-1] + peaks_sort[o])/2))
                     missing_ord = item[1]
-                    # if p <= 346 and len(peaks_sort) == 3:  # 1 order missing
-                    #     peaks_nord = np.array([
-                    #         peaks_sort[0],
-                    #         peaks_sort[1],
-                    #         int((peaks_sort[1] + peaks_sort[2]) / 2),
-                    #         peaks_sort[2]]
-                    #     )
-                    #     missing_ord = [2]
-                    # elif p <= 1300 and len(peaks_sort) == 2:  # 2 orders missing
-                    #     peaks_nord = np.array([
-                    #         int(peaks_sort[0] - (peaks_sort[1] - peaks_sort[0]) / 2),
-                    #         peaks_sort[0],
-                    #         int((peaks_sort[0] + peaks_sort[1]) / 2),
-                    #         peaks_sort[1]]
-                    #     )
-                    #     missing_ord = [0, 2]
-                    # elif 346 < p <= 1300 and len(peaks_sort) == 3:  # 1 order missing
-                    #     peaks_nord = np.array([
-                    #         int(peaks_sort[0] - (peaks_sort[1] - peaks_sort[0]) / 2),
-                    #         peaks_sort[0],
-                    #         peaks_sort[1],
-                    #         peaks_sort[2]]
-                    #     )
-                    #     missing_ord = [0]
-                    # elif 1680 < p < 1800 and len(peaks_sort) == 3:
-                    #     # weird zone with flip flop between order 4 and 5
-                    #     peaks, _ = sig.find_peaks(bin_counts[:, p], distance=int(0.25 * n_bins), height=snr**2)
-                    #     idx = np.argsort(bin_counts[peaks, p])[::-1]
-                    #     peaks_sort = np.sort(peaks[idx])
-                    #     peaks_nord = np.array([
-                    #         peaks_sort[0],
-                    #         int((peaks_sort[0] + peaks_sort[1]) / 2),
-                    #         peaks_sort[1],
-                    #         int(peaks_sort[1] + (peaks_sort[1] - peaks_sort[0]) / 2)]
-                    #     )
-                    #     missing_ord = [1, 3]
-                    # elif p > 1300 and len(peaks_sort) == 3:  # 1 order missing
-                    #     peaks_nord = np.array([
-                    #         peaks_sort[0],
-                    #         int((peaks_sort[0] + peaks_sort[1]) / 2),
-                    #         peaks_sort[1],
-                    #         peaks_sort[2]]
-                    #     )
-                    #     missing_ord = [1]
-                    # elif p > 1300 and len(peaks_sort) == 2:  # 2 orders missing
-                    #     peaks_nord = np.array([
-                    #         peaks_sort[0],
-                    #         int((peaks_sort[0] + peaks_sort[1]) / 2),
-                    #         peaks_sort[1],
-                    #         int(peaks_sort[1] + (peaks_sort[1] - peaks_sort[0]) / 2)]
-                    #     )
-                    #     missing_ord = [1, 3]
             if missing_ord is None:  # e.g.: only 1 peak was found
                 logging.info(f'Pixel {p} will default to simulation guess.')
                 peaks_nord = [gen.nearest_idx(bin_centers, sim_phase[i, p]) for i in range(nord)]

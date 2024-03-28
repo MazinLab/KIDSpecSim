@@ -1,4 +1,5 @@
 import numpy as np
+from copy import deepcopy
 import matplotlib.pyplot as plt
 import time
 from datetime import datetime as dt
@@ -67,19 +68,30 @@ def ordersort(
     for j in detector.pixel_indices:  # binning photons by MSF bins edges
         spec[:, j], _ = np.histogram(photons_pixel[j], bins=msf.bin_edges[:, j])
 
-    # uncorrected errors
-    err_p = np.array([[int(np.sum(msf.cov_matrix[i, :, j] * spec[i, j]) -
-                       msf.cov_matrix[i, i, j] * spec[i, j]) for j in detector.pixel_indices] for i in range(nord)])
-    err_n = np.array([[int(np.sum(msf.cov_matrix[:, i, j] * spec[:, j]) -
-                           msf.cov_matrix[i, i, j] * spec[i, j]) for j in detector.pixel_indices] for i in range(nord)])
+    spec_unfixed = deepcopy(spec)
+
+    err_p = np.zeros([nord, sim.npix])
+    err_n = np.zeros([nord, sim.npix])
+    count_order = np.argsort(spec, axis=0)
+    for j in detector.pixel_indices:
+        for i in count_order[::-1][:, j]:
+            err_indv = np.delete(msf.cov_matrix[i, :, j] * spec[i, j], i)
+            err_n[:, j] += np.insert(err_indv, i, 0)
+            err_p[i, j] = np.sum(err_indv)
+            spec[:, j] = np.around(np.insert(np.delete(spec[:, j], i) - err_indv, i, spec[i, j] + err_p[i, j])).astype(int)
+    spec[spec < 0] = 0
+    err_p = np.around(err_p).astype(int)
+    err_n = np.around(err_n).astype(int)
 
     # saving extracted and unblazed spectrum to file
     fits_file = f'{outdir}/{filename}.fits'
     hdu_list = fits.HDUList([fits.PrimaryHDU(),
-                             fits.BinTableHDU(Table(spec), name='Spectrum'),
-                             fits.BinTableHDU(Table(err_n), name='- Errors'),
-                             fits.BinTableHDU(Table(err_p), name='+ Errors'),
-                             fits.BinTableHDU(Table(lambda_pixel.to(u.Angstrom)), name='Wave Range')])
+                             fits.BinTableHDU(Table(spec), name='Corrected Spectrum'),
+                             fits.BinTableHDU(Table(err_p), name='- Errors'),
+                             fits.BinTableHDU(Table(err_n), name='+ Errors'),
+                             fits.BinTableHDU(Table(lambda_pixel.to(u.Angstrom)), name='Wave Range'),
+                             fits.BinTableHDU(Table(spec_unfixed), name='Uncorrected Spectrum')])
+
     hdu_list.writeto(fits_file, output_verify='ignore', overwrite=True)
     logging.info(f'The extracted spectrum with its errors has been saved to {fits_file}.')
 
@@ -87,21 +99,16 @@ def ordersort(
         spectrum = fits.open(fits_file)
 
         # plot the spectrum unblazed with the error band:
-        fig2, ax2 = plt.subplots(int(np.ceil(nord/2)), 2, figsize=(30, int(10*nord)), sharex=True)
-        axes2 = ax2.ravel()
+        fig, ax = plt.subplots(int(np.ceil(nord/2)), 2, figsize=(15, int(5*nord)), sharex=True)
+        axes = ax.ravel()
         for i in range(nord):
-            spec_w_merr = np.array(spectrum[1].data[i]) - np.array(spectrum[2].data[i])
-            spec_w_perr = np.array(spectrum[1].data[i]) + np.array(spectrum[3].data[i])
-            spec_w_merr[spec_w_merr < 0] = 0
-            axes2[i].grid()
-            axes2[i].fill_between(detector.pixel_indices, spec_w_merr, spec_w_perr, edgecolor='r', facecolor='r',
-                                  linewidth=0.5)
-            axes2[i].plot(detector.pixel_indices, spectrum[1].data[i])
-            axes2[i].set_title(f'Order {7 - i}')
-        axes2[-1].set_xlabel("Pixel Index")
-        axes2[-2].set_xlabel("Pixel Index")
-        axes2[0].set_ylabel('Photon Count')
-        axes2[2].set_ylabel('Photon Count')
+            axes[i].grid()
+            axes[i].plot(detector.pixel_indices, spectrum[1].data[i])
+            axes[i].set_title(f'Order {spectro.orders[::-1][i]}')
+        axes[-1].set_xlabel("Pixel Index")
+        axes[-2].set_xlabel("Pixel Index")
+        axes[0].set_ylabel('Photon Count')
+        axes[2].set_ylabel('Photon Count')
         plt.suptitle(f'Sorted spectrum with error band')
         plt.tight_layout()
         plt.show()
