@@ -23,6 +23,7 @@ class SpecSimSettings:
             focallength_mm: float,
             R0s_file: str = None,
             phaseoffset_file: str = None,
+            resid_file: str = None,
             type_spectra: str = None,
             emission_file: str = None,
             exptime_s: float = None,
@@ -50,6 +51,7 @@ class SpecSimSettings:
         :param float focallength_mm: The focal length of the detector in mm.
         :param str R0s_file: Directory/filename of the R0s file.
         :param str phaseoffset_file: Directory/filename of the pixel phase center offsets file.
+        :param str resid_file: Directory/filename of the resonator IDs file.
         :param str type_spectra: The type of spectrum to be simulated.
         :param str emission_file: Directory/filename of the emission spectrum file.
         :param float exptime_s: The exposure time of the observation in seconds.
@@ -82,6 +84,7 @@ class SpecSimSettings:
         self.focallength = float(focallength_mm)*u.mm if not isinstance(focallength_mm, u.Quantity) else focallength_mm
         self.R0s_file = R0s_file
         self.phaseoffset_file = phaseoffset_file
+        self.resid_file = resid_file
         self.type_spectra = type_spectra
         self.emission_file = emission_file
         if exptime_s is not None:
