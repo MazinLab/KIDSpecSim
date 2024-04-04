@@ -40,18 +40,29 @@ This sets up the Cython files needed to use some of the modules.
 #### Spectrum simulation steps:
 Now that everything is ready, run the following to obtain a flat-field photon table:
 
-`python scripts/simulate.py flat`
+`python scripts/simulate.py --type_spectra flat`
 
 Run the following to obtain a HgAr lamp photon table:
 
-`python scripts/simulate.py emission -ef mkidspec/linelists/hgar.csv`
+`python scripts/simulate.py --type_spectra emission -ef mkidspec/linelists/hgar.csv`
 
 Run the following to obtain a Phoenix star model photon table:
 
-`python scripts/simulate.py phoenix --on_sky`
+`python scripts/simulate.py --type_spectra phoenix --on_sky`
 
-Move all generated .h5 files into ucsbsim/mkidspec/testfiles.
-(These test files are too large to be uploaded to Git and be ready to use.)
+      Optional: writing a .txt file containing command line arguments exactly as shown is 
+      another option if you expect the need to edit many properties. For example, run:
+
+      python scripts/simulate.py --option_file path/to/option_file.txt
+
+      where option_file.txt contains:
+
+      --type_spectra phoenix
+
+      --on_sky
+
+Move all generated .h5 files (their file locations are printed in the command line output) into `ucsbsim/mkidspec/testfiles`.
+(These test files are too large to be uploaded to Git.)
 
 Now to recover the Phoenix star spectrum, run:
 
@@ -59,13 +70,16 @@ Now to recover the Phoenix star spectrum, run:
 
 You may omit the '--plot' if you do not wish to view intermediate plots.
 
-run
 
-`python scripts/simulate.py --help`
-
-or
-
-`python scripts/mkidspec.py --help`
-
-for the script arguments to see the different configurations and
-how to skip certain steps.
+   #### Help: 
+      
+      Run
+      
+      python scripts/simulate.py --help
+      
+      or
+      
+      python scripts/mkidspec.py --help
+      
+      for the script arguments to see the different configurations and
+      how to skip certain steps.
