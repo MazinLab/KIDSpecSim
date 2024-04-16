@@ -60,7 +60,8 @@ if __name__ == '__main__':
 
     # optional simulation args:
     parser.add_argument('--type_spectra', default='flat', type=str,
-                        help='The type of spectra: can be "blackbody", "phoenix", "flat", "emission", or "sky_emission".')
+                        help='The type of spectra: can be "blackbody", "phoenix", "flat", "emission", '
+                             '"sky_emission", or "from_file".')
     parser.add_argument('--outdir', default='../mkidspec/testfiles', type=str, help='Directory for output files.')
     parser.add_argument('--R0s_file', default='../mkidspec/simfiles/R0s.csv', type=str,
                         help="Directory/filename of the R0s file, will be created if it doesn't exist.")
@@ -71,8 +72,9 @@ if __name__ == '__main__':
     parser.add_argument('--spectro_type', default='default', type=str,
                         help='Type of spectrograph settings, in general. E.g.: "default", "FWHMlimit", etc.'
                              'Will only be used for folder naming convention.')
-    parser.add_argument('-ef', '--emission_file', default=None,
-                        help='Directory/filename of NIST emission line spectrum, REQUIRED if spectra is "emission".')
+    parser.add_argument('-sf', '--spec_file', default=None,
+                        help='Directory/filename of linelist or spectrum, '
+                             'REQUIRED if spectra is "emission" or "from_file".')
     parser.add_argument('-dist', type=float, default=5,  # Sirius A, brightest star in the night sky
                         help='Distance to target star in parsecs, REQUIRED if spectra is "phoenix".')
     parser.add_argument('-rad', default=1, type=float,
@@ -145,7 +147,7 @@ if __name__ == '__main__':
         phaseoffset_file=args.phaseoffset_file,
         resid_file=args.resid_file,
         type_spectra=args.type_spectra,
-        emission_file=args.emission_file,
+        spec_file=args.spec_file,
         exptime_s=args.exptime,
         telearea_cm2=args.telearea,
         distance_ps=args.dist,
@@ -227,7 +229,7 @@ if __name__ == '__main__':
         distance=sim.distance,
         radius=sim.radius,
         teff=sim.temp,
-        emission_file=sim.emission_file,
+        spec_file=sim.spec_file,
         minwave=sim.minwave,
         maxwave=sim.maxwave,
         on_sky=sim.on_sky,
@@ -311,6 +313,10 @@ if __name__ == '__main__':
     if args.plot:
         warnings.filterwarnings(action="ignore")  # ignore tight_layout warnings
 
+        # separate photons by resid (pixel) and realign (no offset):
+        idx = [np.where(photons[:observed].resID == resid_map[j]) for j in range(sim.npix)]
+        photons_realign = [(photons[:observed].wavelength[idx[j]] / phase_offsets[j]).tolist() for j in range(sim.npix)]
+
         # phase/pixel space plot to verify that phases are within proper values and orders are more-or-less visible
         bin_edges = np.linspace(-1, -0.1, 100)
         centers = bin_edges[:-1] + np.diff(bin_edges) / 2
@@ -333,10 +339,6 @@ if __name__ == '__main__':
 
         # integrating the convolution to go to pixel-order array size:
         convol_int = np.sum(convol_normed, axis=0)
-
-        # separate photons by resid (pixel) and realign (no offset):
-        idx = [np.where(photons[:observed].resID == resid_map[j]) for j in range(sim.npix)]
-        photons_realign = [(photons[:observed].wavelength[idx[j]] / phase_offsets[j]).tolist() for j in range(sim.npix)]
 
         # use FSR to bin and order sort:
         fsr = spectro.fsr(order=spectro.orders).to(u.nm)

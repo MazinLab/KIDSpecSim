@@ -7,7 +7,7 @@ from astropy import units as u
 from astropy.constants import sigma_sb, h, c, R_earth
 from specutils import Spectrum1D
 from synphot import SpectralElement, SourceSpectrum, units
-from synphot.models import Box1D, BlackBodyNorm1D, ConstFlux1D
+from synphot.models import Box1D, BlackBodyNorm1D, ConstFlux1D, Empirical1D
 from KIDSpecSim.ucsbsim.mkidspec.utils.general import gauss
 
 _atm = None
@@ -236,19 +236,30 @@ def EmissionModel(filename, minwave, maxwave, target_R=50000):
     return sp*ratio
 
 
-def get_spectrum(spectrum_type: str, distance=None, radius=None, teff=None, emission_file=None, minwave=None,
-                 maxwave=None, on_sky=False, fov=None):
+def SpecFromFile(filename: str, wave_units: u.Quantity):
+    """
+    :param filename: Directory/filename of spectrum
+    :param wave_units: units of wavelength, as u.Quantity
+    :return: spectrum from file
+    """
+    file = np.genfromtxt(filename)
+    return SourceSpectrum(Empirical1D, points=file[:, 0]*wave_units, lookup_table=file[:, 1]*u.photlam)
+
+
+def get_spectrum(spectrum_type: str, distance=None, radius=None, teff=None, spec_file=None, minwave=None,
+                 maxwave=None, on_sky=False, fov=None, wave_units=u.nm):
     """
     :param str spectrum_type: 'blackbody', 'phoenix', 'flat', or 'emission' only
     :param distance: distance to spectrum.
     :param radius: radius of star.
     :param teff: effective temperature for blackbody or phoenix model spectrum
-    :param emission_file: file name for the desired emission spectrum
+    :param spec_file: file name for the emission line list or spectrum from file
     :param minwave: minimum wavelength
     :param maxwave: maximum wavelength
     :param bool on_sky: True if observation is on sky and has atmospheric attenuation/sky emission/etc.
                         will always be ignored for flat and emission type spectra.
     :param fov: field of view in arcsec^2
+    :param wave_units: wavelength units for spectrum from file
     :return: SourceSpectrum object of chosen spectrum
     """
     if spectrum_type == 'blackbody':
@@ -261,13 +272,17 @@ def get_spectrum(spectrum_type: str, distance=None, radius=None, teff=None, emis
         logging.info(f'\nObtained flat-field model spectrum.')
         return FlatModel()
     elif spectrum_type == 'emission':
-        logging.info(f'\nObtained {emission_file} emission spectrum.')
-        return EmissionModel(emission_file, minwave, maxwave)
+        logging.info(f'\nObtained {spec_file} emission spectrum.')
+        return EmissionModel(spec_file, minwave, maxwave)
     elif spectrum_type == 'sky_emission':
         logging.info(f'\nObtained sky emission spectrum.')
         return SkyEmission(fov)
+    elif spectrum_type == 'from_file':
+        logging.info('\nObtained spectrum from file.')
+        return SpecFromFile(filename=spec_file, wave_units=wave_units)
     else:
-        raise ValueError("Only 'blackbody', 'phoenix', 'flat', 'emission', or 'sky_emission' are supported for spectrum_type.")
+        raise ValueError("Only 'blackbody', 'phoenix', 'flat', 'emission', 'sky_emission', "
+                         "or 'from_file' are supported for spectrum_type.")
 
 
 def clip_spectrum(x, clip_range):

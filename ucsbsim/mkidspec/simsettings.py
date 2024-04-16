@@ -25,7 +25,7 @@ class SpecSimSettings:
             phaseoffset_file: str = None,
             resid_file: str = None,
             type_spectra: str = None,
-            emission_file: str = None,
+            spec_file: str = None,
             exptime_s: float = None,
             telearea_cm2: float = None,
             distance_ps: float = None,
@@ -53,7 +53,7 @@ class SpecSimSettings:
         :param str phaseoffset_file: Directory/filename of the pixel phase center offsets file.
         :param str resid_file: Directory/filename of the resonator IDs file.
         :param str type_spectra: The type of spectrum to be simulated.
-        :param str emission_file: Directory/filename of the emission spectrum file.
+        :param str spec_file: Directory/filename of the spectrum file.
         :param float exptime_s: The exposure time of the observation in seconds.
         :param float telearea_cm2: The telescope area of the observation in cm2.
         :param distance_ps: The distance to target in parsecs.
@@ -86,7 +86,7 @@ class SpecSimSettings:
         self.phaseoffset_file = phaseoffset_file
         self.resid_file = resid_file
         self.type_spectra = type_spectra
-        self.emission_file = emission_file
+        self.spec_file = spec_file
         if exptime_s is not None:
             self.exptime = float(exptime_s)*u.s if not isinstance(exptime_s, u.Quantity) else exptime_s
         if telearea_cm2 is not None:
