@@ -75,7 +75,7 @@ def _determine_apodization(x, pixel_samples_frac, pixel_max_npoints):
     """
     # TODO this many not be quite right, cf. interp_wave
     # each pixel split into npoints
-    in_pixel = np.abs(x[:, None, None]) <= (pixel_samples_frac / 2)
+    in_pixel = np.abs(x[:, None, None]) <= (pixel_samples_frac / 2 + 0.5) 
     # only the points that are within the boundaries of each pixel
 
     edge = pixel_samples_frac / 2
