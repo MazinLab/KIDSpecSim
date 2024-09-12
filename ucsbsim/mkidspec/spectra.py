@@ -8,12 +8,13 @@ from astropy.constants import sigma_sb, h, c, R_earth
 from specutils import Spectrum1D
 from synphot import SpectralElement, SourceSpectrum, units
 from synphot.models import Box1D, BlackBodyNorm1D, ConstFlux1D, Empirical1D
-from KIDSpecSim.ucsbsim.mkidspec.utils.general import gauss
+from ucsbsim.mkidspec.utils.general import gauss
 
 _atm = None
 
 u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # new unit name, photon flux per wavelength
 
+logger = logging.getLogger('spectra')
 
 # todo make use of Specutils/and pysynphot.
 # https://synphot.readthedocs.io/en/latest/synphot/spectrum.html#specutils
@@ -96,7 +97,7 @@ def apply_bandpass(spectra, bandpass):
         for b in bandpass:
             s *= b
         spectra[i] = s
-    logging.info(f'Multipled spectrum with given bandpass.')
+    logger.info(f'Multipled spectrum with given bandpass.')
     if not_list:
         return spectra[0]
     else:
@@ -263,22 +264,22 @@ def get_spectrum(spectrum_type: str, distance=None, radius=None, teff=None, spec
     :return: SourceSpectrum object of chosen spectrum
     """
     if spectrum_type == 'blackbody':
-        logging.info(f'\nObtained blackbody model spectrum.')
+        logger.info(f'Obtained blackbody model spectrum.')
         return BlackbodyModel(distance=distance, radius=radius, teff=teff, on_sky=on_sky, fov=fov)
     elif spectrum_type == 'phoenix':
-        logging.info(f'\nObtained Phoenix model spectrum.')
+        logger.info(f'Obtained Phoenix model spectrum.')
         return PhoenixModel(distance=distance, radius=radius, teff=teff, on_sky=on_sky, fov=fov)
     elif spectrum_type == 'flat':
-        logging.info(f'\nObtained flat-field model spectrum.')
+        logger.info(f'Obtained flat-field model spectrum.')
         return FlatModel()
     elif spectrum_type == 'emission':
-        logging.info(f'\nObtained {spec_file} emission spectrum.')
+        logger.info(f'Obtained {spec_file} emission spectrum.')
         return EmissionModel(spec_file, minwave, maxwave)
     elif spectrum_type == 'sky_emission':
-        logging.info(f'\nObtained sky emission spectrum.')
+        logger.info(f'Obtained sky emission spectrum.')
         return SkyEmission(fov)
     elif spectrum_type == 'from_file':
-        logging.info('\nObtained spectrum from file.')
+        logger.info('Obtained spectrum from file.')
         return SpecFromFile(filename=spec_file, wave_units=wave_units)
     else:
         raise ValueError("Only 'blackbody', 'phoenix', 'flat', 'emission', 'sky_emission', "
@@ -293,5 +294,5 @@ def clip_spectrum(x, clip_range):
     """
     mask = (x.waveset >= clip_range[0]) & (x.waveset <= clip_range[-1])
     w = x.waveset[mask]
-    logging.info(f"Clipped spectrum to{clip_range}.")
+    logger.info(f"Clipped spectrum to{clip_range}.")
     return SourceSpectrum.from_spectrum1d(Spectrum1D(spectral_axis=w, flux=x(w)))
