@@ -3,8 +3,16 @@ import astropy.units as u
 import logging
 from scipy.constants import c
 
+from general import wave_to_eV
 from ucsbsim.filterphot import mask_deadtime
 from ucsbsim.mkidspec.engine import draw_photons
+
+logger = logging.getLogger('detector')
+
+
+def lasercal(phot_phases, phase_offset, minw, maxw, lasers=[400, 600, 800], error=0.05):
+    laser_phase = np.multiply(wave_to_phase(lasers, minw, maxw)*phase_offset,np.random.uniform(1-error, 1+error, len(lasers)))
+    return np.poly1d(np.polyfit(laser_phase, lasers, len(lasers)-1))(phot_phases)
 
 
 def wave_to_phase(waves, minwave, maxwave):
@@ -14,10 +22,10 @@ def wave_to_phase(waves, minwave, maxwave):
     :param maxwave: maximum wavelength of spectrograph
     :return: phase values corresponding to wavelength
     """
-    shape = np.shape(waves)
-    waves = waves.flatten()
     if isinstance(waves, u.Quantity):
         waves = waves.to(u.nm).value
+    shape = np.shape(waves)
+    waves = np.array(waves).flatten()
     # range is -1(pi/2) to 1(pi/2)
     # smaller wavelengths wrap beginning at -1 and larger wavelengths wrap beginning at 1
     # line from (freq_minw, -0.8) to (freq_maxw, -0.2)
@@ -30,6 +38,14 @@ def wave_to_phase(waves, minwave, maxwave):
                            posinf=0, neginf=-1)
     phases = np.reshape(phases, shape)
     return phases
+
+
+def phase_to_wave(phases, minwave, maxwave):
+    # linear equation: x = (y-y1)*(x2-x1)/(y2-y1) + x1 = (y + 0.8)*(freq_maxw-freq_minw)/0.6 + freq_minw
+    freq_minw = (c * u.m / u.s / minwave).decompose()
+    freq_maxw = (c * u.m / u.s / maxwave).decompose()
+    freqs = ((phases+0.8)*(freq_maxw-freq_minw)/0.6 + freq_minw).decompose()
+    return c * u.m / u.s / freqs
 
 
 class MKIDDetector:
@@ -128,12 +144,12 @@ class MKIDDetector:
         SATURATION_WAVELENGTH_NM = 350 * u.nm
         DEADTIME = 10 * u.us
 
-        logging.info("\nBeginning MKID detector observation sequence with:"
+        logger.info("Beginning MKID detector observation sequence with:"
                      f"\n\tMinimum trigger energy: {MIN_TRIGGER_ENERGY:.3e}"
                      f"\n\tPhoton merge time: {merge_time_window_s:.0e}"
                      f"\n\tSaturation wavelength: {SATURATION_WAVELENGTH_NM}"
                      f"\n\tDeadtime: {DEADTIME}")
-        logging.warning(f'Simulated dataset may take up to {total_photons * 16 / 1024 ** 3:.2} GB of RAM.')
+        logger.warning(f'Simulated dataset may take up to {total_photons * 16 / 1024 ** 3:.2} GB of RAM.')
 
         if self.resid_map is None:
             self.resid_map = np.arange(pixel_count.size, dtype=int) * 10 + 100  # something arbitrary
@@ -210,7 +226,7 @@ class MKIDDetector:
                     while photons.wavelength[n] > 1:
                         photons.wavelength[n] -= 2
 
-        logging.info(f'Completed detector observation sequence.\n'
+        logger.info(f'Completed detector observation sequence.\n'
                      f'Merged: {total_merged}\n'
                      f'Deadtime miss: {np.sum(total_missed)}\n'
                      f'Observed: {observed}')
