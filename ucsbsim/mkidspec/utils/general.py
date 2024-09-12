@@ -1,4 +1,7 @@
 import numpy as np
+import astropy.units as u
+from scipy.constants import h, c
+
 
 def gauss(x, mu, sig, A):
     """
@@ -27,8 +30,8 @@ def gauss_intersect(mu, sig, A):
     a = 1 / sig[0] ** 2 - 1 / sig[1] ** 2
     b = 2 * mu[1] / sig[1] ** 2 - 2 * mu[0] / sig[0] ** 2
     c = (mu[0] / sig[0]) ** 2 - (mu[1] / sig[1]) ** 2 - 2 * np.log(A[0] / A[1])
-    if a == 0:
-        return quad_formula(a=a, b=b, c=c)[0]
+    if np.abs(a) <= 1e-10:
+        return quad_formula(a=0, b=b, c=c)[0]
     else:
         solp, soln = tuple(quad_formula(a=a, b=b, c=c))
         if mu[0] < solp < mu[1]:
@@ -69,6 +72,22 @@ def sig_to_R(sig, lam):
     return np.abs(R)
 
 
+def wave_to_eV(wave):
+    """
+    :param wave: wavelength in astropy units
+    :return: energy in eV
+    """
+    return ((h*u.J*u.s) * (c * u.m / u.s) / wave).to(u.eV)
+
+
+def energy_to_nm(eV):
+    """
+    :param eV: energy in astropy units
+    :return: wavelength in nm
+    """
+    return ((h*u.J*u.s) * (c * u.m / u.s) / eV).to(u.nm)
+
+
 def n_bins(n_data: int, method: str = 'rice'):
     # TODO include more algorithms based on number of data points
     """
@@ -80,4 +99,3 @@ def n_bins(n_data: int, method: str = 'rice'):
         return int(4 * n_data ** (1 / 3))  # multiplied by 2 because sparsest pixel likely only has 2 gauss (need 4)
     else:
         raise ValueError(f'Method {method} not supported.')
-
