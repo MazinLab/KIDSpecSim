@@ -17,6 +17,8 @@ This script may also:
 - fit an empiric blaze function to be divided out
 """
 
+logger = logging.getLogger('extract')
+
 
 def extract(
         obs_fits,
@@ -40,7 +42,7 @@ def extract(
                              spectrum[5],
                              fits.BinTableHDU(Table(wavecal), name='Wavecal')])
     hdu_list.writeto(obs_fits, output_verify='ignore', overwrite=True)
-    logging.info(f'The FITS file has been updated with the wavecal: {obs_fits}.')
+    logger.info(f'The FITS file has been updated with the wavecal: {obs_fits}.')
 
     if plot:
         # comparing the wavecal solution to the simulation wavelengths

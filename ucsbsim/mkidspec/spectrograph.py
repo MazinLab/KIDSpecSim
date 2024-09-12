@@ -4,6 +4,8 @@ import logging
 
 from ucsbsim.mkidspec.detector import MKIDDetector
 
+logger = logging.getLogger('spectrograph')
+
 
 class GratingSetup:
     def __init__(
@@ -49,7 +51,7 @@ class GratingSetup:
         q4 = np.cos(self.delta) - np.sin(self.delta) / np.tan((self.alpha + beta) / 2)
         rho = np.cos(self.delta) if self.alpha < self.delta else np.cos(self.alpha) / np.cos(self.alpha - self.delta)
         # 2 different rho depending on whether alpha or delta is larger
-        logging.info(f"\nCalculated relative transmission (grating efficiency).")
+        logger.info(f"Calculated relative throughput (grating efficiency).")
         ret = k * np.sinc((m * rho * q4).value) ** 2  # omit np.pi as np.sinc includes it
         return self.empiric_blaze_factor * ret
 
@@ -139,13 +141,13 @@ class SpectrographSetup:
         # slit image at some fiducial wavelength and that the resolution element has some known width there
         # (and that the slit image is a gaussian)
         self.nondimensional_lsf_width = 1 / self.design_res
-        logging.info(f'\nThe spectrograph has been setup with the following properties:'
+        logger.info(f'The spectrograph has been setup with the following properties:'
                      f'\n\tl0: {self.l0}'
                      f'\n\tR0: {self.detector.design_R0}'
                      f'\n\tOrders: {self.orders}'
                      f'\n\tFocal length: {self.focal_length}'
                      f'\n\tIncidence angle: {np.rad2deg(self.grating.alpha):.3f}'
-                     f'\n\tReflectance angle: {np.rad2deg(self.beta_central_pixel):.2f}\n'
+                     f'\n\tReflectance angle: {np.rad2deg(self.beta_central_pixel):.2f}'
                      f'\n\tGroove length: {self.grating.d:.2f}'
                      f'\n\t# of pixels: {self.detector.n_pixels}'
                      f'\n\tPixel size: {self.detector.pixel_size}'

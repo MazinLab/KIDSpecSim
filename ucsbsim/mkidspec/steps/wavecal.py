@@ -25,13 +25,16 @@ Emission line wavelength calibration. The steps are:
 -
 """  # TODO
 
+logger = logging.getLogger('wavecal')
+
+
 def wavecal(
         wavecal_fits,
         orders,
         elem,
         minw,
         maxw,
-        resid_max,
+        residual_max,
         degree,
         iters,
         dim,
@@ -121,7 +124,7 @@ def wavecal(
 
     # load wavecal module
     module = WavelengthCalibration(
-        threshold=resid_max,  # Residual threshold in m/s above which to remove lines (diff/wave*c)
+        threshold=residual_max,  # Residual threshold in m/s above which to remove lines (diff/wave*c)
         degree=deg,  # polynomial degree of the wavelength fit in (pixel, order) direction
         iterations=iters,  # Number of iterations in the remove residuals, auto id, loop
         dimensionality=dim,  # Whether to use 1d or 2d fit
@@ -131,7 +134,7 @@ def wavecal(
         element=elem,
         medium="vac",  # use vac if the linelist provided is in 'air' already, air will convert
         plot=plot,
-        plot_title=f'{degree}D Poly./{resid_max:.0e} Max Resid./Element: {elem.capitalize()}'
+        plot_title=f'{degree}D Poly./{residual_max:.0e} Max Resid./Element: {elem.capitalize()}'
     )
     # combines the orders and returns 2D solution
     wave_result, coef, residuals, fit_lines = module.execute(obs_flux, linelist)
@@ -141,7 +144,7 @@ def wavecal(
     print(f"{np.sum(fit_lines['flag'])} used out of {len(fit_lines)}")
 
     np.savez(f'{outdir}/wavecal.npz', wave_result=wave_result, coef=coef, rms=rms, linelist=linelist, orders=orders)
-    logging.info(f'\nSaved wavecal solution and linelist to {outdir}/wavecal.npz.')
+    logger.info(f'\nSaved wavecal solution and linelist to {outdir}/wavecal.npz.')
 
     if plot:
         new_file = np.load(f'{outdir}/wavecal.npz')
@@ -205,7 +208,7 @@ if __name__ == '__main__':
                         help="Number of iterations to loop through for identifying and discarding lines.")
     parser.add_argument('--manual_fit', action='store_true', default=False, type=bool,
                         help="If passed, indicates user should click plot to align observation and linelist.")
-    parser.add_argument('--resid_max', default=85e3, type=float,
+    parser.add_argument('--residual_max', default=85e3, type=float,
                         help="Maximum residual allowed between fit wavelength and atlas in m/s. (float)")
     parser.add_argument('--width', default=3, type=int, help="Width in pixels when searching for matching peaks.")
     parser.add_argument('--shift_window', default=0.05, type=float,
@@ -228,9 +231,9 @@ if __name__ == '__main__':
     # START LOGGING TO FILE
     # ==================================================================================================================
     now = dt.now()
-    logging.basicConfig(filename=f'{args.output_dir}/logging/wavecal_{now.strftime("%Y%m%d_%H%M%S")}.log',
-                        format='%(levelname)s:%(message)s', level=logging.DEBUG)
-    logging.info("The process of wavelength calibration from an emission line spectrum is recorded."
+    logger = logging.getLogger('wavecal')
+    logging.basicConfig(level=logging.DEBUG)
+    logger.info("The process of wavelength calibration from an emission line spectrum is recorded."
                  f"\nThe date and time are: {now.strftime('%Y-%m-%d %H:%M:%S')}.")
 
     # ==================================================================================================================
@@ -242,11 +245,11 @@ if __name__ == '__main__':
     #     module_init = WavelengthCalibrationInitialize(
     #         degree=args.degree,  # polynomial degree of the wavelength fit
     #         plot=True,
-    #         plot_title=f'Deg. {args.degree} Poly./{10} Walkers/{50000} Steps/{args.resid_max} Max Resid./Element: {args.elem}',
+    #         plot_title=f'Deg. {args.degree} Poly./{10} Walkers/{50000} Steps/{args.residual_max} Max Resid./Element: {args.elem}',
     #         wave_delta=10,  # wavelength uncertainty on the initial guess in Angstrom
     #         nwalkers=100,  # number of walkers in the MCMC
     #         steps=50000,  # number of steps in the MCMC
-    #         resid_delta=args.resid_max,
+    #         resid_delta=args.residual_max,
     #         # residual uncertainty allowed when matching observation with known lines (diff/wave*c)
     #         cutoff=10,  # minimum value in the spectrum to be considered a spectral line,
     #         # if the value is above (or equal 1) it defines the percentile of the spectrum
@@ -265,7 +268,7 @@ if __name__ == '__main__':
         elem=args.elem,
         minwave=args.minw,
         maxwave=args.maxw,
-        resid_max=args.resid_max,
+        residual_max=args.residual_max,
         degree=args.degree,
         iters=args.iters,
         dim=args.dim,
@@ -276,7 +279,7 @@ if __name__ == '__main__':
         plot=args.plot
     )
 
-    logging.info(f'\nTotal script runtime: {((time.perf_counter() - tic) / 60):.2f} min.')
+    logger.info(f'\nTotal script runtime: {((time.perf_counter() - tic) / 60):.2f} min.')
     # ==================================================================================================================
     # MSF EXTRACTION ENDS
     # ==================================================================================================================
