@@ -18,52 +18,24 @@ def parse():
     parser = argparse.ArgumentParser(description='MKID Spectrograph Data Reduction')
 
     # optional script args:
-    parser.add_argument('--outdir', default='../mkidspec/testfiles/outdir', type=str, help='Directory for the output files.')
-    parser.add_argument('--plot', action='store_true', default=False,
-                        help='If passed, indicates that intermediate plots will be shown.')
-    parser.add_argument('--resid_map', default=np.arange(2048, dtype=int) * 10 + 100,
-                        help='Resonator IDs for the array.')
-
-    # optional spectrograph simulation args which are necessary for msf guess:
-    parser.add_argument('--minw', default=400, type=float, help='The minimum wavelength of the spectrograph in nm.')
-    parser.add_argument('--maxw', default=800, type=float, help='The maximum wavelength of the spectrograph in nm.')
-    parser.add_argument('--npix', default=2048, type=int, help='The number of pixels in the MKID detector.')
-    parser.add_argument('--pixsize', default=20, type=float,
-                        help='The length of the MKID pixel in the dispersion direction in um.')
-    parser.add_argument('-R0', default=15, type=float, help='The spectral resolution at the maximum wavelength.')
-    parser.add_argument('-l0', default='same',
-                        help="The longest wavelength in nm. Can be float or 'same' to be equal to 'maxw' arg.")
-    parser.add_argument('--osamp', default=10, type=int,
-                        help='The number of samples to use for the smallest pixel dlambda during convolution.')
-    parser.add_argument('--nsig', default=3, type=float,
-                        help='The number of sigma to use for Gaussian during convolution.')
-    parser.add_argument('--alpha', default=28.3, type=float, help='Angle of incidence on the grating in degrees.')
-    parser.add_argument('--beta', default='littrow', help='Reflectance angle at the central pixel in degrees.'
-                             'Can be a number or "littrow" to be equal to alpha.')
-    parser.add_argument('--delta', default=63, type=float, help='Blaze angle in degrees.')
-    parser.add_argument('-d', '--groove_length', default=((1 / 316) * u.mm).to(u.nm).value, type=float,
-                        help='The groove length d, or distance between slits, of the grating in nm.')
-    parser.add_argument('--m0', default=4, type=int, help='The initial order, at the longer wavelength end.')
-    parser.add_argument('--m_max', default=7, type=int, help='The final order, at the shorter wavelength end.')
-    parser.add_argument('-ppre', '--pixels_per_res_elem', default=2.5, type=float,
-                        help='Number of pixels per spectral resolution element for the spectrograph.')
-    parser.add_argument('--focallength', default=300, type=float, help='The focal length of the detector in mm.')
+    parser.add_argument('--outdir', default='outdir', type=str, help='Directory for the output files.')
+    parser.add_argument('--plot', action='store_true', default=False, help='If passed, show all plots.')
 
     # optional MSF args:
-    parser.add_argument('--msf', default='../mkidspec/testfiles/flat.h5', type=str,
+    parser.add_argument('--msf', default='outdir/flat.h5',
                         help='Directory/name of the flat/blackbody spectrum photon table .h5 file OR'
                              'Directory/name of the complete MKID Spread Function .npz file.'
                              'Pass "False" to disable this step.')
-    parser.add_argument('--bin_range', default=(-1, 0), type=tuple, help='Start and stop of range for phase histogram.')
-    parser.add_argument('--bins', default=50, type=int, help='Number of bins for phase histogram.')
+    parser.add_argument('--bin_range', default=(-1.5, 0), type=tuple, help='Start and stop of range for phase histogram.')
+    parser.add_argument('--bins', default=75, type=int, help='Number of bins for phase histogram.')
     parser.add_argument('--missing_order_pix', nargs='*',
-                        default=[0, 346, 1, 0, 1300, 12, 346, 1300, 1, 1300, 2047, 2, 1300, 2047, 24],
-                        help='Array of [start1, stop1, missing orders as single number indexed from 1],'
-                             'e.g.: [0, 1000, 123, 1000, 2000, 23].')
-    parser.add_argument('--snr', default=5, type=tuple, help='Minimum SNR for peak-finding.')
+                        default=[0, 350, 3, 350, 1300, 1, 0, 1300, 13, 1300, 2047, 2, 1300, 2047, 24],
+                        help='Array of [startpix, stoppix, missing orders as single digit indexed from 1, and so on],'
+                             'e.g.: [0, 1000, 13, 1000, 2000, 25].' )
+    parser.add_argument('--snr', default=7, type=tuple, help='Minimum SNR for peak-finding.')
 
     # optional wavecal args:
-    parser.add_argument('--wavecal', default='../mkidspec/testfiles/emission.h5', type=str,
+    parser.add_argument('--wavecal', default='outdir/emission.h5',
                         help='Directory/name of the emission lamp spectrum photon table .h5 file OR'
                              'Directory/name of the order-sorted emission lamp spectrum FITS file OR'
                              'Directory/name of the complete wavelength calibration solution .npz file.'
@@ -79,7 +51,7 @@ def parse():
                         help="Number of iterations to loop through for identifying and discarding lines.")
     parser.add_argument('--manual_fit', action='store_true', default=False,
                         help="If passed, indicates user should click plot to align observation and linelist.")
-    parser.add_argument('--resid_max', default=85e3, type=float,
+    parser.add_argument('--residual_max', default=85e3, type=float,
                         help="Maximum residual allowed between fit wavelength and atlas in m/s. (float)")
     parser.add_argument('--width', default=3, type=int, help="Width in pixels when searching for matching peaks.")
     parser.add_argument('--shift_window', default=0.05, type=float,
@@ -88,7 +60,7 @@ def parse():
                         help="Return a '1D' (pixel direction) or '2D' (pixel+order directions) fitting solution.")
 
     # optional observation args:
-    parser.add_argument('--extract', default='../mkidspec/testfiles/phoenix.h5', type=str,
+    parser.add_argument('--extract', default='outdir/phoenix.h5',
                         help='Directory/name of the on-sky observation spectrum photon table .h5 file OR'
                              'Directory/name of the order-sorted observation spectrum FITS file.'
                              'Pass "False" to disable this step.')
@@ -97,33 +69,10 @@ def parse():
 
 
 if __name__ == "__main__":
-
-    now = dt.now()
-
     args = parse()
-
-    os.makedirs(name=f'{args.outdir}/logging', exist_ok=True)
-
-    logging.basicConfig(filename=f'{args.outdir}/logging/mkidspec_{now.strftime("%Y%m%d_%H%M%S")}.log',
-                        format='%(levelname)s:%(message)s', level=logging.INFO)
-
-    # packing up the simulation values into a class
-    sim = SpecSimSettings(
-        minwave_nm=args.minw,
-        maxwave_nm=args.maxw,
-        npix=args.npix,
-        pixelsize_um=args.pixsize,
-        designR0=args.R0,
-        l0_nm=args.l0,
-        alpha_deg=args.alpha,
-        delta_deg=args.delta,
-        beta_deg=args.beta,
-        groove_length_nm=args.groove_length,
-        m0=args.m0,
-        m_max=args.m_max,
-        pixels_per_res_elem=args.pixels_per_res_elem,
-        focallength_mm=args.focallength
-    )
+    
+    logger = logging.getLogger('mkidspec')
+    logging.basicConfig(level=logging.INFO)
 
     steps = []  # list to append steps in use
 
@@ -131,8 +80,10 @@ if __name__ == "__main__":
     if args.msf.lower().endswith('.h5'):  # the MSF has yet to be fit
         msf_table = Photontable(file_name=args.msf)
         steps.append('msf')
+        sim = msf_table.query_header('sim_settings')
     elif args.msf.lower().endswith('.npz'):  # the MSF file already exists
-        msf_file = args.msf
+        msf_obj = MKIDSpreadFunction(filename=msf_file)
+        sim = msf_obj.sim_settings.item()
 
     # wavecal
     if args.wavecal.lower().endswith('.h5'):  # the table is not order-sorted and wavecal has yet to be done
@@ -155,15 +106,16 @@ if __name__ == "__main__":
             obs_fits = args.extract
             steps.append('extract')
 
+    logger.info(f'The {steps} step(s) will be conducted.')
     # execute the steps:
     if 'msf' in steps:
         missing_order_pix = np.reshape(list(map(int, args.missing_order_pix)), (-1, 3))
-        missing_order_pix = [[(missing_order_pix[i, 0], missing_order_pix[i, 1]),
+        missing_order_pix = [[(missing_order_pix[i, 0], missing_order_pix[i, 1]),  # does not work past order 9
                               [int(o)-1 for o in str(missing_order_pix[i, 2])]] for i in range(missing_order_pix.shape[0])]
-        msf_file = fitmsf(
+        msf_obj = fitmsf(
             msf_table=msf_table,
             sim=sim,
-            resid_map=args.resid_map,
+            resid_map=sim.resid_file,
             outdir=args.outdir,
             bin_range=args.bin_range,
             bins=args.bins,
@@ -175,8 +127,8 @@ if __name__ == "__main__":
         wavecal_fits = ordersort(
             table=wavecal_table,
             filename='emission',
-            msf_file=msf_file,
-            resid_map=args.resid_map,
+            msf=msf_obj,
+            resid_map=sim.resid_file,
             outdir=args.outdir,
             plot=args.plot
         )
@@ -187,7 +139,7 @@ if __name__ == "__main__":
             elem=args.elem,
             minw=args.minw,
             maxw=args.maxw,
-            resid_max=args.resid_max,
+            residual_max=args.residual_max,
             degree=args.degree,
             iters=args.iters,
             dim=args.dim,
@@ -201,8 +153,8 @@ if __name__ == "__main__":
         obs_fits = ordersort(
             table=obs_table,
             filename='observation',
-            msf_file=msf_file,
-            resid_map=args.resid_map,
+            msf=msf_obj,
+            resid_map=sim.resid_file,
             outdir=args.outdir,
             plot=args.plot
         )
@@ -212,4 +164,4 @@ if __name__ == "__main__":
             wavecal_file=wavecal_file,
             plot=args.plot
         )
-
+logger.info('Data reduction complete. Exiting.')
