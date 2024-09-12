@@ -28,20 +28,22 @@ Application of the virtual pixel boundaries and errors on an spectrum using the 
 -Show final spectrum as plot.
 """
 
-
 def ordersort(
         table: Photontable,
         filename: str,
-        msf_file: str,
+        msf,
         outdir: str,
         plot: bool,
-        resid_map=np.arange(2048, dtype=int) * 10 + 100,
+        resid_map,
 ):
+    if isinstance(resid_map, str):
+        resid_map = np.loadtxt(fname=resid_map, delimiter=',')
     photons_pixel = engine.sorted_table(table=table, resid_map=resid_map)
 
-    msf = MKIDSpreadFunction(filename=msf_file)
+    if isinstance(msf, str):
+        msf = MKIDSpreadFunction(filename=msf)
     sim = msf.sim_settings.item()
-    logging.info(f'Obtained MKID Spread Function from {msf_file}.')
+    logger.info(f'Obtained MKID Spread Function from {msf_file}.')
 
     # INSTANTIATE SPECTROGRAPH & DETECTOR:
     detector = MKIDDetector(
@@ -82,9 +84,9 @@ def ordersort(
         spec -= err_indiv.T  # removing the counts from the other orders
         spec[i, pixels] += err_n[i, pixels]  # adding the counts to the ith order
     spec[spec < 0] = 0
-    spec = np.around(spec).astype(int)
-    err_p = np.around(err_p).astype(int)
-    err_n = np.around(err_n).astype(int)
+    spec = np.around(spec)
+    err_p = np.around(err_p)
+    err_n = np.around(err_n)
 
     # saving extracted and unblazed spectrum to file
     fits_file = f'{outdir}/{filename}.fits'
@@ -96,7 +98,7 @@ def ordersort(
                              fits.BinTableHDU(Table(spec_unfixed), name='Uncorrected Spectrum')])
 
     hdu_list.writeto(fits_file, output_verify='ignore', overwrite=True)
-    logging.info(f'The extracted spectrum with its errors has been saved to {fits_file}.')
+    logger.info(f'The extracted spectrum with its errors has been saved to {fits_file}.')
 
     if plot:
         spectrum = fits.open(fits_file)
@@ -155,9 +157,9 @@ if __name__ == '__main__':
     # START LOGGING TO FILE
     # ==================================================================================================================
     now = dt.now()
-    logging.basicConfig(filename=f'{args.output_dir}/ordersort_{now.strftime("%Y%m%d_%H%M%S")}.log',
-                        format='%(levelname)s:%(message)s', level=logging.DEBUG)
-    logging.info(f"The extraction of an observed spectrum is recorded."
+    logger = logging.getLogger('ordersort')
+    logging.basicConfig(level=logging.DEBUG)
+    logger.info(f"The extraction of an observed spectrum is recorded."
                  f"\nThe date and time are: {now.strftime('%Y-%m-%d %H:%M:%S')}.")
 
     obs_table = Photontable(file_name=args.obstable)
@@ -191,7 +193,7 @@ if __name__ == '__main__':
     blaze_shape[blaze_shape == 0] = 1  # prevent divide by 0 or very small num. issue
     '''
 
-    logging.info(f'\nTotal script runtime: {((time.time() - tic) / 60):.2f} min.')
+    logger.info(f'Total script runtime: {((time.time() - tic) / 60):.2f} min.')
     # ==================================================================================================================
     # OBSERVATION SPECTRUM EXTRACTION ENDS
     # ==================================================================================================================
