@@ -3,16 +3,15 @@ import scipy.interpolate as interp
 import scipy
 import scipy.signal as sig
 import scipy.ndimage as ndi
-import numpy as np
 import matplotlib.pyplot as plt
 import time
 
 import astropy.units as u
-from ucsbsim.spectra import PhoenixModel, AtmosphericTransmission, FilterTransmission, TelescopeTransmission
-from ucsbsim.spectrograph import GratingSetup, SpectrographSetup
-from ucsbsim.detector import MKIDDetector
-from ucsbsim.engine import Engine
-from ucsbsim.spectra import clip_spectrum
+from ucsbsim.mkidspec.spectra import PhoenixModel, AtmosphericTransmission, FilterTransmission, TelescopeTransmission
+from ucsbsim.mkidspec.spectrograph import GratingSetup, SpectrographSetup
+from ucsbsim.mkidspec.detector import MKIDDetector
+from ucsbsim.mkidspec.engine import Engine
+from ucsbsim.mkidspec.spectra import clip_spectrum
 
 
 tic = time.time()
@@ -59,12 +58,9 @@ def minsep(m, R0=15, R0_l=800):
     groove_length = m0 * l0_center / 2 / np.sin(incident_angle)
     blaze_angle = incident_angle  # +10*u.deg  # a good bit off blaze
 
-    beta_central_pixel = incident_angle
-
-    detector = MKIDDetector(npix, pixel_size, R0, R0_l, randomize_r0=None)
-    grating = GratingSetup(incident_angle, blaze_angle, groove_length)
-    spectrograph = SpectrographSetup(m0, m_max, l0, pixels_per_res_elem, focal_length, beta_central_pixel,
-                                     grating, detector)
+    detector = MKIDDetector(npix, pixel_size, R0, R0_l)
+    grating = GratingSetup(incident_angle, blaze_angle, incident_angle, groove_length)
+    spectrograph = SpectrographSetup(m0, m_max, l0, pixels_per_res_elem, focal_length, grating, detector)
 
     for s in spectrograph.info_str():
         print(s)

@@ -10,15 +10,14 @@ import scipy.interpolate as interp
 import scipy
 import scipy.signal as sig
 import scipy.ndimage as ndi
-import numpy as np
 import matplotlib.pyplot as plt
 import time
 
 import astropy.units as u
 
 u.photlam = u.photon / u.s / u.cm ** 2 / u.AA
-from ucsbsim.spectrograph import GratingSetup, SpectrographSetup, NEWPORT_GRATINGS
-from ucsbsim.detector import MKIDDetector
+from ucsbsim.mkidspec.spectrograph import GratingSetup, SpectrographSetup, NEWPORT_GRATINGS
+from ucsbsim.mkidspec.detector import MKIDDetector
 
 m = 4
 R0 = 15
@@ -39,15 +38,15 @@ MKID_FWHM_MARGIN = 1.33
 
 def grating_explore(grating, name, amin=20, n_a=5, plot=False, r800_lim=7, plot_blaze=False,
                     verbose=False, min_coverage=.2, m0=2, m_max=30):
-    detector = MKIDDetector(npix, pixel_size, R0, R0_l, randomize_r0=None)
-    spectrograph = SpectrographSetup(m0, m_max, l0, pixels_per_res_elem, focal_length, grating.delta, grating, detector)
+    detector = MKIDDetector(npix, pixel_size, R0, R0_l)
+    spectrograph = SpectrographSetup(m0, m_max, l0, pixels_per_res_elem, focal_length, grating, detector)
     for i in np.linspace(amin, grating.delta.value, num=n_a):
         spectrograph.m0 = m0
         spectrograph.m_max = m_max
         spectrograph.set_beta_center(i)
         edges = spectrograph.edge_wave(fsr=True)
         use_orders = (edges[:, 0] <= maxwave) & (edges[:, 1] >= minwave)
-        if use_orders.sum() >=2:
+        if use_orders.sum() >= 2:
             spectrograph.m0, spectrograph.m_max = spectrograph.orders[use_orders][[0, -1]]
             if plot or plot_blaze:
                 spectrograph.plot_echellogram(center_orders=True, title=name, blaze=plot_blaze)
@@ -64,7 +63,7 @@ def grating_explore(grating, name, amin=20, n_a=5, plot=False, r800_lim=7, plot_
             #                  np.select([detector_edges < edges, detector_edges > edges],
             #                            [detector_edges, edges])[:, 1]]).T * u.nm
 
-            needed_mkid_r = detector_edges[:-1]/np.abs(np.diff(detector_edges,axis=0))*MKID_FWHM_MARGIN
+            needed_mkid_r = detector_edges[:-1] / np.abs(np.diff(detector_edges, axis=0)) * MKID_FWHM_MARGIN
 
         if use_orders.sum() < 2:
             if verbose:
@@ -73,21 +72,21 @@ def grating_explore(grating, name, amin=20, n_a=5, plot=False, r800_lim=7, plot_
 
         r800 = (needed_mkid_r[0, 1] * detector_edges[0, 1]) / maxwave
 
-        if r800>r800_lim:
+        if r800 > r800_lim:
             if verbose:
                 print(f"  R800 > {r800_lim}")
             continue
 
         if (1 - gaps.sum() / (maxwave - minwave)) < min_coverage:
             if verbose:
-                print(f"  Coverage < {min_coverage*100:.0f:}%")
+                print(f"  Coverage < {min_coverage * 100:.0f:}%")
             continue
 
         print(f"  a={i:.1f} deg m={spectrograph.m0}-{spectrograph.m_max}")
         print(f"     % coverage: {1 - gaps.sum() / (maxwave - minwave):.2f}")
         print(f"     R800 {r800:.1f}")
         print(f"     System R: {spectrograph.average_res[0]:.0f}")
-        o=f'{np.log10(spectrograph.mean_blaze_eff_est(n=200).mean()):.1f}'
+        o = f'{np.log10(spectrograph.mean_blaze_eff_est(n=200).mean()):.1f}'
         print(f"     Blaze %: {spectrograph.mean_blaze_eff_est(n=200).mean():.2f} O(%)={o}")
 
 
@@ -95,8 +94,7 @@ def grating_report(name, alpha=None, empiric_factor=1.0, m0=9, m_max=19):
     detector = MKIDDetector(npix, pixel_size, R0, R0_l, randomize_r0=None)
     grating = NEWPORT_GRATINGS[name]  # or maybe 452E
     grating.empiric_blaze_factor = empiric_factor
-    spectrograph = SpectrographSetup(m0, m_max, l0, pixels_per_res_elem, focal_length, grating.delta, grating, detector)
-    spectrograph.set_beta_center(grating.delta if alpha is None else alpha)
+    spectrograph = SpectrographSetup(m0, m_max, l0, pixels_per_res_elem, focal_length, grating, detector)
     spectrograph.plot_echellogram(center_orders=True, blaze=True)
     edges = spectrograph.edge_wave(fsr=True)
     detector_edges = spectrograph.edge_wave(fsr=False)
@@ -118,7 +116,6 @@ def grating_report(name, alpha=None, empiric_factor=1.0, m0=9, m_max=19):
     return spectrograph
 
 
-
 # The groove length and angles need to be ~self-consistent
 # From the grating equation with Littrow
 # m0*l0_center=2*groove_length*np.sin(incident_angle=reflected_angle)
@@ -132,9 +129,9 @@ def grating_report(name, alpha=None, empiric_factor=1.0, m0=9, m_max=19):
 
 
 # Investigate grating
-NEWPORT_GRATINGS['JB1']=GratingSetup(None, 34.38 * u.deg, 1e6*u.nm/147.84)
-NEWPORT_GRATINGS['JB2']=GratingSetup(None, 22.24 * u.deg, 1e6*u.nm/170.87)
-NEWPORT_GRATINGS['JB3']=GratingSetup(None, 15.25 * u.deg, 1e6*u.nm/184.95)
+NEWPORT_GRATINGS['JB1'] = GratingSetup(0, 34.38 * u.deg, 0, 1e6 * u.nm / 147.84)
+NEWPORT_GRATINGS['JB2'] = GratingSetup(0, 22.24 * u.deg, 0, 1e6 * u.nm / 170.87)
+NEWPORT_GRATINGS['JB3'] = GratingSetup(0, 15.25 * u.deg, 0, 1e6 * u.nm / 184.95)
 
 # for name, grating in NEWPORT_GRATINGS.items():
 #     print(f'Grating {name}')
@@ -149,10 +146,11 @@ NEWPORT_GRATINGS['JB3']=GratingSetup(None, 15.25 * u.deg, 1e6*u.nm/184.95)
 # grating_report('149E', empiric_factor=0.82, m0=9, m_max=19)
 
 
-spec=grating_report('451E', alpha=28.3, empiric_factor=1, m0=4, m_max=8)
+spec = grating_report('451E', alpha=28.3, empiric_factor=1, m0=4, m_max=8)
 spec.pixel_wavelengths()[:, np.linspace(0, 2047, num=5, dtype=int)].to('um').value
-print(spec.grating.alpha-spec.grating.delta,spec.grating.delta,spec.grating.d/1000)
+print(spec.grating.alpha - spec.grating.delta, spec.grating.delta, spec.grating.d / 1000)
+
 
 def determine_empric_blaze_factor(spec, o, w, newport):
     eff = spec.grating.blaze(spec.grating.beta(w, o), o)
-    return newport/eff
+    return newport / eff

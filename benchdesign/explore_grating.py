@@ -6,15 +6,14 @@ import scipy.interpolate as interp
 import scipy
 import scipy.signal as sig
 import scipy.ndimage as ndi
-import numpy as np
 import matplotlib.pyplot as plt
 import time
-
 import astropy.units as u
 
+from ucsbsim.mkidspec.spectrograph import GratingSetup, SpectrographSetup, NEWPORT_GRATINGS
+from ucsbsim.mkidspec.detector import MKIDDetector
+
 u.photlam = u.photon / u.s / u.cm ** 2 / u.AA
-from ucsbsim.spectrograph import GratingSetup, SpectrographSetup, NEWPORT_GRATINGS
-from ucsbsim.detector import MKIDDetector
 
 m = 4
 R0 = 15
@@ -45,16 +44,16 @@ MKID_FWHM_MARGIN = 1.33
 
 
 # Investigate grating
-detector = MKIDDetector(npix, pixel_size, R0, R0_l, randomize_r0=None)
+detector = MKIDDetector(npix, pixel_size, R0, R0_l)
 grating = NEWPORT_GRATINGS['451E']  # or maybe 452E
 m0, m_max = 7, 14
-grating = GratingSetup(None, 34.38 * u.deg, 1e6*u.nm/147.84)  #10-19, 6-11, 4-7
-m0, m_max = 4, 7
-grating = GratingSetup(None, 22.24 * u.deg, 1e6*u.nm/170.87)
-# GratingSetup(None, 15.25 * u.deg, 1e6*u.nm/184.95)
+grating = GratingSetup(0, (34.38 * u.deg).to(u.rad).value, 0, 1e6*u.nm/147.84)  #10-19, 6-11, 4-7
+#m0, m_max = 4, 7
+#grating = GratingSetup(0, (22.24 * u.deg).to(u.rad).value, 0, 1e6*u.nm/170.87)
 
-spectrograph = SpectrographSetup(m0, m_max, l0, pixels_per_res_elem, focal_length, grating.delta, grating, detector)
-spectrograph.set_beta_center(grating.delta)
+#grating = GratingSetup(0, (15.25 * u.deg).to(u.rad).value, 0, 1e6*u.nm/184.95)
+
+spectrograph = SpectrographSetup((m0, m_max), l0, pixels_per_res_elem, focal_length, grating, detector)
 
 w = spectrograph.pixel_wavelengths()
 
@@ -100,12 +99,10 @@ for i in np.linspace(20, grating.delta.value, num=10):
     print(f"System R: {spectrograph.average_res[0]:.0f}")
 
 
-detector = MKIDDetector(npix, pixel_size, R0, R0_l, randomize_r0=None)
 grating = NEWPORT_GRATINGS['149E']  # or maybe 452E
 grating.empiric_blaze_factor = 0.82
 m0, m_max = 9, 19
-spectrograph = SpectrographSetup(m0, m_max, l0, pixels_per_res_elem, focal_length, grating.delta, grating, detector)
-spectrograph.set_beta_center(grating.delta)
+spectrograph = SpectrographSetup((m0, m_max), l0, pixels_per_res_elem, focal_length, grating, detector)
 spectrograph.plot_echellogram(center_orders=True, blaze=True)
 edges = spectrograph.edge_wave(fsr=True)
 detector_edges = spectrograph.edge_wave(fsr=False)
