@@ -3,6 +3,7 @@ import scipy.interpolate as interp
 from scipy.signal import oaconvolve, find_peaks, gaussian
 import scipy.ndimage as ndi
 from scipy.constants import h, c
+from scipy.stats import norm
 import astropy.units as u
 import matplotlib.pyplot as plt
 import logging
@@ -15,6 +16,8 @@ from lmfit import Parameters, minimize
 u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # photon flux per wavelength
 SIG2WID = 2 * np.sqrt(np.log(2))
 
+logger = logging.getLogger('engine')
+
 
 def sorted_table(table: Photontable, resid_map):
     # SORT PHOTONS BY RESID:
@@ -22,20 +25,6 @@ def sorted_table(table: Photontable, resid_map):
     resID = table.query(column='resID')
     idx = [np.where(resID == j) for j in resid_map]
     return [phases[j].tolist() for j in idx]  # list of photons in each pixel
-
-
-def nearest_index(array, value):
-    array = np.asarray(array)
-    idx = (np.abs(array - value)).argmin()
-    return idx
-
-
-def wave_to_eV(waves):
-    return ((h*u.J*u.s) * (c * u.m / u.s) / waves).to(u.eV)
-
-
-def eV_to_wave(eVs):
-    return ((h*u.J*u.s) * (c * u.m / u.s) / eVs).to(u.nm)
 
 
 def _determine_apodization(x, pixel_samples_frac, pixel_max_npoints):
@@ -98,7 +87,7 @@ def _determine_apodization(x, pixel_samples_frac, pixel_max_npoints):
     interp_apod[apod_ndx[0], ord_ndx, pix_ndx] = apod
     interp_apod[apod_ndx[1], ord_ndx, pix_ndx] = apod
 
-    logging.info("\nDetermined apodization, excess transmission at pixel edges were trimmed.")
+    logger.info("Determined apodization, excess transmission at pixel edges were trimmed.")
     return interp_apod
 
 
@@ -115,7 +104,7 @@ def draw_photons(convol_wave,
     :return: the arrival times and randomly chosen wavelengths from CDF
     """
     # Now, compute the CDF from dNdE and set up an interpolating function
-    logging.info(f"\nBeginning photon draw, with exposure time: {exptime} and telescope area: {area:.2f}.")
+    logger.info(f"Beginning photon draw, with exposure time: {exptime} and telescope area: {area:.2f}.")
     cdf_shape = int(np.prod(convol_result.shape[:2])), convol_result.shape[-1]  # reshaped to 5 * photons, 2048 pix
     result_p = convol_result.reshape(cdf_shape)
     wave_p = convol_wave.reshape(cdf_shape)
@@ -134,23 +123,23 @@ def draw_photons(convol_wave,
         total_photons_ltd = (total_photons.value / total_photons.value.max() * 1000 * exptime.value).astype(int)
         N = np.random.poisson(total_photons_ltd)
         # Now assume that you want N photons as a Poisson random number for each pixel
-        logging.info(f'\tLimited to 1000 photons per pixel per second.')
+        logger.info(f'Limited to 1000 photons per pixel per second.')
     else:
         N = np.random.poisson(total_photons.value.astype(int))
         total_photons_ltd = total_photons.value
-        logging.info(f'\tMax photons per pixel per second: {N.max() / exptime.value}.')
+        logger.info(f'Max photons per pixel per second: {N.max() / exptime.value}.')
 
     reduce_factor = total_photons.value / total_photons_ltd
     cdf /= total_photons
 
-    logging.info("\tBeginning random draw for photon wavelengths (from CDF) and arrival times (from uniform random).")
+    logger.info("Beginning random draw for photon wavelengths (from CDF) and arrival times (from uniform random).")
     # Decide on wavelengths and times
     l_photons, t_photons = [], []
     for i, (x, n) in enumerate(zip(cdf.T, N)):
         cdf_interp = interp.interp1d(x, wave_pix[:, i].to('nm').value, fill_value=0, bounds_error=False, copy=False)
         l_photons.append(cdf_interp(np.random.uniform(0, 1, size=n)) * u.nm)
         t_photons.append(np.random.uniform(0, 1, size=n) * exptime)
-    logging.info("Completed photon draw, obtained random arrival times and wavelengths for individual photons.")
+    logger.info("Completed photon draw, obtained random arrival times and wavelengths for individual photons.")
     return t_photons, l_photons, reduce_factor
 
 
@@ -169,7 +158,7 @@ class Engine:
         blazed_spectrum = blaze_efficiencies * spectra(wave.to(u.nm))
         masked_blaze = [blazed_spectrum[i, order_mask[i]] for i in range(len(self.spectrograph.orders))]
         masked_waves = [wave[order_mask[i]].to(u.nm) for i in range(len(self.spectrograph.orders))]
-        logging.info('Multiplied spectrum with blaze efficiencies.')
+        logger.info('Multiplied spectrum with blaze efficiencies.')
         return blazed_spectrum, masked_waves, masked_blaze
 
     def optically_broaden(self, wave, flux: u.Quantity, axis: int = 1):
@@ -282,13 +271,13 @@ class Engine:
 
         if simp:
             result = data * spectral_fluxden.unit * mkid_kernel[:, None, None]
-            logging.info('Multiplied function with MKID response.')
+            logger.info('Multiplied function with MKID response.')
         else:
             sl = slice(pixel_max_npoints // 2, -(pixel_max_npoints // 2))
             result = oaconvolve(data, mkid_kernel[:, None, None], mode='full', axes=0)[sl] * u.photlam
             # takes the 67 sampling axis and turns it into ~95000 points each for each order/pixel [~95000, 4, 2048]
             # oaconvolve can't deal with units so you have to give it them
-            logging.info('Fully-convolved spectrum with MKID response.')
+            logger.info('Fully-convolved spectrum with MKID response.')
 
         # TODO I'm not sure this is right, might be simply sampling
         result *= pixel_rescale[None, ...]
@@ -299,7 +288,20 @@ class Engine:
         result_wave = (np.arange(result.shape[0]) - result.shape[0] // 2)[:, None, None] * pixel_rescale[None, ...] \
                       + lambda_pixel
 
-        return result_wave, result
+        # building the kernel wavelengths for dividing kernel out:
+        x = self.mkid_kernel_waves(n_points=len(mkid_kernel), n_sigma=n_sigma_mkid, oversampling=oversampling)
+        sigma_frac = norm.cdf(n_sigma_mkid)  # convert number of sigma to a fraction
+
+        # integrating the kernel with each grid spacing:
+        norms = np.sum(a=mkid_kernel) * (x[:, :, 1] - x[:, :, 0]) / sigma_frac  # since n sigma is not exactly 1
+
+        # calculating the spacing for every pixel-order:
+        dx = (result_wave[1, :, :] - result_wave[0, :, :]).to(u.nm)
+
+        # returning the convolution spacing back in line with everything else:
+        result = result.to(u.ph / u.cm ** 2 / u.s) / norms[None, ...] * dx[None, ...].value
+
+        return result_wave, result, mkid_kernel
 
     def lambda_to_pixel_space(self, array_wave, array, leftedge):
         """
