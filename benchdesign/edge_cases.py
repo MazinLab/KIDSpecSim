@@ -100,8 +100,8 @@ def desired_grating(R0, sep, minw=400*u.nm, maxw=800*u.nm, stype='default', plot
 
     #return spectro
 
-
-desired_grating(7.5, 2.1)
-#desired_grating(7.5, 1.33)
-#desired_grating(15, 2.1)
-#desired_grating(15, 1.33)
+if __name__ == '__main__':
+    desired_grating(7.5, 2.1)
+    #desired_grating(7.5, 1.33)
+    #desired_grating(15, 2.1)
+    #desired_grating(15, 1.33)

@@ -127,28 +127,28 @@ def grating_report(name, alpha=None, empiric_factor=1.0, m0=9, m_max=19):
 
 # angular_dispersion = 2 * np.arctan(pixel_size * npix / 2 / focal_length) / (l0_center / m0)
 
+if __name__ == '__main__':
+    # Investigate grating
+    NEWPORT_GRATINGS['JB1'] = GratingSetup(0, 34.38 * u.deg, 0, 1e6 * u.nm / 147.84)
+    NEWPORT_GRATINGS['JB2'] = GratingSetup(0, 22.24 * u.deg, 0, 1e6 * u.nm / 170.87)
+    NEWPORT_GRATINGS['JB3'] = GratingSetup(0, 15.25 * u.deg, 0, 1e6 * u.nm / 184.95)
 
-# Investigate grating
-NEWPORT_GRATINGS['JB1'] = GratingSetup(0, 34.38 * u.deg, 0, 1e6 * u.nm / 147.84)
-NEWPORT_GRATINGS['JB2'] = GratingSetup(0, 22.24 * u.deg, 0, 1e6 * u.nm / 170.87)
-NEWPORT_GRATINGS['JB3'] = GratingSetup(0, 15.25 * u.deg, 0, 1e6 * u.nm / 184.95)
-
-# for name, grating in NEWPORT_GRATINGS.items():
-#     print(f'Grating {name}')
-#     grating_explore(grating, name, amin=grating.delta.value)
-
-# for name in ('451E', '452E'):
-#     grating = NEWPORT_GRATINGS[name]
-#     print(f'Grating {name}')
-#     grating_explore(grating, name, amin=grating.delta.value/20, n_a=20, r800_lim=8,
-#                     plot_blaze=False, verbose=False, min_coverage=.2)
-
-# grating_report('149E', empiric_factor=0.82, m0=9, m_max=19)
+    # for name, grating in NEWPORT_GRATINGS.items():
+    #     print(f'Grating {name}')
+    #     grating_explore(grating, name, amin=grating.delta.value)
+    
+    # for name in ('451E', '452E'):
+    #     grating = NEWPORT_GRATINGS[name]
+    #     print(f'Grating {name}')
+    #     grating_explore(grating, name, amin=grating.delta.value/20, n_a=20, r800_lim=8,
+    #                     plot_blaze=False, verbose=False, min_coverage=.2)
+    
+    # grating_report('149E', empiric_factor=0.82, m0=9, m_max=19)
 
 
-spec = grating_report('451E', alpha=28.3, empiric_factor=1, m0=4, m_max=8)
-spec.pixel_wavelengths()[:, np.linspace(0, 2047, num=5, dtype=int)].to('um').value
-print(spec.grating.alpha - spec.grating.delta, spec.grating.delta, spec.grating.d / 1000)
+    spec = grating_report('451E', alpha=28.3, empiric_factor=1, m0=4, m_max=8)
+    spec.pixel_wavelengths()[:, np.linspace(0, 2047, num=5, dtype=int)].to('um').value
+    print(spec.grating.alpha - spec.grating.delta, spec.grating.delta, spec.grating.d / 1000)
 
 
 def determine_empric_blaze_factor(spec, o, w, newport):
