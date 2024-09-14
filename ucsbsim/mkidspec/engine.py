@@ -10,21 +10,13 @@ import logging
 
 from ucsbsim import sortarray
 from ucsbsim.mkidspec.plotting import quick_plot
-from mkidpipeline.photontable import Photontable
 from lmfit import Parameters, minimize
+
 
 u.photlam = u.photon / u.s / u.cm ** 2 / u.AA  # photon flux per wavelength
 SIG2WID = 2 * np.sqrt(np.log(2))
 
 logger = logging.getLogger('engine')
-
-
-def sorted_table(table: Photontable, resid_map):
-    # SORT PHOTONS BY RESID:
-    phases = table.query(column='wavelength')
-    resID = table.query(column='resID')
-    idx = [np.where(resID == j) for j in resid_map]
-    return [phases[j].tolist() for j in idx]  # list of photons in each pixel
 
 
 def _determine_apodization(x, pixel_samples_frac, pixel_max_npoints):

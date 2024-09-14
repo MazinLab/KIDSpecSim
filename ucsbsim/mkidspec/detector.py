@@ -6,13 +6,27 @@ from scipy.constants import c
 from general import wave_to_eV
 from ucsbsim.filterphot import mask_deadtime
 from ucsbsim.mkidspec.engine import draw_photons
+from mkidpipeline.photontable import Photontable
 
 logger = logging.getLogger('detector')
 
 
+def sorted_table(table: Photontable, resid_map):
+    """
+    :param table: Photontable object
+    :param resid_map: the resonator ID list
+    :return: a list of photon wavelengths sorted by resonator ID
+    """
+    phases = table.query(column='wavelength')
+    resID = table.query(column='resID')
+    idx = [np.where(resID == j) for j in resid_map]
+    return [phases[j].tolist() for j in idx]
+
+
 def lasercal(phot_phases, phase_offset, minw, maxw, lasers=[400, 600, 800], error=0.05):
     laser_phase = np.multiply(wave_to_phase(lasers, minw, maxw)*phase_offset,np.random.uniform(1-error, 1+error, len(lasers)))
-    return np.poly1d(np.polyfit(laser_phase, lasers, len(lasers)-1))(phot_phases)
+    sol_phase = np.poly1d(np.polyfit(lasers, laser_phase, len(lasers)-1))
+    return np.poly1d(np.polyfit(laser_phase, lasers, len(lasers)-1))(phot_phases), sol_phase
 
 
 def wave_to_phase(waves, minwave, maxwave):
