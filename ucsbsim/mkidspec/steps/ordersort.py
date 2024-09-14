@@ -11,7 +11,7 @@ from astropy.table import Table
 import os
 
 from ucsbsim.mkidspec.spectrograph import GratingSetup, SpectrographSetup
-from ucsbsim.mkidspec.detector import MKIDDetector, wave_to_phase
+from ucsbsim.mkidspec.detector import MKIDDetector, wave_to_phase, sorted_table
 import ucsbsim.mkidspec.engine as engine
 from ucsbsim.mkidspec.plotting import quick_plot
 from synphot.models import BlackBodyNorm1D, ConstFlux1D
@@ -38,7 +38,7 @@ def ordersort(
 ):
     if isinstance(resid_map, str):
         resid_map = np.loadtxt(fname=resid_map, delimiter=',')
-    photons_pixel = engine.sorted_table(table=table, resid_map=resid_map)
+    photons_pixel = sorted_table(table=table, resid_map=resid_map)
 
     if isinstance(msf, str):
         msf = MKIDSpreadFunction(filename=msf)
@@ -46,24 +46,11 @@ def ordersort(
     logger.info(f'Obtained MKID Spread Function from {msf_file}.')
 
     # INSTANTIATE SPECTROGRAPH & DETECTOR:
-    detector = MKIDDetector(
-        n_pix=sim.npix,
-        pixel_size=sim.pixelsize,
-        design_R0=sim.designR0,
-        l0=sim.l0,
-        resid_map=resid_map
-    )
+    detector = sim.detector
     pixels = detector.pixel_indices
-    grating = GratingSetup(alpha=sim.alpha, delta=sim.delta, beta_center=sim.beta, groove_length=sim.groove_length)
-    spectro = SpectrographSetup(
-        order_range=sim.order_range,
-        final_wave=sim.l0,
-        pixels_per_res_elem=sim.pixels_per_res_elem,
-        focal_length=sim.focallength,
-        grating=grating,
-        detector=detector
-    )
+    spectro = sim.spectrograph
 
+    # shorten some variables
     nord = spectro.nord
     lambda_pixel = spectro.pixel_wavelengths().to(u.nm)[::-1]
 
@@ -108,7 +95,7 @@ def ordersort(
         axes = ax.ravel()
         for i in range(nord):
             axes[i].grid()
-            axes[i].plot(detector.pixel_indices, spectrum[1].data[i])
+            axes[i].plot(pixels, spectrum[1].data[i])
             axes[i].set_title(f'Order {spectro.orders[::-1][i]}')
         axes[-1].set_xlabel("Pixel Index")
         axes[-2].set_xlabel("Pixel Index")
