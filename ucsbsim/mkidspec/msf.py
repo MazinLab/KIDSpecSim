@@ -2,6 +2,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+def plot(ax=None):
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=(8.5, 11), dpi=300)
+    # add more
+
+
 class MKIDSpreadFunction:
     def __init__(
             self,
@@ -58,9 +64,3 @@ class MKIDSpreadFunction:
         self.sim_settings = msf['sim_settings']
         assert msf['waves'].any(), 'File is missing wavelengths/phases or syntax is incorrect.'
         self.waves = msf['waves']
-
-    def plot(self, ax=None):
-        if ax is None:
-            fig, ax = plt.subplots(1, 1, figsize=(8.5, 11), dpi=300)
-        # add more
-

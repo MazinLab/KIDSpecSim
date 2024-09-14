@@ -471,4 +471,3 @@ NEWPORT_GRATINGS = {x['name']: GratingSetup(
     (x['blaze']*u.deg).to(u.rad).value,
     0,
     x['l'] * u.nm) for x in GRATING_CATALOG}
-

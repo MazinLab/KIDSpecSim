@@ -184,8 +184,7 @@ if __name__ == '__main__':
     try:  # check for the spectral resolution file, create if not exist
         R0s = np.loadtxt(fname=sim.R0s_file, delimiter=',')
         logger.info(f'The pixel Rs @ {sim.l0} nm were imported from {sim.R0s_file}.')
-    except IOError as e:
-        logger.info(msg=e)
+    except IOError:
         R0s = np.random.uniform(low=.85, high=1.15, size=sim.npix) * sim.designR0
         np.savetxt(fname=sim.R0s_file, X=R0s, delimiter=',')
         logger.info(msg=f'The pixel Rs @ {sim.l0} nm were randomly generated from R0 and saved to {sim.R0s_file}.')
@@ -193,8 +192,7 @@ if __name__ == '__main__':
     try:  # check for the phase offset file, create if not exist
         phase_offsets = np.loadtxt(fname=sim.phaseoffset_file, delimiter=',')
         logger.info(msg=f'The pixel center phase offsets were imported from {sim.phaseoffset_file}.')
-    except IOError as e:
-        logger.info(msg=e)
+    except IOError:
         phase_offsets = np.random.uniform(low=.8, high=1.2, size=sim.npix)
         np.savetxt(fname=sim.phaseoffset_file, X=phase_offsets, delimiter=',')
         logger.info(msg=f'The pixel phase offsets were generated randomly and saved to {sim.phaseoffset_file}.')
@@ -202,18 +200,16 @@ if __name__ == '__main__':
     try:  # check for the resonator IDs, create if not exist
         resid_map = np.loadtxt(fname=sim.resid_file, delimiter=',')
         logger.info(msg=f'The resonator IDs were imported from {sim.resid_file}.')
-    except IOError as e:
-        logger.info(msg=e)
+    except IOError:
         resid_map = np.arange(sim.npix, dtype=int) * 10 + 100
         np.savetxt(fname=sim.resid_file, X=resid_map, delimiter=',')
         logger.info(msg=f'The resonator IDs were generated from {resid_map.min()} to {resid_map.max()}.')
 
     detector = MKIDDetector(n_pix=sim.npix, pixel_size=sim.pixelsize, design_R0=sim.designR0, l0=sim.l0, R0s=R0s,
                             phase_offsets=phase_offsets, resid_map=resid_map)
-    grating = GratingSetup(alpha=sim.alpha, delta=sim.delta, beta_center=sim.beta, groove_length=sim.groove_length)
     spectro = SpectrographSetup(order_range=sim.order_range, final_wave=sim.l0,
                                 pixels_per_res_elem=sim.pixels_per_res_elem,
-                                focal_length=sim.focallength, grating=grating, detector=detector)
+                                focal_length=sim.focallength, grating=sim.grating, detector=detector)
     eng = engine.Engine(spectrograph=spectro)
 
     # shorten commonly used properties:
