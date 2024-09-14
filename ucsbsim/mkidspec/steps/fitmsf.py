@@ -20,8 +20,7 @@ from detector import phase_to_wave
 from mkidpipeline.photontable import Photontable
 import ucsbsim.mkidspec.engine as engine
 from ucsbsim.mkidspec.msf import MKIDSpreadFunction
-from ucsbsim.mkidspec.spectrograph import GratingSetup, SpectrographSetup
-from ucsbsim.mkidspec.detector import MKIDDetector, wave_to_phase, phase_to_wave, lasercal
+from ucsbsim.mkidspec.detector import wave_to_phase, phase_to_wave, lasercal, sorted_table
 from ucsbsim.mkidspec.plotting import quick_plot
 import ucsbsim.mkidspec.utils.general as gen
 
@@ -46,19 +45,19 @@ def init_params(
         e_guess,
         s_guess,
         amp_guess,
-        missing_ord=None,
-        percent: float = 0.3,
+        missing_ord=[],
+        percent: float = 0.15,
         degree: int = 2,
         e_domain=[-1, 0]
 ):
     """
-    :param phi_guess: n_ord guess values for phases
+    :param phi_guess: n_ord guess values for phase centers
     :param e_guess: n_ord guess values for energies of given phases
     :param s_guess: n_ord guess values for sigmas of given energies
-    :param amp_guess: n_ord guess values for fit_amps
-    :param missing_ord: as list, the orders that are probably missing/0
-    :param percent: the percentage to add to the amp threshold
-    :param degree: degree to use for polynomial fitting, default 2nd order
+    :param amp_guess: n_ord guess values for peak amplitudes
+    :param missing_ord: as list, the orders that are probably too dim to detect, may be empty
+    :param percent: the percentage to allow amplitude to vary, if not missing
+    :param degree: degree to use for polynomial fitting
     :param e_domain: domain for the legendre polynomial
     :return: an lmfit Parameter object with the populated parameters and guess values
     """
@@ -67,14 +66,16 @@ def init_params(
     # use Legendre polyfitting on the theoretical/peak-finding data to get guess coefs
     e_coefs = Legendre.fit(x=phi_guess, y=e_guess / e_guess[-1], deg=degree, domain=e_domain).coef
     s_coefs = Legendre.fit(x=e_guess / e_guess[-1], y=s_guess, deg=degree, domain=[e_guess[0] / e_guess[-1], 1]).coef
+    # the domain of the sigmas is scaled such that the order_0 energy is = to 1
 
     # add the sigma coefs to params object:
-    parameters.add(name=f's0', value=s_coefs[0], min=1e-5)
-    parameters.add(name=f's1', value=s_coefs[1], min=s_coefs[1]*0.8, max=s_coefs[1]*1.2)
-    try:
-        parameters.add(name=f's2', value=s_coefs[2], min=s_coefs[2]*0.5, max=s_coefs[2]*1.5)
-    except ValueError:
-        parameters.add(name=f's2', value=s_coefs[2], min=-1e-2, max=1e-2)
+    parameters.add(name=f's0', value=s_coefs[0], min=1e-4)  # must be positive
+    
+    s1_minmax = [s_coefs[1] * 0.8, s_coefs[1] * 1.2] if s_coefs[1] != 0 else [-1e-2, 1e-2]
+    parameters.add(name=f's1', value=s_coefs[1], min=s1_minmax[0], max=s1_minmax[1])
+
+    s2_minmax = [s_coefs[2] * 0.5, s_coefs[2] * 1.5] if s_coefs[2] != 0 else [-1e-2, 1e-2]
+    parameters.add(name=f's2', value=s_coefs[2], min=s2_minmax[0], max=s2_minmax[1])
 
     # add phi_0s to params object:
     parameters.add(name=f'phi_0', value=phi_guess[-1], min=phi_guess[-1] - 0.02, max=phi_guess[-1] + 0.02)
@@ -87,39 +88,14 @@ def init_params(
         parameters.add(name=f'e2', value=e_coefs[2], min=-1e-2, max=1e-2)
 
     # add amplitudes to params object:
-    if missing_ord is None:  # no orders were identified as missing
-        for i in range(len(amp_guess)):
-            if amp_guess[i] == 0:
-                parameters.add(
-                    name=f'O{i}_amp',
-                    value=amp_guess[i],
-                    min=0
-                )
-            else:
-                parameters.add(
-                    name=f'O{i}_amp',
-                    value=amp_guess[i],
-                    min=amp_guess[i] * (1 - percent),
-                    max=amp_guess[i] * (1 + percent)
-                )
-    else:  # at least one order was flagged as missing
-        for i in range(len(amp_guess)):
-            if i in missing_ord:
-                parameters.add(name=f'O{i}_amp', value=0, vary=False)
-            else:
-                if amp_guess[i] == 0:
-                    parameters.add(
-                        name=f'O{i}_amp',
-                        value=amp_guess[i],
-                        min=0
-                    )
-                else:
-                    parameters.add(
-                        name=f'O{i}_amp',
-                        value=amp_guess[i],
-                        min=amp_guess[i] * (1 - percent),
-                        max=amp_guess[i] * (1 + percent)
-                    )
+    for n, a in enumerate(amp_guess):
+        if n in missing_ord:  # too dim, force to 0 and make fixed parameter
+            parameters.add(name=f'O{n}_amp', value=0, vary=False)
+        else:
+            if a == 0:  # prevents amplitude from being negative
+                parameters.add(name=f'O{n}_amp', value=a, min=0)
+            else:  # vary as normal
+                parameters.add(name=f'O{n}_amp', value=a, min=a * (1 - percent), max=a * (1 + percent))
 
     return parameters
 
@@ -150,10 +126,10 @@ def fit_func(
     :return: residuals, fitting function separated, or fitting function summed
     """
 
-    # turn dictionary of param values into separate params:
+    # turn dictionary of param values into separate variables
     s0, s1, s2, phi_0, e1, e2, *amps = tuple(params.valuesdict().values())
 
-    # obtain the 0th order coef
+    # obtain the 0th order energy coef
     e0 = e0_from_params(e1, e2, phi_0)
 
     # pass coef parameters to polys:
@@ -221,7 +197,7 @@ def fit_func(
         return residual
 
 
-def extract_params(params, nord, degree=2):
+def extract_params(params: Parameters, nord: int, degree: int = 2):
     """
     :param params: Parameter object
     :param nord: number of orders
@@ -229,14 +205,14 @@ def extract_params(params, nord, degree=2):
     :return: the extracted parameters
     """
     phi_0 = params[f'phi_0'].value
-    e_coefs = np.array([params[f'e{c}'].value for c in range(1, degree + 1)])
+    e_coefs = np.array([params[f'e{c}'].value for c in range(1, degree + 1)])  # no e0
     s_coefs = np.array([params[f's{c}'].value for c in range(degree + 1)])
     amps = np.array([params[f'O{i}_amp'].value for i in range(nord)])
 
     return phi_0, e_coefs, s_coefs, amps
 
 
-def e0_from_params(e1, e2, phi_0):
+def e0_from_params(e1: float, e2: float, phi_0: float):
     """
     :param e1: the 1st order coef
     :param e2: the 2nd order coef
@@ -246,12 +222,12 @@ def e0_from_params(e1, e2, phi_0):
     return 1 - e2 * (1 / 2 * (3 * ((phi_0 + 0.5) * 2) ** 2 - 1)) - e1 * 2 * (phi_0 + 0.5)
 
 
-def phis_from_grating_eq(orders, phi_0, leg, coefs=None):
+def phis_from_grating_eq(orders, phi_0: float, leg, coefs=None):
     """
-    :param orders: orders of the spectrograph in ascending order
+    :param orders: orders of the spectrograph in ascending numbers
     :param phi_0: the phase center of the initial order
     :param leg: the energy legendre poly object
-    :param coefs: the coefs of the energy poly in ascending order
+    :param coefs: the coefs of the energy poly in ascending degree
     :return: the phase centers of the other orders constrained by the grating equation
     """
     grating_eq = orders[1:][::-1] / orders[0] * leg(phi_0)
@@ -290,7 +266,7 @@ def cov_from_params(params, model, nord, order_edges, valid_idx, x_phases, **fit
     # 6 [  #   #   #   1   #  ]
     # 5 [  #   #   #   #   1  ]
     #      ^ how much of other orders is in order 9, every column must be a fraction of every orders
-
+    # TODO write comments
     model = interp.InterpolatedUnivariateSpline(x=x_phases, y=model, k=1, ext=1)
     model_sum = np.array([model.integral(order_edges[i], order_edges[i + 1]) for i in range(len(order_edges) - 1)])
     cov = np.zeros([nord, nord])
@@ -321,7 +297,7 @@ def fitmsf(
         plot: bool = False
 ):
     """
-    :param msf_table: 
+    :param msf_table: TODO
     :param sim: 
     :param outdir: 
     :param resid_map: 
@@ -337,26 +313,12 @@ def fitmsf(
         
     phase_offsets = np.loadtxt(fname=sim.phaseoffset_file, delimiter=',')  # obtain phase offsets from sim
 
-    photons_pixel = engine.sorted_table(table=msf_table, resid_map=resid_map)  # get list of photons in each pixel
+    photons_pixel = sorted_table(table=msf_table, resid_map=resid_map)  # get list of photons in each pixel
 
-    # setup detector, spectrograph, and engine:
-    detector = MKIDDetector(
-        n_pix=sim.npix,
-        pixel_size=sim.pixelsize,
-        design_R0=sim.designR0,
-        l0=sim.l0,
-        resid_map=resid_map
-    )
-    grating = GratingSetup(alpha=sim.alpha, delta=sim.delta, beta_center=sim.beta, groove_length=sim.groove_length)
-    spectro = SpectrographSetup(
-        order_range=sim.order_range,
-        final_wave=sim.l0,
-        pixels_per_res_elem=sim.pixels_per_res_elem,
-        focal_length=sim.focallength,
-        grating=grating,
-        detector=detector
-    )
-    eng = engine.Engine(spectrograph=spectro)
+    # retrieve the detector, spectrograph, and engine:
+    detector = sim.detector
+    spectro = sim.spectrograph
+    eng = sim.engine
 
     # shortening some longer variable names:
     nord = spectro.nord
@@ -366,20 +328,22 @@ def fitmsf(
     # convert and calculate the estimation phases, energies, and sigmas
     sim_phase = np.nan_to_num(wave_to_phase(pix_waves, minwave=sim.minwave, maxwave=sim.maxwave))
 
-    energy = np.nan_to_num(gen.wave_to_eV(pix_waves).value)
+    energy = gen.wave_to_eV(pix_waves).value
     sig_start = wave_to_phase(pix_waves - (detector.mkid_resolution_width(pix_waves, pixels) / (2 * np.log(2))) / 2,
                               minwave=sim.minwave, maxwave=sim.maxwave)
     sig_end = wave_to_phase(pix_waves + (detector.mkid_resolution_width(pix_waves, pixels) / (2 * np.log(2))) / 2,
                             minwave=sim.minwave, maxwave=sim.maxwave)
     sigmas = sig_end - sig_start  # approximate sigmas given starting-end point conversion
+    # TODO use sig.peak_widths to find sigmas
 
+    # TODO reinstate binning algorithm
     # generating # of bins and building initial histogram for every pixel:
     #num_pixel = [len(photons_pixel[j]) for j in detector.pixel_indices]  # number of photons in all pixels
     #sparse_pixel = int(np.min(num_pixel))  # number of photons in sparsest pixel
     #n_bins = gen.n_bins(n_data=sparse_pixel, method="rice")  # bins the same for all, based on pixel with fewest photons
 
-    # bin each pixel with the same bin edges:
-    bin_edges = np.linspace(bin_range[0], bin_range[1], bins + 1, endpoint=True)
+    # pre-bin each pixel with the same bin edges and get centers for plotting:
+    bin_edges = np.linspace(bin_range[0], bin_range[1], bins+1, endpoint=True) #, bins + 1
     bin_centers = bin_edges[:-1] + np.diff(bin_edges) / 2
     bin_counts = np.zeros([bins, sim.npix])
     for p in pixels:
@@ -396,6 +360,7 @@ def fitmsf(
  
     # create lists/arrays to place loop values:
     red_chi2 = np.full(sim.npix, fill_value=1e6)
+    # TODO figure out conditions for throwing out pixels
 
     # create empty arrays to hold values for gaussian model:
     all_fit_phi = np.empty([nord, sim.npix])
@@ -426,13 +391,11 @@ def fitmsf(
 
     # do the non-linear least squares fit for each pixel:
     for p in tqdm.tqdm(pixels):
-        #print(p)
-        
         # setup the special sigma Legendre object:
         leg_s = Legendre(coef=(0, 0, 0), domain=[energy[0, p] / energy[-1, p], 1])
 
         # retrieve the lasercal wavelengths from solution and bin:
-        waves_laser = lasercal(photons_pixel[p], phase_offsets[p], sim.minwave, sim.maxwave)
+        waves_laser, sol_phase = lasercal(photons_pixel[p], phase_offsets[p], sim.minwave, sim.maxwave)
         wave_bin_counts, _ = np.histogram(waves_laser, bins=wave_bin_edges)
         
         # find 1st/last peak in wave space to find other waves:
@@ -446,13 +409,12 @@ def fitmsf(
             other_order_waves = spectro.orders[-1] * orderN_wave / spectro.orders[:-1][::-1]
             all_order_waves = np.append(np.array(orderN_wave), other_order_waves)
         
-        min_sep = np.abs(np.diff(wave_to_phase(all_order_waves, sim.minwave, sim.maxwave))).min()/(bin_edges[1]-bin_edges[0])
+        min_sep = np.abs(np.diff(sol_phase(all_order_waves))).min()/(bin_edges[1]-bin_edges[0])
         all_peaks, _ = sig.find_peaks(x=bin_counts[:, p], distance=int(min_sep * 0.80), height=snr ** 2)
 
-        missing_ord = None
+        missing_ord = []
 
         # use find peaks to get phi/amplitude guesses:
-        # TODO make into method by ruling out different cases based on all_peaks, use avg distance from 0 + avg peak sep
         if len(all_peaks) >= nord:  # n_orders+ peaks are present
             idx = np.argsort(bin_counts[all_peaks, p])[::-1][:nord]  # grab only the first n_orders tallest peaks
             peaks_all_orders = np.sort(all_peaks[idx])  # sort according to ascending index
@@ -467,21 +429,28 @@ def fitmsf(
                             peaks_all_orders = np.insert(peaks_all_orders, o, np.max([idx, 0]))
                         elif 0 < o < nord-1:  # if the missing order is one of the ones in between
                             if missing[0] <= missing[-1]:
-                                peaks_all_orders = np.insert(peaks_all_orders, o, int(peaks_all_orders[o-1]+(peaks_all_orders[o] - peaks_all_orders[o-1]) / 2))
+                                peaks_all_orders = np.insert(
+                                    peaks_all_orders, 
+                                    o, 
+                                    int(peaks_all_orders[o-1]+(peaks_all_orders[o] - peaks_all_orders[o-1]) / 2)
+                                )
                             else:
-                                peaks_all_orders = np.insert(peaks_all_orders, o - 1,
-                                                             int(peaks_all_orders[o - 2]+(peaks_all_orders[o-1] - peaks_all_orders[o - 2]) / 2))
+                                peaks_all_orders = np.insert(
+                                    peaks_all_orders, 
+                                    o - 1,
+                                    int(peaks_all_orders[o - 2]+(peaks_all_orders[o-1] - peaks_all_orders[o - 2]) / 2)
+                                )
                         elif o == nord-1:  # if the missing order is the last one (rightmost)
                             idx = int(peaks_all_orders[-1] + np.average(np.diff(peaks_all_orders)))
                             peaks_all_orders = np.insert(peaks_all_orders, o, np.max([bins - 1, idx]))
                         else:
                             raise ValueError('The provided missing order is out of bounds.')
                     missing_ord = missing
-            if missing_ord is None:  # e.g.: none of the passed arguments fit
+            if not len(missing_ord):  # e.g.: none of the passed arguments fit
                 # TODO squeeze/stretch by 0.9/1.1 and use cross correlation to find best initial guess
                 logger.info(f'Pixel {p} will default to simulation guess.')
                 peaks_all_orders = [gen.nearest_idx(bin_centers, sim_phase[i, p]) for i in range(nord)]
-                missing_ord = None
+                missing_ord = []
 
         phi_init = bin_centers[peaks_all_orders]
         amp_init = bin_counts[peaks_all_orders, p]
@@ -527,8 +496,8 @@ def fitmsf(
 
         # TODO discard entire pixels if fit/intersection cannot be found
         # get the order bin edges (requires explicit mu, sig, A):
-        valid_idx = range(nord) if missing_ord is None else np.delete(range(nord), missing_ord)  # ords with non-0 amp
-        if missing_ord is None:
+        valid_idx = range(nord) if not len(missing_ord) else np.delete(range(nord), missing_ord)  # ords with non-0 amp
+        if not len(missing_ord):
             full_pix.append(p)
         inval_idx.append(missing_ord)
         try:
@@ -539,7 +508,7 @@ def fitmsf(
                     fit_amps[[i, valid_idx[h + 1]]]
                 )
         except ValueError:
-            if missing_ord is None:
+            if not len(missing_ord):
                 del full_pix[-1]
             del inval_idx[-1]
             valid_idx = []
@@ -556,7 +525,7 @@ def fitmsf(
                                       legendre_e=leg_e, legendre_s=leg_s)
         gausses[:, p] = np.sum(gausses_i[:, :, p], axis=1)
 
-        if missing_ord is None:
+        if not len(missing_ord):
             # find order-bleeding covar:
             covariance[:, :, p] = cov_from_params(params=opt_params.params, model=gausses[:, p], nord=nord,
                                                   order_edges=order_edges[np.isfinite(order_edges[:, p]), p],
@@ -613,12 +582,11 @@ def fitmsf(
             # get the initial residuals and weighted reduced chi^2:
             pre_residual = fit_func(params, bin_centers, y_counts=bin_counts[:, p], orders=spectro.orders,
                                     legendre_e=leg_e, legendre_s=leg_s)
-            N = len(pre_residual)
-            N_dof2 = N - opt_params.nvarys
-            pre_red_chi2 = np.sum(pre_residual ** 2) / N_dof2
+            N_dof = len(pre_residual) - opt_params.nvarys
+            pre_red_chi2 = np.sum(pre_residual ** 2) / N_dof
 
             # get the post residuals:
-            opt_residual = fit_func(params=opt_params.params, x_phases=bin_centers, y_counts=bin_counts[:, p],
+            opt_residual = fit_func(opt_params.params, bin_centers, y_counts=bin_counts[:, p],
                                     orders=spectro.orders, legendre_e=leg_e, legendre_s=leg_s)
 
             ax1.grid()
@@ -631,7 +599,6 @@ def fitmsf(
                 ax1.axvline(b, linestyle='--', color='black')
             ax1.axvline(order_edges[-1, p], linestyle='--', color='black', label='Order Edges')
             ax1.set_xlim([-1, 0])
-            # ax1.set_yscale(matplotlib.scale.FuncScale(ax1, (lambda e: e**0.5, lambda e: e**2)))
             ax1.legend()
 
             res1.grid()
