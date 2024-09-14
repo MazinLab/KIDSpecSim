@@ -3,6 +3,10 @@ import matplotlib.pyplot as plt
 import astropy.units as u
 from astropy.constants import R_sun
 
+from engine import Engine
+from ucsbsim.mkidspec.spectrograph import GratingSetup, SpectrographSetup
+from ucsbsim.mkidspec.detector import MKIDDetector
+import ucsbsim.mkidspec.engine as engine
 
 class SpecSimSettings:
     def __init__(
@@ -105,3 +109,21 @@ class SpecSimSettings:
             return False
         else:
             return self.__dict__ == other.__dict__
+    
+    @property
+    def detector(self):
+        return MKIDDetector(n_pix=self.npix, pixel_size=self.pixelsize, design_R0=self.designR0, l0=self.l0)
+
+    @property
+    def grating(self):
+        return GratingSetup(alpha=self.alpha, delta=self.delta, beta_center=self.beta, groove_length=self.groove_length)
+
+    @property
+    def spectrograph(self):
+        return SpectrographSetup(order_range=self.order_range, final_wave=self.l0,
+                                pixels_per_res_elem=self.pixels_per_res_elem,
+                                focal_length=self.focallength, grating=self.grating, detector=self.detector)
+    
+    @property
+    def engine(self):
+        return Engine(spectrograph=self.spectrograph)
