@@ -2,12 +2,12 @@ import numpy as np
 import logging
 import pandas as pd
 import sys
-
 from astropy import units as u
 from astropy.constants import sigma_sb, h, c, R_earth
 from specutils import Spectrum1D
 from synphot import SpectralElement, SourceSpectrum, units
 from synphot.models import Box1D, BlackBodyNorm1D, ConstFlux1D, Empirical1D
+
 from ucsbsim.mkidspec.utils.general import gauss
 
 _atm = None
@@ -39,7 +39,7 @@ def _get_atm():
     # atmosphere = trans[(trans[:, 0] > .5) & (trans[:, 0] < 1.4)]
     # _atm = atmosphere[:, 0] * u.micron, atmosphere[:, 1] * u.dimensionless_unscaled
 
-    x = np.genfromtxt('/home/kimc/pycharm/KIDSpecSim/ucsbsim/mkidspec/simfiles/transmission.dat')
+    x = np.genfromtxt('../mkidspec/simfiles/transmission.dat')
     _atm = x[:, 0] * u.nm, x[:, 1] * u.dimensionless_unscaled
     return _atm
 
@@ -64,15 +64,17 @@ def TelescopeTransmission(reflectivity: float = .9):
     return SpectralElement.from_spectrum1d(spec)
 
 
-def FilterTransmission(min=400 * u.nm, max=800 * u.nm):
+def FilterTransmission():
     """
-    :param min: shorter wavelength edge
-    :param max: longer wavelength edge
-    :return: transmission of 1 between min and max as SpectralElement object
+    :return: transmission through fridge filter as SpectralElement object
     """
-    wid = max - min
-    center = (max + min) / 2
-    return SpectralElement(Box1D, amplitude=1, x_0=center, width=wid)
+
+    file = pd.read_csv('../mkidspec/simfiles/fridge_filter.csv', delimiter=',')
+    flux = np.array(file['transmission'])[::-1]*u.dimensionless_unscaled
+    flux[flux < 0] = 0
+    wave = np.array(file['wavelength'])[::-1]*u.nm
+    spec = Spectrum1D(spectral_axis=wave, flux=flux)
+    return SpectralElement.from_spectrum1d(spec)
 
 
 def FineGrid(min, max, npoints=100000):
@@ -121,7 +123,7 @@ def SkyEmission(fov):
     #                    fwhm[:, None].astype(float) / (2*np.sqrt(2*np.log(2))), flux[:, None].astype(float))
     # spectrum = np.sum(line_gauss, axis=1)
     # return SourceSpectrum.from_spectrum1d(Spectrum1D(flux=spectrum * u.photlam, spectral_axis=wave_grid * u.nm))
-    file = np.genfromtxt('/home/kimc/pycharm/KIDSpecSim/ucsbsim/mkidspec/simfiles/sky_emission/radiance.dat')
+    file = np.genfromtxt('../mkidspec/simfiles/sky_emission/radiance.dat')
 
     spec = Spectrum1D(spectral_axis=file[:, 0]*u.nm, flux=file[:, 1]*(fov/2)**2*u.ph/u.s/u.m**2/u.um)
     return SourceSpectrum.from_spectrum1d(spec)
@@ -194,7 +196,7 @@ def EmissionModel(filename, minwave, maxwave, target_R=50000):
     :param target_R: spectral resolution to diffraction limit line spectrum
     :return: full emission spectrum, intensity converted to photlam
     """
-    file = pd.read_csv(f'/home/kimc/pycharm/KIDSpecSim/ucsbsim/{filename}', delimiter=',')
+    file = pd.read_csv(filename, delimiter=',')
     flux = np.array(file['intens'])
     wave = np.array(file['obs_wl_air(nm)'])
     try:
