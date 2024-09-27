@@ -89,8 +89,8 @@ if __name__ == '__main__':
     parser.add_argument('--reflect', default=0.9, type=float,
                         help='Factor to attenuate spectrum due to telescope reflectivity, between 0 and 1, '
                              'REQUIRED if "on_sky" is True.')
-    parser.add_argument('--minw', default=400, type=float, help='The min operating wavelength [nm].')
-    parser.add_argument('--maxw', default=800, type=float, help='The max operating wavelength [nm].')
+    parser.add_argument('--minw', default=330, type=float, help='The min operating wavelength [nm].')
+    parser.add_argument('--maxw', default=850, type=float, help='The max operating wavelength [nm].')
 
     # optional spectrograph args:
     parser.add_argument('--npix', default=2048, type=int, help='The linear # of pixels in the '
@@ -157,6 +157,10 @@ if __name__ == '__main__':
     # CHECK FOR OR CREATE DIRECTORIES
     # ==================================================================================================================
     now = dt.now()
+    try:
+        os.makedirs(name=args.outdir, exist_ok=True)
+    except FileNotFoundError:
+        pass
     try:
         os.makedirs(name=os.path.dirname(sim.R0s_file), exist_ok=True)
     except FileNotFoundError:
@@ -235,7 +239,7 @@ if __name__ == '__main__':
     )  # though all args are passed, type_spectra determines which will be used
 
     # populate bandpasses based on on-sky or lab observation and always have finer grid spacing and min/max filter:
-    bandpasses = [FineGrid(min=sim.minwave, max=sim.maxwave), FilterTransmission(min=sim.minwave, max=sim.maxwave)]
+    bandpasses = [FineGrid(min=sim.minwave, max=sim.maxwave), FilterTransmission()]
     if sim.on_sky:
         bandpasses.append(AtmosphericTransmission())
         bandpasses.append(TelescopeTransmission(reflectivity=args.reflect))
@@ -350,7 +354,7 @@ if __name__ == '__main__':
         quick_plot(ax=axes[0], x=[bandpass_spectrum.waveset.to(u.nm)],
                    y=[bandpass_spectrum(bandpass_spectrum.waveset) / np.max(
                        bandpass_spectrum(bandpass_spectrum.waveset))],
-                   labels=['Incident, R~50,000'], color='r', first=True, xlim=[400, 800])
+                   labels=['Incident, R~50,000'], color='r', first=True, xlim=[300, 900])
         broad_max = np.max([np.max(masked_broad[i].value) for i in range(nord)])
         quick_plot(ax=axes[0], x=masked_waves,
                    y=[masked_broad[i] / broad_max for i in range(nord)], color='g',
@@ -361,13 +365,14 @@ if __name__ == '__main__':
         # plotting comparison between flux-integrated spectrum and integrated/convolved spectrum, must be same,
         # also plotting final counts FSR-binned
         quick_plot(ax=axes[1], x=lambda_pixel, y=photons_binned[::-1], color='k', linewidth=1, linestyle='--',
-                   labels=['Obs. Count to Flux'] + ['_nolegend_' for o in spectro.orders[:-1]], first=True,
-                   xlim=[400, 800])
+                   labels=['Obs. Count to Flux'] + ['_nolegend_' for o in spectro.orders[:-1]], first=True)
         quick_plot(ax=axes[1], x=lambda_pixel, y=convol_int, color='red', linewidth=1.5, alpha=0.4,
-                   labels=["Post-Convol"] + ['_nolegend_' for o in range(nord - 1)], xlim=[400, 800])
+                   labels=["Post-Convol"] + ['_nolegend_' for o in range(nord - 1)])
         quick_plot(ax=axes[1], x=lambda_pixel, y=blazed_int_spec, color='b', ylabel=r"Flux (phot $cm^{-2} s^{-1})$",
                    labels=["Input-integrated"] + ['_nolegend_' for o in range(nord - 1)], alpha=0.4, linewidth=1.5,
                    xlabel='Wavelength (nm)', title=r"Comparison of Input (integrated to pixel space), "
                                                    r"Post-Convolution (integrated), and Observed Photon Count (FSR-binned)")
         fig.tight_layout()
         plt.show()
+
+    pass
