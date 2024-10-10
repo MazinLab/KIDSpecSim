@@ -1,3 +1,4 @@
+import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -45,22 +46,16 @@ class MKIDSpreadFunction:
             assert self.bin_edges.shape[-1] == self.cov_matrix.shape[-1],\
                 'Bin edges and covariance have unequal number of pixels.'
 
-    def save(self, filename=''):
-        fn = filename or self.filename
-        assert fn, "'filename' must be specified."
-        np.savez(fn,
-                 bin_edges=self.bin_edges,
-                 cov_matrix=self.cov_matrix,
-                 waves=self.waves,
-                 sim_settings=self.sim_settings)
+    def save(self, filename: str):
+        with open(filename, 'wb') as f:
+            pickle.dump(self.bin_edges, f)
+            pickle.dump(self.cov_matrix, f)
+            pickle.dump(self.waves, f)
+            pickle.dump(self.sim_settings, f)
 
     def _load(self):
-        msf = np.load(self.filename, allow_pickle=True)
-        assert msf['bin_edges'].any(), 'File is missing bin edges or syntax is incorrect.'
-        self.bin_edges = msf['bin_edges']
-        assert msf['cov_matrix'].any(), 'File is missing covariance matrix or syntax is incorrect.'
-        self.cov_matrix = msf['cov_matrix']
-        assert msf['sim_settings'], 'File is missing simulation settings or syntax is incorrect.'
-        self.sim_settings = msf['sim_settings']
-        assert msf['waves'].any(), 'File is missing wavelengths/phases or syntax is incorrect.'
-        self.waves = msf['waves']
+        with open(self.filename, 'rb') as f:
+            self.bin_edges = pickle.load(f)
+            self.cov_matrix = pickle.load(f)
+            self.waves = pickle.load(f)
+            self.sim_settings = pickle.load(f)
