@@ -57,8 +57,16 @@ def wavecal(
 
     # open entire line list:
     file = pd.read_csv(f'/home/kimc/pycharm/KIDSpecSim/ucsbsim/mkidspec/linelists/{elem}.csv', delimiter=',')
-    line_wave = np.array([float(i[2:-1]) * 10 for i in file['obs_wl_air(nm)']])  # nm to Angstrom
-    line_flux = np.array([float(i[2:-1]) for i in file['intens']])
+    line_flux = []
+    valid_idx = []
+    for n, i in enumerate(file['intens']):
+        try:
+            line_flux.append(float(i[2:-1]))
+            valid_idx.append(n)
+        except ValueError:
+            pass
+    line_flux = np.array(line_flux)
+    line_wave = np.array([float(i[2:-1]) * 10 for i in file['obs_wl_air(nm)'][valid_idx]])  # nm to Angstrom
 
     if not os.path.exists(f'/home/kimc/pycharm/PyReduce/pyreduce/wavecal/atlas/{elem}_list.txt'):
         # this is the theoretical reference line spectrum:
